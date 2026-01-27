@@ -3,6 +3,7 @@ import io
 import re
 import json
 import pandas as pd
+import requests
 from datetime import date
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,6 +11,7 @@ from google import genai
 from google.genai import types
 from PIL import Image
 from dotenv import load_dotenv
+
 
 app = FastAPI()
 
@@ -183,7 +185,7 @@ async def test_connection():
     return {"message": "CORS is working!"}
 
 @app.post("/analyze-fillin")
-async def analyze_wound(
+async def fill_in(
     image: UploadFile = File(...)   # Received as a file upload
 ):
     try:
@@ -241,6 +243,29 @@ async def analyze_wound(
             )
         )
 
+        # 4. Handle Response
+        if response.candidates:
+            print(response.text)
+            return {"status": "success", "analysis": response.text}
+        else:
+            return {
+                "status": "blocked", 
+                "reason": str(response.prompt_feedback.block_reason)
+            }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/sent_ai_analysis")
+async def analyze_wound(
+    patient_data: str = Form(...),  # Received as a string/JSON from frontend
+    image: UploadFile = File(...)   # Received as a file upload
+):
+    try:
+        image_content = await image.read()
+        img = Image.open(io.BytesIO(image_content))
+
+        print
         # 4. Handle Response
         if response.candidates:
             print(response.text)

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -83,6 +84,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   // Response view
   String? _rawResponse;
   Map<String, dynamic>? _aiExtraction;
+
+  // ✅ NEW: store /analyze-wound JSON result (doctor-facing summary)
+  Map<String, dynamic>? _aiWoundJson;
 
   // ✅ NEW: store nurse-reviewed values from checklist
   final Map<String, dynamic> _reviewed = {};
@@ -268,7 +272,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   Future<void> _submitToAnalyzeWound() async {
     if (_capturedImage == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("No wound photo found. Please take a photo again."), backgroundColor: Colors.redAccent),
+        const SnackBar(
+          content: Text("No wound photo found. Please take a photo again."),
+          backgroundColor: Colors.redAccent,
+        ),
       );
       return;
     }
@@ -309,11 +316,24 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
       // backend returns {status:'success', analysis:'...'}
       if (body['status'] == 'success' && body.containsKey('analysis')) {
+        final analysisVal = body['analysis'];
+        final parsed = _parseAnalysis(analysisVal);
+
+        // ✅ If analysis is JSON (doctor summary), show Summary page
+        if (parsed != null && (parsed.containsKey('AI_analysis') || parsed.containsKey('treatment_plan'))) {
+          setState(() {
+            _aiWoundJson = parsed;
+          });
+          _navigateTo('doctor_summary');
+          return;
+        }
+
+        // Otherwise, treat as free-text (old behavior)
         setState(() {
-          _responseMode = 'analysis'; // ✅ switch mode so ResponseView behaves correctly
-          _rawResponse = body['analysis']?.toString();
-          // For analyze-wound, analysis is free-text, not fill-in json
+          _responseMode = 'analysis';
+          _rawResponse = analysisVal?.toString();
           _aiExtraction = null;
+          _aiWoundJson = null;
         });
         _navigateTo('response_view');
       } else {
@@ -387,6 +407,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         return _buildResponseView();
       case 'assessment':
         return _buildWoundAssessmentForm();
+      case 'doctor_summary':
+        return _buildDoctorSummary();
       case 'detail':
         return _buildPatientDetail();
       default:
@@ -675,6 +697,285 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           _submitToAnalyzeWound,
         ),
       ],
+    );
+  }
+
+  // --- DOCTOR SUMMARY PAGE (after /analyze-wound JSON) ---
+  Widget _buildDoctorSummary() {
+    final data = _aiWoundJson;
+    if (data == null) {
+      return Column(
+        children: [
+          _buildHeader("Doctor Summary", onBack: () => _navigateTo('assessment')),
+          const Expanded(
+            child: Center(child: Text("No summary data found. Please submit again.")),
+          ),
+        ],
+      );
+    }
+
+    final ai = (data['AI_analysis'] is Map)
+        ? Map<String, dynamic>.from(data['AI_analysis'])
+        : <String, dynamic>{};
+    final plan = (data['treatment_plan'] is Map)
+        ? Map<String, dynamic>.from(data['treatment_plan'])
+        : <String, dynamic>{};
+    final tasks = (plan['plan_tasks'] is List)
+        ? List<Map<String, dynamic>>.from(plan['plan_tasks'])
+        : <Map<String, dynamic>>[];
+
+    String fmtDue(String? iso) {
+      if (iso == null) return "";
+      try {
+        final dt = DateTime.parse(iso).toLocal();
+        final hh = dt.hour.toString().padLeft(2, '0');
+        final mm = dt.minute.toString().padLeft(2, '0');
+        return "${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} $hh:$mm";
+      } catch (_) {
+        return iso;
+      }
+    }
+
+    final confidence = ai['confidence'];
+    final confPct = (confidence is num) ? (confidence * 100).round() : null;
+
+    return Column(
+      children: [
+        _buildHeader("Summary Before Sending to Doctor", onBack: () => _navigateTo('assessment')),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.all(24),
+            children: [
+              if (_capturedImage != null)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Image.file(
+                    File(_capturedImage!.path),
+                    height: 180,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                    errorBuilder: (c, e, s) => Container(
+                      height: 180,
+                      color: const Color(0xFFE2E8F0),
+                      child: const Center(child: Icon(Icons.broken_image)),
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 16),
+
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF0FDFA),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFF5EEAD4)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(LucideIcons.stethoscope, color: Color(0xFF0D9488), size: 18),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            (ai['wound_stage'] ?? 'Wound Stage').toString(),
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF134E4A)),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            ai['diagnosis']?.toString() ?? "No diagnosis provided.",
+                            style: const TextStyle(fontSize: 12, color: Color(0xFF134E4A)),
+                          ),
+                          if (confPct != null) ...[
+                            const SizedBox(height: 8),
+                            Text(
+                              "Confidence: $confPct%",
+                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF0D9488)),
+                            ),
+                          ]
+                        ],
+                      ),
+                    )
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 20),
+              _buildSectionTitle(LucideIcons.clipboardCheck, "Nurse-Reviewed Data"),
+              const SizedBox(height: 12),
+              _kv("Location", (_reviewed['location_primary'] ?? '').toString()),
+              _kv("Location detail", (_reviewed['location_detail'] ?? '').toString()),
+              _kv("Wound type", (_reviewed['wound_type'] ?? '').toString()),
+              _kv("Size", "${_reviewed['size_width_cm'] ?? ''} × ${_reviewed['size_length_cm'] ?? ''} cm"),
+              _kv("Depth", (_reviewed['depth_category'] ?? '').toString()),
+              _kv("Slough / Necrotic", "${_reviewed['bed_slough_pct'] ?? ''}% / ${_reviewed['bed_necrotic_pct'] ?? ''}%"),
+              _kv("Discharge", "${_reviewed['discharge_volume'] ?? ''} / ${_reviewed['discharge_type'] ?? ''}"),
+              _kv("Odor", (_reviewed['odor_presence'] ?? '').toString()),
+              _kv("Pain score", (_reviewed['pain_score'] ?? '').toString()),
+              _kv("Infection flag", ((_reviewed['has_infection'] ?? false) == true) ? "Yes" : "No"),
+
+              const SizedBox(height: 20),
+              _buildSectionTitle(LucideIcons.fileText, "AI Narrative"),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Text(
+                  ai['description']?.toString() ?? "No description provided.",
+                  style: const TextStyle(fontSize: 12, color: Colors.black87, height: 1.3),
+                ),
+              ),
+
+              const SizedBox(height: 20),
+              _buildSectionTitle(LucideIcons.bandage, "Treatment Plan"),
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Text(
+                  plan['plan_text']?.toString() ?? ai['treatment_plan']?.toString() ?? "No plan provided.",
+                  style: const TextStyle(fontSize: 12, color: Colors.black87, height: 1.3),
+                ),
+              ),
+
+              const SizedBox(height: 20),
+              _buildSectionTitle(LucideIcons.listTodo, "Task List"),
+              const SizedBox(height: 12),
+              if (tasks.isEmpty)
+                const Text("No tasks provided.", style: TextStyle(fontSize: 12, color: Colors.grey))
+              else
+                ...tasks.map((t) {
+                  final txt = t['task_text']?.toString() ?? "(task)";
+                  final due = fmtDue(t['task_due']?.toString());
+                  final status = t['status']?.toString() ?? "";
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFFF1F5F9)),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(LucideIcons.squareCheck, size: 16, color: Color(0xFF0D9488)),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(txt, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                              const SizedBox(height: 4),
+                              Text(
+                                due.isEmpty ? status : "Due: $due • $status",
+                                style: const TextStyle(fontSize: 11, color: Colors.grey),
+                              ),
+                            ],
+                          ),
+                        )
+                      ],
+                    ),
+                  );
+                }),
+
+              const SizedBox(height: 10),
+              if (plan['followup_days'] != null)
+                Text(
+                  "Suggested follow-up: ${plan['followup_days']} day(s)",
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF0D9488)),
+                ),
+
+              const SizedBox(height: 18),
+              ExpansionTile(
+                tilePadding: EdgeInsets.zero,
+                title: const Text("Raw JSON (for audit)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                children: [
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: SelectableText(
+                      const JsonEncoder.withIndent('  ').convert(data),
+                      style: GoogleFonts.firaCode(fontSize: 12, color: Colors.blueGrey.shade800),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
+              ),
+
+              const SizedBox(height: 24),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFFBEB),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFFDE68A)),
+                ),
+                child: const Text(
+                  "Disclaimer: This summary is AI-generated and must be verified by a licensed medical professional before use.",
+                  style: TextStyle(fontSize: 12, color: Color(0xFF92400E)),
+                ),
+              ),
+
+              const SizedBox(height: 120),
+            ],
+          ),
+        ),
+        _buildFixedBottomButton(
+          "Send to Doctor (Demo)",
+          LucideIcons.send,
+          () {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Submitted to doctor (demo)."), backgroundColor: Color(0xFF0D9488)),
+            );
+            setState(() {
+              _aiWoundJson = null;
+              _responseMode = 'fillin';
+            });
+            _navigateTo('dashboard');
+          },
+        ),
+      ],
+    );
+  }
+
+  Widget _kv(String k, String v) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 120,
+            child: Text(
+              k,
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              v.isEmpty ? "-" : v,
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

@@ -1,0 +1,11 @@
+﻿patient_id,hn,patient_name,phone_no,dob,gender,height_cm,weight_kg,status,occupation,medical_history,created_by,created_at
+P-1001,67-101,Somchai Rakdee,081-234-5678,1955-05-12,Male,172,68,TRUE,Retired,"Diabetes, HT",Admin_01,2026-01-20 9:15
+P-1002,67-102,Somsak Sripai,082-345-6789,1962-11-20,Male,168,72,TRUE,Farmer,Hypertension,Admin_01,2026-01-20 10:30
+P-1003,67-103,Malee Jaiyen,089-876-5432,1948-03-15,Female,155,54,TRUE,Housewife,CKD Stage 3,Nurse_Joy,2026-01-21 8:00
+P-1004,67-104,Anong Saetang,081-111-2222,1971-09-02,Female,160,58,TRUE,Merchant,None,Admin_02,2026-01-21 13:45
+P-1005,67-105,Wanchai Maneerat,085-555-4433,1959-01-30,Male,175,80,TRUE,Office Worker,Dyslipidemia,Admin_01,2026-01-22 11:20
+P-1006,67-106,Kanya Suksamran,086-789-1234,1980-07-14,Female,162,65,TRUE,Teacher,Asthma,Nurse_Joy,2026-01-22 15:10
+P-1007,67-107,Prasert Bunma,083-444-5566,1945-12-10,Male,170,62,TRUE,Retired,Heart Disease,Admin_02,2026-01-23 9:00
+P-1008,67-108,Sunee Thongdee,084-222-3311,1966-04-22,Female,158,59,TRUE,Seller,Hypertension,Admin_01,2026-01-23 10:45
+P-1009,67-109,Chai Wongsuwan,081-999-8877,1975-06-08,Male,180,85,TRUE,Driver,None,Admin_02,2026-01-24 14:00
+P-1010,67-110,Rattana Kaewmanee,087-654-3210,1952-10-05,Female,156,50,TRUE,Retired,Diabetes Type 2,Nurse_Joy,2026-01-24 16:30
