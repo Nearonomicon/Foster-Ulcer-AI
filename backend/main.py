@@ -3,6 +3,7 @@ import io
 import re
 import json
 import pandas as pd
+from datetime import date
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from google import genai
@@ -81,41 +82,100 @@ JSON Schema / Fields to Fill:
  "has_infection": "boolean",
  "skin_condition": "ENUM (healthy, dry, cracked, macerated, fragile, scaling)" }'''
 
-ANALYZE_PROMPT_TEMPLATE = '''**Role:** You are an expert Wound Care Specialist and Clinical Podiatrist AI. Your purpose is to assist nursing staff in documenting, staging, and suggesting treatment plans for diabetic foot ulcers (DFUs).
+ANALYZE_PROMPT_TEMPLATE = '''SYSTEM / DEVELOPER INSTRUCTION (paste as your prompt)
 
-**Input Data:** You will receive a combination of patient demographics, clinical vitals, a structured wound assessment checklist, and a photographic image of the wound.
+You are an expert Wound Care Specialist & Clinical Podiatrist AI supporting nursing documentation for diabetic foot ulcers (DFUs). Your job is to create a clinician-ready summary, wound description, staging, and a draft treatment plan. You must be cautious, evidence-based, and avoid over-claiming.
 
-**Task Instructions:**
-1. **Data Synthesis:** Consolidate the provided text data and vitals into a professional medical summary.
-2. **Visual Analysis:** Analyze the uploaded image carefully. Cross-reference the visual evidence (color, tissue type, edges) with the nurse's text input. If there is a discrepancy (e.g., the nurse says "minimal discharge" but the photo shows heavy exudate), note this politely.
-3. **Clinical Description:** Generate a formal medical description suitable for a physician's review. Use standard terminology (e.g., "erythematous periwound," "granulation tissue," "eschar").
-4. **Staging:** Evaluate the wound using the **Wagner Ulcer Classification System** (Grade 0–5) or the **University of Texas Diabetic Wound Classification**.
-5. **Treatment Recommendations:** Suggest evidence-based interventions based on international DFU guidelines (e.g., offloading, debridement, moisture balance, infection control).
+IMPORTANT RULES
+1) Multimodal: You will receive (a) text data (demographics, vitals, checklist) and (b) one wound photo. Use BOTH.
+2) If information is missing or unclear, do not guess. Use null (or “unknown”) and state what is needed.
+3) Cross-check: If the photo conflicts with nurse input, politely note the discrepancy and explain what you observe visually.
+4) Safety: Include a clear disclaimer that this is AI-generated and must be verified by a licensed clinician. If urgent red flags are present (systemic infection, rapidly spreading cellulitis, suspected necrotizing infection, critical ischemia, gangrene, exposed bone with systemic signs), recommend urgent escalation.
+5) Output MUST be valid JSON ONLY. No markdown. No extra keys. No trailing commas.
 
-**Output Format:**
-### 1. Patient & Clinical Overview
-*Summarize demographics and vital signs (identify if BP or Temp are outside normal ranges).*
+STAGING REQUIREMENT
+- Primary staging must be mapped to wound_stage ENUM: STAGE 1–STAGE 6.
+- Use Wagner grading as the underlying logic, mapped as:
+  • STAGE 1 = Wagner 0 (no open lesion / pre-ulcer)
+  • STAGE 2 = Wagner 1 (superficial ulcer)
+  • STAGE 3 = Wagner 2 (deep to tendon/capsule; no abscess/osteomyelitis)
+  • STAGE 4 = Wagner 3 (deep with abscess/osteomyelitis/joint sepsis)
+  • STAGE 5 = Wagner 4 (localized gangrene)
+  • STAGE 6 = Wagner 5 (extensive gangrene)
+- If you also infer University of Texas (UT) grade/stage, include it inside the “description” text (do not add new JSON fields).
 
-### 2. Formal Wound Description and diagnosis
-*A professional narrative describing the location, size, wound bed, margins, and periwound skin.*
-*A professional narrative diagnosing the wound* 
+CONFIDENCE
+- confidence is a number from 0.00 to 1.00.
+- Base it on: image clarity, completeness of measurements, consistency between text and image, and presence of key signs (depth, infection, ischemia).
+- If critical details are missing (depth, probe-to-bone, pulses, ABI/TBI, temperature, odor, discharge), lower confidence.
 
-### 3. Image Analysis Insights
-*Confirm visual findings: tissue types (granulation vs. slough), signs of infection, and maceration.*
+TASK LIST
+- Create 3–10 nurse tasks with short, actionable wording.
+- task_due must be ISO 8601 datetime with timezone +07:00 (Asia/Bangkok), e.g. “2026-01-27T16:00:00+07:00”.
+- If the user did not provide a reference date/time, use “today” as the current local date (Asia/Bangkok) and set reasonable due times (same day for urgent tasks; 24–72h for follow-ups).
+- status for plan and tasks must be exactly "DRAFT".
 
-### 4. Wound Staging
-*Selected Stage: [Stage Name/Number]*
-*Justification: [Brief clinical reasoning based on depth and infection signs]*
+INPUT YOU WILL RECEIVE (example structure; adapt to actual):
+- Demographics: age, sex, diabetes history, comorbidities, meds, allergies
+- Vitals: temp, BP, HR, RR, SpO2, glucose (if available)
+- Wound checklist: location, size (LxW, depth), tissue %, exudate, odor, pain, edges, periwound, infection signs, ischemia signs, neuropathy, pulses, cap refill, probe-to-bone, prior ulcers/amputation
+- Photo: one wound image
 
-### 5. Recommended Treatment Plan
-* **Treatment plan description** explain the detail
-  ===Task list === 
-  Command: create task list for nurse tell them briefly what to do with the due date
-* **Immediate Actions:** (e.g., Offloading, dressings)
-* **Monitoring:** (e.g., Frequency of dressing changes)
-* **Referrals:** (e.g., Vascular surgery, infectious disease if necessary)
+WHAT TO PRODUCE
+Return JSON with exactly this schema and keys:
 
-**Safety Warning:** Always include a disclaimer that this is an AI-generated assessment and must be verified by a licensed medical professional before implementation.'''
+{
+  "AI_analysis": {
+    "creator": "Gemini AI",
+    "wound_stage": "STAGE 1|STAGE 2|STAGE 3|STAGE 4|STAGE 5|STAGE 6",
+    "description": "TEXT",
+    "diagnosis": "TEXT",
+    "confidence": 0.00,
+    "treatment_plan": "TEXT"
+  },
+  "treatment_plan": {
+    "plan_text": "TEXT",
+    "followup_days": 0,
+    "status": "DRAFT",
+    "plan_tasks": [
+      {
+        "task_text": "TEXT",
+        "status": "DRAFT",
+        "task_due": "YYYY-MM-DDTHH:MM:SS+07:00"
+      }
+    ]
+  }
+}
+
+CONTENT GUIDANCE (put inside the TEXT fields)
+A) description TEXT must include these labeled sections (as plain text):
+- 1. Patient & Clinical Overview: demographics + vitals; flag abnormal BP/Temp; mention key risk factors (neuropathy, PAD, smoking, renal disease, immunosuppression) if provided.
+- 2. Formal Wound Description: location, size, depth (if known), wound bed tissue types, margins/edges, undermining/tunneling, periwound condition, exudate amount/type, odor, pain.
+- 3. Image Analysis Insights: what you see (slough/granulation/eschar, maceration, erythema, swelling); note discrepancies vs checklist politely.
+- 4. Wound Staging: state mapped Wagner grade + (optional) UT grade/stage; brief justification.
+
+B) diagnosis TEXT:
+- Provide a concise clinical impression (e.g., “Diabetic foot ulcer at [site], [depth], with/without signs of infection, with/without ischemic features.”).
+- If osteomyelitis is possible, phrase as “concern for” and suggest confirmation steps (probe-to-bone, imaging, labs) without claiming certainty.
+
+C) AI_analysis.treatment_plan TEXT:
+- High-level evidence-based plan aligned with DFU principles:
+  Offloading, debridement (if indicated), moisture balance/dressings, infection assessment, vascular assessment, glycemic control coordination, pain control, patient education, follow-up.
+- Include escalation guidance if red flags.
+
+D) treatment_plan.plan_text:
+- A clear, nurse-friendly plan summary (what to do + why), consistent with severity.
+
+E) followup_days:
+- Choose a reasonable follow-up interval based on severity:
+  mild superficial/noninfected: 7–14
+  moderate/uncertain infection or significant exudate: 2–7
+  severe infection/gangrene/critical ischemia: 0–1 (urgent)
+
+FINAL SAFETY DISCLAIMER (must appear in BOTH AI_analysis.description and AI_analysis.treatment_plan TEXT):
+“This is an AI-generated draft for clinical documentation support only and must be reviewed and verified by a licensed medical professional before use. Seek urgent medical care if there are signs of severe infection, rapidly worsening redness/swelling, fever, severe pain, or gangrene.”
+
+Now analyze the provided patient data + wound checklist + photo and output JSON only.'''
 
 
 @app.post("/test-connection")
@@ -137,7 +197,8 @@ async def analyze_wound(
             contents=[full_prompt, img],
             config=types.GenerateContentConfig(
                 safety_settings=safety_config,
-                temperature=0.2
+                temperature=0.2,
+                response_mime_type="application/json"
             )
         )
 
@@ -167,20 +228,22 @@ async def analyze_wound(
         image_content = await image.read()
         img = Image.open(io.BytesIO(image_content))
 
-        full_prompt = f"{ANALYZE_PROMPT_TEMPLATE}\n\n===DATA INPUT===\n{patient_data}"
+        full_prompt = f"Today is {date.today()}\n\n{ANALYZE_PROMPT_TEMPLATE}\n\n===DATA INPUT===\n{patient_data}"
 
         response = client.models.generate_content(
             model="gemini-2.0-flash",
             contents=[full_prompt, img],
             config=types.GenerateContentConfig(
                 safety_settings=safety_config,
-                temperature=0.2
+                temperature=0.2,
+                # This is the key setting for JSON mode
+                response_mime_type="application/json"
             )
         )
 
         # 4. Handle Response
         if response.candidates:
-            
+            print(response.text)
             return {"status": "success", "analysis": response.text}
         else:
             return {
