@@ -45,6 +45,15 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     for (final c in _controllers.values) {
       c.dispose();
     }
+    _patientSearchCtrl.dispose();
+
+    // patient profile controllers
+    _patientNameCtrl.dispose();
+    _patientPhoneCtrl.dispose();
+    _patientHeightCtrl.dispose();
+    _patientWeightCtrl.dispose();
+    _patientHistoryCtrl.dispose();
+
     super.dispose();
   }
   // ✅ Track which response is currently shown
@@ -60,6 +69,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   void _applyPrefillControllersFromReviewed() {
     const keys = [
+      // vitals
+      'temperature',
+      'blood_pressure',
+      'heart_rate',
+
+      // wound fields
       'location_detail',
       'wound_type',
       'size_width_cm',
@@ -76,9 +91,25 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   // Navigation & UI State
   String _currentStep = 'dashboard';
+
+  // ✅ Patient search before intake
+  final TextEditingController _patientSearchCtrl = TextEditingController();
+  String _patientSearchQuery = "";
+
+  // ✅ Patient profile (intake)
+  final Map<String, dynamic> _patientProfile = {}; // patient profile state
+  bool _patientProfileSaved = false;
+
+  // patient profile controllers
+  final TextEditingController _patientNameCtrl = TextEditingController();
+  final TextEditingController _patientPhoneCtrl = TextEditingController();
+  final TextEditingController _patientHeightCtrl = TextEditingController();
+  final TextEditingController _patientWeightCtrl = TextEditingController();
+  final TextEditingController _patientHistoryCtrl = TextEditingController();
   int _activeTab = 0;
   Map<String, dynamic>? _selectedPatient;
   bool _isAnalyzing = false;
+
   XFile? _capturedImage;
 
   // Response view
@@ -97,7 +128,16 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   // ✅ FastAPI endpoints
   final Uri _fillinUri = Uri.parse("$_baseUrl/analyze-fillin");
   final Uri _analyzeWoundUri = Uri.parse("$_baseUrl/analyze-wound");
+  final Uri _createCaseUri = Uri.parse("$_baseUrl/create-case");
+  // ✅ Patient profile endpoint (implement in FastAPI)
+  // ✅ Patient profile endpoint (multipart/form-data: patient_data JSON string)
+  final Uri _createPatientUri = Uri.parse("$_baseUrl/create-patient-profile"); // patient API
   final Uri _docsUri = Uri.parse("$_baseUrl/docs");
+
+  // ✅ NEW: endpoints to persist/send the final case package
+  // create-case: save everything (recommended)
+  // send-to-doctor: optional demo endpoint (notify/forward)
+  final Uri _sendToDoctorUri = Uri.parse("$_baseUrl/send-to-doctor");
 
   // Mock Clinical Data
   final List<Map<String, dynamic>> _patients = [
@@ -182,6 +222,19 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
 
   Future<void> _pickImage(ImageSource source) async {
+    // Enforce: must save/select patient profile before taking a wound photo
+    if (!_patientProfileSaved) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Please save/select the patient profile first."),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+      _navigateTo('patient_search');
+      return;
+    }
     final picker = ImagePicker();
     try {
       final XFile? image = await picker.pickImage(source: source, imageQuality: 85);
@@ -280,18 +333,45 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       return;
     }
 
+    // Enforce: must have patient profile
+    if (!_patientProfileSaved || _patientProfile.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Please save/select the patient profile first."),
+          backgroundColor: Colors.redAccent,
+        ),
+      );
+      _navigateTo('patient_search');
+      return;
+    }
+
     setState(() => _isAnalyzing = true);
 
     try {
       final request = http.MultipartRequest('POST', _analyzeWoundUri);
 
-      // patient_data must be Form field string
-      final payload = Map<String, dynamic>.from(_reviewed);
-      payload['source'] = 'flutter_demo';
+      // Nurse-reviewed payload (from checklist)
+      final reviewed = Map<String, dynamic>.from(_reviewed);
 
+      // Backward-compatible aliases (your DB field typos)
+      if (reviewed.containsKey('size_length_cm') && !reviewed.containsKey('size_legnth_cm')) {
+        reviewed['size_legnth_cm'] = reviewed['size_length_cm'];
+      }
+      if (reviewed.containsKey('discharge_volume') && !reviewed.containsKey('discharge_volumn')) {
+        reviewed['discharge_volumn'] = reviewed['discharge_volume'];
+      }
+
+      // Pack patient profile together with other data
+      final payload = <String, dynamic>{
+        'source': 'flutter_demo',
+        'patient_profile': Map<String, dynamic>.from(_patientProfile),
+        'selected_patient': _selectedPatient,
+        'nurse_reviewed': reviewed,
+      };
+
+      // patient_data must be Form field string
       request.fields['patient_data'] = jsonEncode(payload);
 
-      // attach same photo again
       final bytes = await _capturedImage!.readAsBytes();
       request.files.add(
         http.MultipartFile.fromBytes(
@@ -314,12 +394,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
       final Map<String, dynamic> body = jsonDecode(response.body);
 
-      // backend returns {status:'success', analysis:'...'}
       if (body['status'] == 'success' && body.containsKey('analysis')) {
         final analysisVal = body['analysis'];
         final parsed = _parseAnalysis(analysisVal);
 
-        // ✅ If analysis is JSON (doctor summary), show Summary page
         if (parsed != null && (parsed.containsKey('AI_analysis') || parsed.containsKey('treatment_plan'))) {
           setState(() {
             _aiWoundJson = parsed;
@@ -328,7 +406,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           return;
         }
 
-        // Otherwise, treat as free-text (old behavior)
         setState(() {
           _responseMode = 'analysis';
           _rawResponse = analysisVal?.toString();
@@ -346,6 +423,181 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           SnackBar(content: Text("Submit failed: $e"), backgroundColor: Colors.redAccent),
         );
       }
+    } finally {
+      if (mounted) setState(() => _isAnalyzing = false);
+    }
+  }
+
+  // ✅ Step 3a: Create case in backend (SAVE EVERYTHING)
+  // Sends: nurse-reviewed + ai-prefill + ai-analysis + image
+  Future<String> _createCase() async {
+    if (_capturedImage == null) {
+      throw Exception("No image found. Please retake the photo.");
+    }
+    if (_aiWoundJson == null) {
+      throw Exception("No AI analysis found. Please submit to analyze-wound first.");
+    }
+
+    final request = http.MultipartRequest('POST', _createCaseUri);
+
+    final caseData = {
+      'patient_profile': _patientProfile,
+      'selected_patient': _selectedPatient,
+      'nurse_reviewed': _reviewed,
+      'ai_prefill': _aiExtraction, // from /analyze-fillin
+      'ai_analysis': _aiWoundJson, // from /analyze-wound
+      'meta': {
+        'source': 'flutter_demo',
+        'sent_at': DateTime.now().toIso8601String(),
+      }
+    };
+
+    // Single packed field (recommended)
+    request.fields['case_data'] = jsonEncode(caseData);
+
+    // ✅ Required by FastAPI: patient_data field
+    request.fields['patient_data'] = jsonEncode(caseData);
+
+    // Optional: separated fields (backend convenience)
+    request.fields['nurse_reviewed'] = jsonEncode(_reviewed);
+    request.fields['ai_prefill'] = jsonEncode(_aiExtraction ?? {});
+    request.fields['ai_analysis'] = jsonEncode(_aiWoundJson);
+
+    final bytes = await _capturedImage!.readAsBytes();
+    request.files.add(
+      http.MultipartFile.fromBytes(
+        'image',
+        bytes,
+        filename: _capturedImage!.name,
+      ),
+    );
+
+    final streamed = await request.send().timeout(const Duration(seconds: 60));
+    final response = await http.Response.fromStream(streamed);
+
+    debugPrint("DEBUG: POST $_createCaseUri");
+    debugPrint("DEBUG: STATUS: ${response.statusCode}");
+    debugPrint("DEBUG: BODY: ${response.body}");
+
+    if (response.statusCode != 200) {
+      throw Exception("Server Error ${response.statusCode}: ${response.body}");
+    }
+
+    // pretty print if JSON
+    try {
+      final decoded = jsonDecode(response.body);
+      return const JsonEncoder.withIndent('  ').convert(decoded);
+    } catch (_) {
+      return response.body;
+    }
+  }
+
+  // ✅ Step 3b: Send to doctor (Demo)
+  // IMPORTANT: This must call the case endpoint, NOT the patient endpoint.
+  // It saves everything via /create-case (multipart/form-data) and shows the backend response.
+  Future<void> _sendToDoctor() async {
+    setState(() => _isAnalyzing = true);
+    try {
+      final bodyText = await _createCase();
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Case created and sent to doctor (demo)."),
+          backgroundColor: Color(0xFF0D9488),
+        ),
+      );
+
+      setState(() {
+        _responseMode = 'analysis';
+        _rawResponse = bodyText;
+      });
+      _navigateTo('response_view');
+    } catch (e) {
+      debugPrint("SendToDoctor/CreateCase Error: $e");
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Send failed: $e"), backgroundColor: Colors.redAccent),
+      );
+    } finally {
+      if (mounted) setState(() => _isAnalyzing = false);
+    }
+  }
+
+  // ✅ Save patient profile to backend (JSON)
+  // Backend suggestion:
+  // @app.post('/create-patient')
+  // async def create_patient(payload: dict): return {'status':'success'}
+  Future<void> _savePatientProfile() async {
+    final name = _patientNameCtrl.text.trim();
+    if (name.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Patient name is required."), backgroundColor: Colors.redAccent),
+      );
+      return;
+    }
+
+    setState(() => _isAnalyzing = true);
+    try {
+      // Backend expects: multipart/form-data with a Form field named "patient_data" (JSON string)
+      final payload = {
+        'patient_name': name,
+        'phone_no': _patientPhoneCtrl.text.trim(),
+        'height_cm': _patientHeightCtrl.text.trim(),
+        'weight_kg': _patientWeightCtrl.text.trim(),
+        'medical_history': _patientHistoryCtrl.text.trim(),
+        'source': 'flutter_demo',
+        'created_at': DateTime.now().toIso8601String(),
+      };
+
+      final req = http.MultipartRequest('POST', _createPatientUri);
+      req.fields['patient_data'] = jsonEncode(payload);
+
+      final streamed = await req.send().timeout(const Duration(seconds: 30));
+      final resp = await http.Response.fromStream(streamed);
+
+      debugPrint("DEBUG: POST $_createPatientUri");
+      debugPrint("DEBUG: STATUS: ${resp.statusCode}");
+      debugPrint("DEBUG: BODY: ${resp.body}");
+
+      if (resp.statusCode != 200) {
+        throw Exception("Server Error ${resp.statusCode}: ${resp.body}");
+      }
+
+      final decoded = jsonDecode(resp.body);
+      if (decoded is! Map<String, dynamic> || decoded['status'] != 'success') {
+        throw Exception("Unexpected response: ${resp.body}");
+      }
+
+      final patientId = (decoded['patient_id'] ?? '').toString();
+      final patientProfile = (decoded['patient_profile'] is Map)
+          ? Map<String, dynamic>.from(decoded['patient_profile'])
+          : <String, dynamic>{};
+
+      // Keep local state for later /create-case
+      _patientProfile
+        ..clear()
+        ..addAll(patientProfile.isNotEmpty ? patientProfile : payload);
+
+      // Ensure patient_id is present locally even if backend didn't include full profile
+      if (patientId.isNotEmpty) {
+        _patientProfile['patient_id'] = patientId;
+      }
+
+      setState(() => _patientProfileSaved = true);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(patientId.isEmpty ? "Patient profile saved." : "Patient profile saved ($patientId)."),
+          backgroundColor: const Color(0xFF0D9488),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Save failed: $e"), backgroundColor: Colors.redAccent),
+      );
     } finally {
       if (mounted) setState(() => _isAnalyzing = false);
     }
@@ -399,6 +651,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     }
 
     switch (_currentStep) {
+      case 'patient_search':
+        return _buildPatientSearch();
       case 'intake':
         return _buildIntakeForm();
       case 'camera':
@@ -503,7 +757,30 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             padding: const EdgeInsets.all(24),
             children: [
               if (_aiExtraction != null) _buildAISuggestionBox(),
-
+              _buildSectionTitle(LucideIcons.thermometer, "Vitals"),
+              const SizedBox(height: 20),
+              _buildTextField(
+                      label: "TEMPERATURE",
+                      placeholder: "e.g. 37",
+                      icon: LucideIcons.thermometer,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      bindKey: 'temperature',
+              ), 
+              _buildTextField(
+                      label: "BLOOD PRESSURE",
+                      placeholder: "e.g. 120/80",
+                      icon: LucideIcons.droplet,
+                      keyboardType: TextInputType.text,
+                      bindKey: 'blood_pressure',
+              ), 
+              _buildTextField(
+                      label: "HEART RATE",
+                      placeholder: "0.0",
+                      icon: LucideIcons.heart,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      bindKey: 'heart_rate',
+              ),
+              const SizedBox(height: 20),
               _buildSectionTitle(LucideIcons.mapPin, "Anatomy & Location"),
               const SizedBox(height: 20),
               _buildDropdownField(
@@ -720,8 +997,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     final plan = (data['treatment_plan'] is Map)
         ? Map<String, dynamic>.from(data['treatment_plan'])
         : <String, dynamic>{};
-    final tasks = (plan['plan_tasks'] is List)
-        ? List<Map<String, dynamic>>.from(plan['plan_tasks'])
+    final tasks = (plan['plan_tasks_sorted'] is List)
+        ? List<Map<String, dynamic>>.from(plan['plan_tasks_sorted'])
         : <Map<String, dynamic>>[];
 
     String fmtDue(String? iso) {
@@ -805,6 +1082,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               const SizedBox(height: 20),
               _buildSectionTitle(LucideIcons.clipboardCheck, "Nurse-Reviewed Data"),
               const SizedBox(height: 12),
+              _kv("Temperature", (_reviewed['temperature'] ?? '').toString()),
+              _kv("Blood pressure", (_reviewed['blood_pressure'] ?? '').toString()),
+              _kv("Heart rate", (_reviewed['heart_rate'] ?? '').toString()),
               _kv("Location", (_reviewed['location_primary'] ?? '').toString()),
               _kv("Location detail", (_reviewed['location_detail'] ?? '').toString()),
               _kv("Wound type", (_reviewed['wound_type'] ?? '').toString()),
@@ -939,16 +1219,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         _buildFixedBottomButton(
           "Send to Doctor (Demo)",
           LucideIcons.send,
-          () {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text("Submitted to doctor (demo)."), backgroundColor: Color(0xFF0D9488)),
-            );
-            setState(() {
-              _aiWoundJson = null;
-              _responseMode = 'fillin';
-            });
-            _navigateTo('dashboard');
-          },
+          _sendToDoctor,
         ),
       ],
     );
@@ -956,7 +1227,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   Widget _kv(String k, String v) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -964,14 +1235,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             width: 120,
             child: Text(
               k,
-              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.grey),
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey),
             ),
           ),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               v.isEmpty ? "-" : v,
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
             ),
           ),
         ],
@@ -979,7 +1250,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
-  // --- UI building blocks ---
   Widget _buildAISuggestionBox() {
     return Container(
       margin: const EdgeInsets.only(bottom: 24),
@@ -996,7 +1266,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           Expanded(
             child: Text(
               "Analysis successful. Please verify the pre-filled clinical data before submitting.",
-              style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF134E4A)),
+              style: GoogleFonts.plusJakartaSans(
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF134E4A),
+              ),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
@@ -1163,7 +1437,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         _buildActionCard(),
         const SizedBox(height: 24),
         ElevatedButton.icon(
-          onPressed: () => _navigateTo('intake'),
+          onPressed: () => _navigateTo('patient_search'),
           icon: const Icon(LucideIcons.userPlus, size: 20),
           label: const Text("New Patient Intake", style: TextStyle(fontWeight: FontWeight.bold)),
           style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0D9488), foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 64), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)), elevation: 0),
@@ -1176,25 +1450,374 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
+  Widget _buildPatientSearch() {
+    final q = _patientSearchQuery.trim().toLowerCase();
+    final filtered = q.isEmpty
+        ? _patients
+        : _patients.where((p) {
+            final name = (p['name'] ?? '').toString().toLowerCase();
+            final id = (p['id'] ?? '').toString().toLowerCase();
+            return name.contains(q) || id.contains(q);
+          }).toList();
+
+    return Column(
+      children: [
+        _buildHeader("Find Patient", onBack: () => _navigateTo('dashboard')),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.all(24),
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFF1F5F9)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(LucideIcons.search, color: TWColors.slate.shade400, size: 18),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: TextField(
+                        controller: _patientSearchCtrl,
+                        decoration: const InputDecoration(
+                          hintText: "Search by Patient Name or ID",
+                          border: InputBorder.none,
+                        ),
+                        onChanged: (v) => setState(() => _patientSearchQuery = v),
+                      ),
+                    ),
+                    if (_patientSearchQuery.isNotEmpty)
+                      IconButton(
+                        onPressed: () {
+                          _patientSearchCtrl.clear();
+                          setState(() => _patientSearchQuery = "");
+                        },
+                        icon: Icon(LucideIcons.x, size: 18, color: TWColors.slate.shade400),
+                      )
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                "Search Results",
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey),
+              ),
+              const SizedBox(height: 12),
+              if (filtered.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.only(top: 12),
+                  child: Text("No patient found.", style: TextStyle(color: Colors.grey)),
+                )
+              else
+                ...filtered.map((p) {
+                  final bool selected = _selectedPatient != null && _selectedPatient!['id'] == p['id'];
+                  return GestureDetector(
+                    onTap: () => setState(() => _selectedPatient = p),
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: selected ? const Color(0xFFF0FDFA) : Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: selected ? const Color(0xFF5EEAD4) : const Color(0xFFF1F5F9),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFCCFBF1),
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: const Center(
+                              child: Icon(LucideIcons.user, size: 18, color: Color(0xFF0D9488)),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  (p['name'] ?? '').toString(),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  (p['id'] ?? '').toString(),
+                                  style: const TextStyle(fontSize: 11, color: Colors.grey),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (selected)
+                            const Icon(LucideIcons.circleCheck, color: Color(0xFF0D9488), size: 18)
+                          else
+                            Icon(LucideIcons.circle, color: TWColors.slate.shade300, size: 18),
+                        ],
+                      ),
+                    ),
+                  );
+                }),
+              const SizedBox(height: 120),
+            ],
+          ),
+        ),
+        Container(
+          padding: const EdgeInsets.all(24),
+          decoration: const BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: Color(0xFFF1F5F9)))),
+          child: Column(
+            children: [
+              ElevatedButton.icon(
+                onPressed: () {
+                  if (_selectedPatient == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text("Please select a patient first."), backgroundColor: Colors.redAccent),
+                    );
+                    return;
+                  }
+
+                  // existing patient is considered already saved
+                  _patientProfile
+                    ..clear()
+                    ..addAll({
+                      'patient_id': _selectedPatient?['id'],
+                      'patient_name': _selectedPatient?['name'],
+                      'age': _selectedPatient?['age'],
+                      'gender': _selectedPatient?['gender'],
+                      'source': 'flutter_demo',
+                    });
+                  setState(() => _patientProfileSaved = true);
+                  _navigateTo('camera');
+                },
+                icon: const Icon(LucideIcons.camera),
+                label: const Text("Proceed To Take Wound Photo", style: TextStyle(fontWeight: FontWeight.bold)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0D9488),
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 60),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                ),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                onPressed: () {
+                  // reset for new patient
+                  _patientProfile.clear();
+                  _patientProfileSaved = false;
+                  _selectedPatient = null;
+                  _patientNameCtrl.clear();
+                  _patientPhoneCtrl.clear();
+                  _patientHeightCtrl.clear();
+                  _patientWeightCtrl.clear();
+                  _patientHistoryCtrl.clear();
+                  _navigateTo('intake');
+                },
+                icon: const Icon(LucideIcons.userPlus),
+                label: const Text("Register New Patient", style: TextStyle(fontWeight: FontWeight.bold)),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF0D9488),
+                  side: const BorderSide(color: Color(0xFF0D9488)),
+                  minimumSize: const Size(double.infinity, 60),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildIntakeForm() {
     return Column(children: [
-      _buildHeader("New Patient Intake", onBack: () => _navigateTo('dashboard')),
+      _buildHeader("New Patient Intake", onBack: () => _navigateTo('patient_search')),
       Expanded(
         child: ListView(padding: const EdgeInsets.all(24), children: [
           _buildSectionTitle(LucideIcons.user, "Step 1: Patient Details"),
           const SizedBox(height: 24),
-          _buildTextField(label: "HN (HOSPITAL NUMBER)", placeholder: "e.g. HN-12345", icon: LucideIcons.hash),
-          _buildTextField(label: "PATIENT NAME", placeholder: "Full name", icon: LucideIcons.userCheck),
-          _buildTextField(label: "PHONE NO", placeholder: "+91 00000 00000", icon: LucideIcons.phone, keyboardType: TextInputType.phone),
+
+          Padding(
+            padding: const EdgeInsets.only(bottom: 20),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text("PATIENT NAME", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF0D9488))),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _patientNameCtrl,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                decoration: InputDecoration(
+                  prefixIcon: Icon(LucideIcons.userCheck, size: 20, color: TWColors.slate.shade400),
+                  hintText: "Full name",
+                  filled: true,
+                  fillColor: const Color(0xFFF8FAFC),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                ),
+              ),
+            ]),
+          ),
+
+          Padding(
+            padding: const EdgeInsets.only(bottom: 20),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text("PHONE NO", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF0D9488))),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _patientPhoneCtrl,
+                keyboardType: TextInputType.phone,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                decoration: InputDecoration(
+                  prefixIcon: Icon(LucideIcons.phone, size: 20, color: TWColors.slate.shade400),
+                  hintText: "+91 00000 00000",
+                  filled: true,
+                  fillColor: const Color(0xFFF8FAFC),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                ),
+              ),
+            ]),
+          ),
+
           Row(children: [
-            Expanded(child: _buildTextField(label: "HEIGHT (CM)", placeholder: "175", icon: LucideIcons.ruler, keyboardType: TextInputType.number)),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 20),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text("HEIGHT (CM)", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF0D9488))),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: _patientHeightCtrl,
+                    keyboardType: TextInputType.number,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    decoration: InputDecoration(
+                      prefixIcon: Icon(LucideIcons.ruler, size: 20, color: TWColors.slate.shade400),
+                      hintText: "Enter Height",
+                      filled: true,
+                      fillColor: const Color(0xFFF8FAFC),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                    ),
+                  ),
+                ]),
+              ),
+            ),
             const SizedBox(width: 16),
-            Expanded(child: _buildTextField(label: "WEIGHT (KG)", placeholder: "70", icon: LucideIcons.scale, keyboardType: TextInputType.number)),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 20),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  const Text("WEIGHT (KG)", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF0D9488))),
+                  const SizedBox(height: 8),
+                  TextFormField(
+                    controller: _patientWeightCtrl,
+                    keyboardType: TextInputType.number,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                    decoration: InputDecoration(
+                      prefixIcon: Icon(LucideIcons.scale, size: 20, color: TWColors.slate.shade400),
+                      hintText: "Enter Weight",
+                      filled: true,
+                      fillColor: const Color(0xFFF8FAFC),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                    ),
+                  ),
+                ]),
+              ),
+            ),
           ]),
-          const SizedBox(height: 40),
+
+          Padding(
+            padding: const EdgeInsets.only(bottom: 20),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text("MEDICAL HISTORY", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF0D9488))),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _patientHistoryCtrl,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                decoration: InputDecoration(
+                  prefixIcon: Icon(LucideIcons.clipboard, size: 20, color: TWColors.slate.shade400),
+                  hintText: "Diabetes",
+                  filled: true,
+                  fillColor: const Color(0xFFF8FAFC),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                ),
+              ),
+            ]),
+          ),
+
+          if (_patientProfileSaved)
+            Container(
+              margin: const EdgeInsets.only(top: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF0FDFA),
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFF5EEAD4)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(LucideIcons.circleCheck, size: 16, color: Color(0xFF0D9488)),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      "Profile saved. You can proceed to take a wound photo.",
+                      style: TextStyle(fontSize: 12, color: Color(0xFF134E4A), fontWeight: FontWeight.w600),
+                    ),
+                  )
+                ],
+              ),
+            ),
+
+          const SizedBox(height: 120),
         ]),
       ),
-      _buildFixedBottomButton("Take Wound Photo", LucideIcons.camera, () => _navigateTo('camera')),
+
+      // Button 1: Save Patient Profile
+      Container(
+        padding: const EdgeInsets.fromLTRB(24, 24, 24, 12),
+        decoration: const BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: Color(0xFFF1F5F9)))),
+        child: ElevatedButton.icon(
+          onPressed: () async {
+            await _savePatientProfile();
+          },
+          icon: const Icon(LucideIcons.save),
+          label: const Text("Save Patient Profile", style: TextStyle(fontWeight: FontWeight.bold)),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF0D9488),
+            foregroundColor: Colors.white,
+            minimumSize: const Size(double.infinity, 60),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            elevation: 0,
+          ),
+        ),
+      ),
+
+      // Button 2: Take wound photo (only after save)
+      Container(
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 24),
+        decoration: const BoxDecoration(color: Colors.white),
+        child: ElevatedButton.icon(
+          onPressed: _patientProfileSaved
+              ? () => _navigateTo('camera')
+              : () {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Please save the patient profile first."), backgroundColor: Colors.redAccent),
+                  );
+                },
+          icon: const Icon(LucideIcons.camera),
+          label: const Text("Take Wound Photo", style: TextStyle(fontWeight: FontWeight.bold)),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: _patientProfileSaved ? const Color(0xFF0D9488) : TWColors.slate.shade300,
+            foregroundColor: Colors.white,
+            minimumSize: const Size(double.infinity, 60),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            elevation: 0,
+          ),
+        ),
+      ),
     ]);
   }
 

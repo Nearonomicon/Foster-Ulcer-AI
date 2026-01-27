@@ -4,6 +4,8 @@ import re
 import json
 import pandas as pd
 import requests
+import uuid
+import datetime
 from datetime import date
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,7 +14,7 @@ from google.genai import types
 from PIL import Image
 from dotenv import load_dotenv
 
-
+genai_model = "gemini-2.5-flash"
 app = FastAPI()
 
 # --- CORS CONFIGURATION ---
@@ -184,6 +186,33 @@ Now analyze the provided patient data + wound checklist + photo and output JSON 
 async def test_connection():
     return {"message": "CORS is working!"}
 
+@app.post("/create-patient-profile")
+async def create_patient_profile(patient_data: str = Form(...)):
+    try:
+        # Decode JSON string
+        data = json.loads(patient_data)
+
+        if not data.get("patient_name", "").strip():
+            raise HTTPException(status_code=400, detail="patient_name is required")
+
+        patient_id = f"PT-{uuid.uuid4().hex[:6].upper()}"
+        created_at = data.get("created_at") or datetime.utcnow().isoformat()
+
+        data["patient_id"] = patient_id
+        data["created_at"] = created_at
+
+        print("✅ create-patient-profile:", data)
+
+        return {
+            "status": "success",
+            "patient_id": patient_id,
+            "patient_profile": data,
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.post("/analyze-fillin")
 async def fill_in(
     image: UploadFile = File(...)   # Received as a file upload
@@ -195,7 +224,7 @@ async def fill_in(
         full_prompt = f"{FILLIN_PROMPT_TEMPLATE}"
 
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model=genai_model,
             contents=[full_prompt, img],
             config=types.GenerateContentConfig(
                 safety_settings=safety_config,
@@ -233,7 +262,7 @@ async def analyze_wound(
         full_prompt = f"Today is {date.today()}\n\n{ANALYZE_PROMPT_TEMPLATE}\n\n===DATA INPUT===\n{patient_data}"
 
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model=genai_model,
             contents=[full_prompt, img],
             config=types.GenerateContentConfig(
                 safety_settings=safety_config,
@@ -256,25 +285,26 @@ async def analyze_wound(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/sent_ai_analysis")
+@app.post("/create-case")
 async def analyze_wound(
-    patient_data: str = Form(...),  # Received as a string/JSON from frontend
+    case_data: str = Form(...),  # Received as a string/JSON from frontend
     image: UploadFile = File(...)   # Received as a file upload
 ):
     try:
         image_content = await image.read()
         img = Image.open(io.BytesIO(image_content))
 
-        print
-        # 4. Handle Response
-        if response.candidates:
-            print(response.text)
-            return {"status": "success", "analysis": response.text}
-        else:
-            return {
-                "status": "blocked", 
-                "reason": str(response.prompt_feedback.block_reason)
-            }
+        print(case_data)
+        img.show()
+        # # 4. Handle Response
+        # if response.candidates:
+        #     print(response.text)
+        #     return {"status": "success", "analysis": response.text}
+        # else:
+        #     return {
+        #         "status": "blocked", 
+        #         "reason": str(response.prompt_feedback.block_reason)
+        #     }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
