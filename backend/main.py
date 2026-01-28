@@ -14,8 +14,19 @@ from google.genai import types
 from PIL import Image
 from dotenv import load_dotenv
 
-genai_model = "gemini-2.5-flash"
+genai_model = "gemini-2.0-flash"
 app = FastAPI()
+#---- READ (MOCK UP) DATABASE ------#
+
+df_patients = pd.read_csv("C:/Users/Pawarit/Desktop/GitHub/Foster-Ulcer-AI/Foster-Ulcer-AI/mockup_data/patients.csv")
+df_wound_cases = pd.read_csv("C:/Users/Pawarit/Desktop/GitHub/Foster-Ulcer-AI/Foster-Ulcer-AI/mockup_data/wound_cases.csv")
+df_ai_analysis = pd.read_csv("C:/Users/Pawarit/Desktop/GitHub/Foster-Ulcer-AI/Foster-Ulcer-AI/mockup_data/ai_analysis.csv")
+df_treatment_plan = pd.read_csv("C:/Users/Pawarit/Desktop/GitHub/Foster-Ulcer-AI/Foster-Ulcer-AI/mockup_data/treatment_plan.csv")
+df_plan_task = pd.read_csv("C:/Users/Pawarit/Desktop/GitHub/Foster-Ulcer-AI/Foster-Ulcer-AI/mockup_data/plan_task.csv")
+
+
+#-----------------------------------#
+
 
 # --- CORS CONFIGURATION ---
 # You can specify the exact port Flutter is running on, 
@@ -85,7 +96,7 @@ JSON Schema / Fields to Fill:
  "pain_score": "integer (0-10)",
  "has_infection": "boolean",
  "skin_condition": "ENUM (healthy, dry, cracked, macerated, fragile, scaling)" }'''
-
+   
 ANALYZE_PROMPT_TEMPLATE = '''SYSTEM / DEVELOPER INSTRUCTION (paste as your prompt)
 
 You are an expert Wound Care Specialist & Clinical Podiatrist AI supporting nursing documentation for diabetic foot ulcers (DFUs). Your job is to create a clinician-ready summary, wound description, staging, and a draft treatment plan. You must be cautious, evidence-based, and avoid over-claiming.
@@ -120,7 +131,7 @@ TASK LIST
 - status for plan and tasks must be exactly "DRAFT".
 
 INPUT YOU WILL RECEIVE (example structure; adapt to actual):
-- Demographics: age, sex, diabetes history, comorbidities, meds, allergies
+- Demographics: age, sex, medical history, comorbidities, meds, allergies
 - Vitals: temp, BP, HR, RR, SpO2, glucose (if available)
 - Wound checklist: location, size (LxW, depth), tissue %, exudate, odor, pain, edges, periwound, infection signs, ischemia signs, neuropathy, pulses, cap refill, probe-to-bone, prior ulcers/amputation
 - Photo: one wound image
@@ -182,8 +193,9 @@ FINAL SAFETY DISCLAIMER (must appear in BOTH AI_analysis.description and AI_anal
 Now analyze the provided patient data + wound checklist + photo and output JSON only.'''
 
 
-@app.post("/test-connection")
-async def test_connection():
+@app.post("/load-dashboard")
+async def load_dashboard():
+    
     return {"message": "CORS is working!"}
 
 @app.post("/create-patient-profile")
@@ -256,6 +268,7 @@ async def analyze_wound(
     image: UploadFile = File(...)   # Received as a file upload
 ):
     try:
+        print(f"Sending this payload for wound analyzing: {patient_data}")
         image_content = await image.read()
         img = Image.open(io.BytesIO(image_content))
 
@@ -267,7 +280,6 @@ async def analyze_wound(
             config=types.GenerateContentConfig(
                 safety_settings=safety_config,
                 temperature=0.2,
-                # This is the key setting for JSON mode
                 response_mime_type="application/json"
             )
         )
@@ -305,7 +317,7 @@ async def analyze_wound(
         #         "status": "blocked", 
         #         "reason": str(response.prompt_feedback.block_reason)
         #     }
-
+        return {"status": "success"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

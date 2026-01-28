@@ -137,7 +137,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   // ✅ NEW: endpoints to persist/send the final case package
   // create-case: save everything (recommended)
   // send-to-doctor: optional demo endpoint (notify/forward)
-  final Uri _sendToDoctorUri = Uri.parse("$_baseUrl/send-to-doctor");
+  // final Uri _sendToDoctorUri = Uri.parse("$_baseUrl/send-to-doctor");
 
   // Mock Clinical Data
   final List<Map<String, dynamic>> _patients = [
@@ -363,7 +363,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
       // Pack patient profile together with other data
       final payload = <String, dynamic>{
-        'source': 'flutter_demo',
         'patient_profile': Map<String, dynamic>.from(_patientProfile),
         'selected_patient': _selectedPatient,
         'nurse_reviewed': reviewed,
@@ -444,24 +443,18 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       'patient_profile': _patientProfile,
       'selected_patient': _selectedPatient,
       'nurse_reviewed': _reviewed,
-      'ai_prefill': _aiExtraction, // from /analyze-fillin
-      'ai_analysis': _aiWoundJson, // from /analyze-wound
+      'ai_prefill': _aiExtraction,
+      'ai_analysis': _aiWoundJson,
       'meta': {
-        'source': 'flutter_demo',
         'sent_at': DateTime.now().toIso8601String(),
       }
     };
 
-    // Single packed field (recommended)
-    request.fields['case_data'] = jsonEncode(caseData);
-
-    // ✅ Required by FastAPI: patient_data field
+    // ✅ Backend requires patient_data (Form JSON string)
     request.fields['patient_data'] = jsonEncode(caseData);
 
-    // Optional: separated fields (backend convenience)
-    request.fields['nurse_reviewed'] = jsonEncode(_reviewed);
-    request.fields['ai_prefill'] = jsonEncode(_aiExtraction ?? {});
-    request.fields['ai_analysis'] = jsonEncode(_aiWoundJson);
+    // Optional compatibility fields
+    request.fields['case_data'] = jsonEncode(caseData);
 
     final bytes = await _capturedImage!.readAsBytes();
     request.files.add(
@@ -483,7 +476,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       throw Exception("Server Error ${response.statusCode}: ${response.body}");
     }
 
-    // pretty print if JSON
     try {
       final decoded = jsonDecode(response.body);
       return const JsonEncoder.withIndent('  ').convert(decoded);
@@ -512,7 +504,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         _responseMode = 'analysis';
         _rawResponse = bodyText;
       });
-      _navigateTo('response_view');
+      _navigateTo('dashboard');
     } catch (e) {
       debugPrint("SendToDoctor/CreateCase Error: $e");
       if (!mounted) return;
@@ -546,7 +538,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         'height_cm': _patientHeightCtrl.text.trim(),
         'weight_kg': _patientWeightCtrl.text.trim(),
         'medical_history': _patientHistoryCtrl.text.trim(),
-        'source': 'flutter_demo',
         'created_at': DateTime.now().toIso8601String(),
       };
 
@@ -997,17 +988,32 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     final plan = (data['treatment_plan'] is Map)
         ? Map<String, dynamic>.from(data['treatment_plan'])
         : <String, dynamic>{};
-    final tasks = (plan['plan_tasks_sorted'] is List)
-        ? List<Map<String, dynamic>>.from(plan['plan_tasks_sorted'])
+    final tasks = (plan['plan_tasks'] is List)
+        ? List<Map<String, dynamic>>.from(plan['plan_tasks'])
         : <Map<String, dynamic>>[];
+
+    // ✅ Sort tasks by task_due (earliest → latest)
+    tasks.sort((a, b) {
+      DateTime? da;
+      DateTime? db;
+      try { da = DateTime.parse(a['task_due']?.toString() ?? ''); } catch (_) {}
+      try { db = DateTime.parse(b['task_due']?.toString() ?? ''); } catch (_) {}
+      if (da == null && db == null) return 0;
+      if (da == null) return 1;
+      if (db == null) return -1;
+      return da.compareTo(db);
+    });
 
     String fmtDue(String? iso) {
       if (iso == null) return "";
       try {
         final dt = DateTime.parse(iso).toLocal();
-        final hh = dt.hour.toString().padLeft(2, '0');
-        final mm = dt.minute.toString().padLeft(2, '0');
-        return "${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} $hh:$mm";
+        final yyyy = dt.year.toString();
+        final mm = dt.month.toString().padLeft(2, '0');
+        final dd = dt.day.toString().padLeft(2, '0');
+        return "$yyyy-$mm-$dd"; 
+        //   return "${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} $hh:$mm";
+
       } catch (_) {
         return iso;
       }
@@ -1592,7 +1598,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                       'patient_name': _selectedPatient?['name'],
                       'age': _selectedPatient?['age'],
                       'gender': _selectedPatient?['gender'],
-                      'source': 'flutter_demo',
                     });
                   setState(() => _patientProfileSaved = true);
                   _navigateTo('camera');
