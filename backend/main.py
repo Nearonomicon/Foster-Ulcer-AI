@@ -16,17 +16,58 @@ from dotenv import load_dotenv
 
 genai_model = "gemini-2.0-flash"
 app = FastAPI()
+
+#---------- FUNCTION ---------------#
+def generate_patient_id(df_patients):
+
+# 1. Get current YYMM prefix (e.g., "2601")
+    current_prefix = date.today().strftime("%y%m")
+    prefix_label = "PT" 
+    
+    # 2. Check if the DataFrame is empty
+    if df_patients.empty:
+        return f"{prefix_label}-{current_prefix}-00001"
+    
+    # 3. Get the last patient_id from the last row
+    last_id = str(df_patients['patient_id'].iloc[-1])
+    
+    try:
+        parts = last_id.split('-')
+        last_date_part = parts[1]        
+        last_running_num = int(parts[2]) 
+        
+        # 4. Check if same month
+        if last_date_part == current_prefix:
+            new_running_num = last_running_num + 1
+        else:
+            new_running_num = 1
+            
+    except (IndexError, ValueError):
+        # Fallback if the last_id format was corrupted
+        new_running_num = 1
+
+    # 5. Format the new code
+    new_code = f"{prefix_label}-{current_prefix}-{new_running_num:05d}"
+    return new_code
+
+
 #---- READ (MOCK UP) DATABASE ------#
 
-df_patients = pd.read_csv("C:/Users/Pawarit/Desktop/GitHub/Foster-Ulcer-AI/Foster-Ulcer-AI/mockup_data/patients.csv")
-df_wound_cases = pd.read_csv("C:/Users/Pawarit/Desktop/GitHub/Foster-Ulcer-AI/Foster-Ulcer-AI/mockup_data/wound_cases.csv")
-df_ai_analysis = pd.read_csv("C:/Users/Pawarit/Desktop/GitHub/Foster-Ulcer-AI/Foster-Ulcer-AI/mockup_data/ai_analysis.csv")
-df_treatment_plan = pd.read_csv("C:/Users/Pawarit/Desktop/GitHub/Foster-Ulcer-AI/Foster-Ulcer-AI/mockup_data/treatment_plan.csv")
-df_plan_task = pd.read_csv("C:/Users/Pawarit/Desktop/GitHub/Foster-Ulcer-AI/Foster-Ulcer-AI/mockup_data/plan_task.csv")
+df_patients_path="C:/Users/Pawarit/Desktop/GitHub/Foster-Ulcer-AI/Foster-Ulcer-AI/mockup_data/patients.csv"
+df_wound_cases_path="C:/Users/Pawarit/Desktop/GitHub/Foster-Ulcer-AI/Foster-Ulcer-AI/mockup_data/wound_cases.csv"
+df_ai_analysis_path = "C:/Users/Pawarit/Desktop/GitHub/Foster-Ulcer-AI/Foster-Ulcer-AI/mockup_data/ai_analysis.csv"
+df_treatment_plan_path = "C:/Users/Pawarit/Desktop/GitHub/Foster-Ulcer-AI/Foster-Ulcer-AI/mockup_data/treatment_plan.csv"
+df_plan_task_path= "C:/Users/Pawarit/Desktop/GitHub/Foster-Ulcer-AI/Foster-Ulcer-AI/mockup_data/plan_task.csv"
+
+
+df_patients = pd.read_csv(df_patients_path)
+df_wound_cases = pd.read_csv(df_wound_cases_path)
+df_ai_analysis = pd.read_csv(df_ai_analysis_path)
+df_treatment_plan = pd.read_csv(df_treatment_plan_path)
+df_plan_task = pd.read_csv(df_plan_task_path)
 
 
 #-----------------------------------#
-
 
 # --- CORS CONFIGURATION ---
 # You can specify the exact port Flutter is running on, 
@@ -199,7 +240,11 @@ async def load_dashboard():
     return {"message": "CORS is working!"}
 
 @app.post("/create-patient-profile")
-async def create_patient_profile(patient_data: str = Form(...)):
+async def create_patient_profile(
+    patient_data: str = Form(...),
+    image: UploadFile = File(...)
+):
+    global df_patients # Required to update the global DataFrame
     try:
         # Decode JSON string
         data = json.loads(patient_data)
@@ -207,13 +252,37 @@ async def create_patient_profile(patient_data: str = Form(...)):
         if not data.get("patient_name", "").strip():
             raise HTTPException(status_code=400, detail="patient_name is required")
 
-        patient_id = f"PT-{uuid.uuid4().hex[:6].upper()}"
+        ## generate patient_id
+        patient_id = generate_patient_id(df_patients)
         created_at = data.get("created_at") or datetime.utcnow().isoformat()
 
         data["patient_id"] = patient_id
         data["created_at"] = created_at
 
-        print("✅ create-patient-profile:", data)
+        ## insert new record
+        record = {
+            "patient_id": patient_id,
+            "patient_name": data.get("patient_name"),
+            "phone_no": data.get("phone_no"),
+            "dob": data.get("dob"),
+            "gender": data.get("gender"),
+            "height_cm": str(data.get("height_cm", "")).strip(),
+            "weight_kg": str(data.get("weight_kg", "")).strip(),
+            "status": 'Active',
+            "occupation": data.get("occupation"),
+            "medical_history": data.get("medical_history"),
+            "image_url": None, # You can handle file saving logic here to update this
+            "created_by": "admin",
+            "created_at": created_at,
+        }
+        
+        # Correctly update the global DataFrame
+        new_row = pd.DataFrame([record])
+        df_patients = pd.concat([df_patients, new_row], ignore_index=True)
+
+        df_patients.to_csv(df_patients_path,index=False)
+
+        print("create-patient-profile success for:", patient_id)
 
         return {
             "status": "success",
@@ -308,15 +377,7 @@ async def analyze_wound(
 
         print(case_data)
         img.show()
-        # # 4. Handle Response
-        # if response.candidates:
-        #     print(response.text)
-        #     return {"status": "success", "analysis": response.text}
-        # else:
-        #     return {
-        #         "status": "blocked", 
-        #         "reason": str(response.prompt_feedback.block_reason)
-        #     }
+
         return {"status": "success"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
