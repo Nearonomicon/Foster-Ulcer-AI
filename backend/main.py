@@ -132,7 +132,7 @@ JSON Schema / Fields to Fill:
  "edge_description": "ENUM (smooth, thickened, irregular, rolled_epibole, undermined, calloused)",
  "periwound_status": "ENUM (normal, erythematous, edematous, indurated, macerated, fluctuant, hyperpigmented)",
  "discharge_volume": "ENUM (none, minimal, moderate, heavy)",
- "discharge_type": "ENUM (serous, sanguineous, serosanguineous, purulent, seropurulent)",
+ "discharge_type": "ENUM ("serous (clear)", "sanguineous (bloody)", "serosanguineous (pink)", "purulent (yellow/pus)", "seropurulent (cloudy yellow)")",
  "odor_presence": "ENUM (none, faint, moderate, foul, putrid)",
  "pain_score": "integer (0-10)",
  "has_infection": "boolean",

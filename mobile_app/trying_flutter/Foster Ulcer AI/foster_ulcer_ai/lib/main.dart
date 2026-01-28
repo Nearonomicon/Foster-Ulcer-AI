@@ -161,7 +161,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   final Uri _createPatientUri = Uri.parse("$_baseUrl/create-patient-profile");
   final Uri _docsUri = Uri.parse("$_baseUrl/docs");
 
-  // Expanded Mock Clinical Data with Urgency, treatment plans and tasks
+  // Mock Clinical Data with Wound Images
   final List<Map<String, dynamic>> _patients = [
     {
       "id": "PT-1002",
@@ -193,7 +193,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         "edge_description": "undermined",
         "periwound_status": "erythematous",
         "discharge_volume": "moderate",
-        "discharge_type": "purulent",
+        "discharge_type": "sanguineous (bloody)",
         "odor_presence": "moderate",
         "pain_score": "8",
         "has_infection": true,
@@ -204,14 +204,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           "wound_stage": "Wagner Grade 3",
           "diagnosis": "Deep diabetic foot ulcer with active infection.",
           "confidence": 0.88,
-          "description": "The wound shows deep tissue involvement reaching the fascia. Slough covers 25% of the wound bed. Periwound erythema and purulent discharge suggest an active infectious process.",
+          "description": "Deep tissue involvement reaching fascia. Slough covers 25% of bed. Active purulent discharge.",
         },
         "treatment_plan": {
-          "plan_text": "Immediate sharp debridement of slough. Start course of oral Clindamycin. Daily dressing with silver-impregnated gauze. Urgent vascular consult requested.",
+          "plan_text": "Sharp debridement. Silver dressing. Oral Clindamycin. Vascular consult.",
           "plan_tasks": [
-            {"task_text": "Perform sharp debridement", "task_due": "2026-01-28T14:00:00", "status": "Pending"},
-            {"task_text": "Administer first dose Clindamycin", "task_due": "2026-01-28T12:00:00", "status": "Urgent"},
-            {"task_text": "Apply offloading boot", "task_due": "2026-01-28T15:00:00", "status": "Pending"},
+            {"task_text": "Apply silver dressing", "task_due": "2026-01-28T16:00:00", "status": "Urgent"},
+            {"task_text": "Check glycemic levels", "task_due": "2026-01-28T14:00:00", "status": "Pending"},
           ],
         },
       }
@@ -255,15 +254,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       "ai_wound_json": {
         "AI_analysis": {
           "wound_stage": "Wagner Grade 2",
-          "diagnosis": "Superficial neuropathic ulcer with healthy granulation tissue.",
-          "confidence": 0.95,
-          "description": "Healthy red granulation tissue covers 90% of the wound. Minimal serous discharge. No signs of cellulitis. Callous around the edge needs reduction.",
+          "diagnosis": "Superficial neuropathic ulcer.",
+          "confidence": 0.94,
+          "description": "Healthy granulation tissue. No signs of localized infection.",
         },
         "treatment_plan": {
-          "plan_text": "Continue daily saline cleaning. Apply hydrocolloid dressing to maintain moisture. Patient education on offloading importance.",
+          "plan_text": "Saline cleaning. Hydrocolloid dressing. Pressure offloading.",
           "plan_tasks": [
-            {"task_text": "Debride peri-wound callous", "task_due": "2026-01-29T10:00:00", "status": "Pending"},
-            {"task_text": "Check glycemic control logs", "task_due": "2026-01-28T11:00:00", "status": "Active"},
+            {"task_text": "Clean with saline", "task_due": "2026-01-28T09:00:00", "status": "Completed"},
           ],
         },
       }
@@ -307,14 +305,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       "ai_wound_json": {
         "AI_analysis": {
           "wound_stage": "Wagner Grade 1",
-          "diagnosis": "Minor skin break with no depth.",
+          "diagnosis": "Minor skin break.",
           "confidence": 0.98,
-          "description": "Minimal skin opening. No exudate. Healthy periwound skin. This is a routine maintenance case.",
+          "description": "Routine maintenance case with no depth or exudate.",
         },
         "treatment_plan": {
-          "plan_text": "Clean with soap and water. Keep dry and monitor. Use offloading footwear.",
+          "plan_text": "Monitor daily. Apply urea cream for hydration.",
           "plan_tasks": [
-            {"task_text": "Review footwear fitting", "task_due": "2026-01-30T10:00:00", "status": "Pending"},
+            {"task_text": "Apply urea cream", "task_due": "2026-01-30T10:00:00", "status": "Pending"},
           ],
         },
       }
@@ -522,6 +520,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       setState(() {
         _responseMode = 'analysis';
         _rawResponse = bodyText;
+        _capturedImage = null; // Clear image after submission
+        _aiWoundJson = null;   // Reset session state
+        _reviewed.clear();
       });
       _navigateTo('dashboard');
     } catch (e) {
@@ -591,6 +592,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       _currentStep = step;
       if (patient != null) {
         _selectedPatient = patient;
+        _capturedImage = null; // BUG FIX: Clear session image when viewing a record
         // Bind clinical data to state for mock patients/existing cases
         if (patient.containsKey('ai_wound_json')) {
           _aiWoundJson = Map<String, dynamic>.from(patient['ai_wound_json']);
@@ -652,7 +654,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       case 'response_view': return _buildResponseView();
       case 'assessment': return _buildWoundAssessmentForm();
       case 'doctor_summary': return _buildDoctorSummary();
-      case 'detail': return _buildDoctorSummary(); // Detail view uses the summary UI
+      case 'detail': return _buildDoctorSummary(); 
       default: return _buildDashboard();
     }
   }
@@ -774,7 +776,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           child: Column(
             children: [
               ElevatedButton.icon(
-                onPressed: _selectedPatient == null ? null : () {
+                onPressed: () {
+                  if (_selectedPatient == null) return;
                   // Prepare profile for the follow-up case and navigate directly to camera
                   _patientProfile..clear()..addAll({
                     'patient_id': _selectedPatient?['id'],
@@ -994,7 +997,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               Row(children: [
                 Expanded(child: _buildDropdownField(label: "Volume", value: (_reviewed['discharge_volume'] ?? _aiExtraction?['discharge_volume'])?.toString(), options: ["none", "minimal", "moderate", "heavy"], bindKey: 'discharge_volume')),
                 const SizedBox(width: 12),
-                Expanded(child: _buildDropdownField(label: "Type", value: (_reviewed['discharge_type'] ?? _aiExtraction?['discharge_type'])?.toString(), options: ["none", "minimal", "moderate", "heavy"], bindKey: 'discharge_type')),
+                Expanded(child: _buildDropdownField(label: "Type", value: (_reviewed['discharge_type'] ?? _aiExtraction?['discharge_type'])?.toString(), options: ["serous (clear)", "sanguineous (bloody)", "serosanguineous (pink)", "purulent (yellow/pus)", "seropurulent (cloudy yellow)"], bindKey: 'discharge_type')),
               ]),
               _buildDropdownField(label: "Odor Presence", value: (_reviewed['odor_presence'] ?? _aiExtraction?['odor_presence'])?.toString(), options: ["none", "faint", "moderate", "foul", "putrid"], bindKey: 'odor_presence'),
               _buildTextField(label: "PAIN SCORE (0-10)", placeholder: "0", icon: LucideIcons.zap, keyboardType: TextInputType.number, bindKey: 'pain_score'),
@@ -1108,7 +1111,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               const SizedBox(height: 32),
               _buildSectionTitle(LucideIcons.clipboardCheck, "Nurse-Reviewed Data"),
               const SizedBox(height: 12),
-              // Displaying all 20 required fields
+              // Displaying all clinical fields
               _kv("Temperature", "${_reviewed['temperature'] ?? '-'} °C"),
               _kv("Blood Pressure", "${_reviewed['blood_pressure'] ?? '-'} mmHg"),
               _kv("Heart Rate", "${_reviewed['heart_rate'] ?? '-'} bpm"),
@@ -1368,7 +1371,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   Widget _buildStatCard({required IconData icon, required String label, required String value, required String subValue, required Color color, required Color iconColor}) => Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: const Color(0xFFF8FAFC), borderRadius: BorderRadius.circular(24), border: Border.all(color: const Color(0xFFF1F5F9))), child: Row(children: [Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(16)), child: Icon(icon, color: iconColor, size: 24)), const SizedBox(width: 16), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(value, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)), Text(label.toUpperCase(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey))])), Text(subValue, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: iconColor))]));
   Widget _buildActionCard() => Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: const Color(0xFFD97706), borderRadius: BorderRadius.circular(24)), child: const Row(children: [Icon(LucideIcons.listTodo, color: Colors.white), SizedBox(width: 16), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text("12", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)), Text("TASKS FOR TODAY", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white70))])), Icon(LucideIcons.chevronRight, color: Colors.white70)]));
   Widget _buildProfileAvatar() => Container(width: 44, height: 44, decoration: BoxDecoration(color: const Color(0xFFCCFBF1), borderRadius: BorderRadius.circular(14)), child: const Center(child: Text("RN", style: TextStyle(color: Color(0xFF0D9488), fontWeight: FontWeight.bold))));
-  Widget _kv(String k, String v) => Padding(padding: const EdgeInsets.only(bottom: 8), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [SizedBox(width: 120, child: Text(k, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey))), Expanded(child: Text(v.isEmpty ? "-" : v, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)))]));
+  Widget _kv(String k, String v) => Padding(padding: const EdgeInsets.only(bottom: 8), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [SizedBox(width: 140, child: Text(k, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey))), Expanded(child: Text(v.isEmpty ? "-" : v, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF1E293B))))]));
   Widget _buildAISuggestionBox() => Container(margin: const EdgeInsets.only(bottom: 24), padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: const Color(0xFFF0FDFA), borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFF5EEAD4))), child: Row(children: [const Icon(LucideIcons.sparkles, size: 16, color: Color(0xFF0D9488)), const SizedBox(width: 8), Expanded(child: Text("Analysis successful. Please verify clinical data.", style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF134E4A))))]));
   Widget _buildAnalysisOverlay() => Container(color: Colors.black.withOpacity(0.9), width: double.infinity, height: double.infinity, child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [const SizedBox(width: 50, height: 50, child: CircularProgressIndicator(color: Color(0xFF0D9488), strokeWidth: 5)), const SizedBox(height: 32), const Icon(LucideIcons.sparkles, color: Color(0xFF0D9488), size: 32), const SizedBox(height: 16), Text("GEMINI CLOUD", style: GoogleFonts.plusJakartaSans(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 3, fontSize: 12)), const SizedBox(height: 12), const Text("Analyzing...", style: TextStyle(color: Colors.white70, fontSize: 14))]));
   Widget _buildHeader(String title, {required VoidCallback onBack}) => Container(padding: const EdgeInsets.all(16), decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFFF1F5F9)))), child: Row(children: [IconButton(icon: const Icon(LucideIcons.arrowLeft), onPressed: onBack), const SizedBox(width: 8), Expanded(child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)))]));

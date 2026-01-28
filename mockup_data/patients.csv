@@ -1,6 +1,4 @@
 patient_id,patient_name,phone_no,dob,gender,height_cm,weight_kg,status,occupation,medical_history,image_url,created_by,created_at
 PT-2601-00013,PAWMAN,861948565,03/02/2001,male,170,60,Active,Data Analysis,Diabetes,,admin,26/01/28 11:33
-PT-2601-00014,Case 6,123125125125,05/02/2001,male,170,60,Active,Data Analyst,Diabetes,,admin,2026-01-28 13:56:30
-PT-2601-00015,Case 6,123125125125,05/02/2001,male,170,60,Active,Data Analyst,Diabetes,,admin,2026-01-28 13:56:32
-PT-2601-00016,Case 6,123125125125,05/02/2001,male,170,60,Active,Data Analyst,Diabetes,,admin,2026-01-28 13:56:42
-PT-2601-00017,CASE 6,123543261,04/02/2001,male,170,60,Active,DA,Diabetes,,admin,2026-01-28 15:34:52
+PT-2601-00014,CASE 6,12356789,01/02/2001,female,180,90,Active,TESTER,Diabetes,,admin,2026-01-28 15:49:08
+PT-2601-00015,CASE 6,909569857,01/02/2001,female,160,90,Active,TESTER,Diabetes,,admin,2026-01-28 15:56:32
