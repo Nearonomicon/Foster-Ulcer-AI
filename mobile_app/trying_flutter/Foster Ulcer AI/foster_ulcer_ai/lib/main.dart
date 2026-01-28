@@ -157,39 +157,167 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   static const String _baseUrl = "http://10.0.2.2:8000";
   final Uri _fillinUri = Uri.parse("$_baseUrl/analyze-fillin");
   final Uri _analyzeWoundUri = Uri.parse("$_baseUrl/analyze-wound");
-  final Uri _createCaseUri = Uri.parse("$_baseUrl/create-case"); // Fixed typo to match your backend
+  final Uri _createCaseUri = Uri.parse("$_baseUrl/create-case"); 
   final Uri _createPatientUri = Uri.parse("$_baseUrl/create-patient-profile");
   final Uri _docsUri = Uri.parse("$_baseUrl/docs");
 
+  // Expanded Mock Clinical Data with Urgency, treatment plans and tasks
   final List<Map<String, dynamic>> _patients = [
     {
       "id": "PT-1002",
       "name": "John Smith",
       "age": 68,
-      "gender": "Male",
+      "gender": "male",
       "stage": "Wagner 3",
       "priority": "Critical",
-      "status": "Pending Review",
-      "date": "Just now",
-      "image": "https://images.unsplash.com/photo-1584036561566-baf8f5f1b144?w=800",
+      "urgency": "high_urgent",
+      "status": "In Treatment",
+      "date": "2026-01-28",
+      "image": "https://upload.wikimedia.org/wikipedia/commons/4/41/DMgas_gangrene.jpg",
       "todos": [
-        {"task": "Clean wound with saline", "completed": true, "due": "Completed", "urgent": false},
         {"task": "Apply antimicrobial dressing", "completed": false, "due": "Today, 4:00 PM", "urgent": true},
       ],
+      "nurse_reviewed": {
+        "temperature": "37.8",
+        "blood_pressure": "145/95",
+        "heart_rate": "92",
+        "location_primary": "heel",
+        "location_detail": "Lateral side of left heel",
+        "wound_type": "Diabetic Foot Ulcer",
+        "shape": "irregular",
+        "size_width_cm": "4.2",
+        "size_length_cm": "3.5",
+        "depth_category": "full_thickness",
+        "bed_slough_pct": "25",
+        "bed_necrotic_pct": "10",
+        "edge_description": "undermined",
+        "periwound_status": "erythematous",
+        "discharge_volume": "moderate",
+        "discharge_type": "purulent",
+        "odor_presence": "moderate",
+        "pain_score": "8",
+        "has_infection": true,
+        "skin_condition": "dry",
+      },
+      "ai_wound_json": {
+        "AI_analysis": {
+          "wound_stage": "Wagner Grade 3",
+          "diagnosis": "Deep diabetic foot ulcer with active infection.",
+          "confidence": 0.88,
+          "description": "The wound shows deep tissue involvement reaching the fascia. Slough covers 25% of the wound bed. Periwound erythema and purulent discharge suggest an active infectious process.",
+        },
+        "treatment_plan": {
+          "plan_text": "Immediate sharp debridement of slough. Start course of oral Clindamycin. Daily dressing with silver-impregnated gauze. Urgent vascular consult requested.",
+          "plan_tasks": [
+            {"task_text": "Perform sharp debridement", "task_due": "2026-01-28T14:00:00", "status": "Pending"},
+            {"task_text": "Administer first dose Clindamycin", "task_due": "2026-01-28T12:00:00", "status": "Urgent"},
+            {"task_text": "Apply offloading boot", "task_due": "2026-01-28T15:00:00", "status": "Pending"},
+          ],
+        },
+      }
     },
     {
       "id": "PT-3091",
       "name": "Rahul Sharma",
       "age": 71,
-      "gender": "Male",
-      "stage": "Wagner 4",
-      "priority": "Critical",
-      "status": "Pending Review",
-      "date": "2 hours ago",
-      "image": "https://images.unsplash.com/photo-1584036533827-45bce166549a?w=800",
+      "gender": "male",
+      "stage": "Wagner 2",
+      "priority": "Medium",
+      "urgency": "medium",
+      "status": "Stable",
+      "date": "2026-01-27",
+      "image": "https://www.saakhealth.com/wp-content/uploads/2024/10/Image20241008065706.png",
       "todos": [
         {"task": "Prepare for surgical referral", "completed": false, "due": "ASAP", "urgent": true},
       ],
+      "nurse_reviewed": {
+        "temperature": "36.8",
+        "blood_pressure": "122/82",
+        "heart_rate": "72",
+        "location_primary": "sole",
+        "location_detail": "1st metatarsal head",
+        "wound_type": "Neuropathic Ulcer",
+        "shape": "round",
+        "size_width_cm": "2.0",
+        "size_length_cm": "2.2",
+        "depth_category": "partial_thickness",
+        "bed_slough_pct": "0",
+        "bed_necrotic_pct": "0",
+        "edge_description": "smooth",
+        "periwound_status": "normal",
+        "discharge_volume": "minimal",
+        "discharge_type": "serous",
+        "odor_presence": "none",
+        "pain_score": "2",
+        "has_infection": false,
+        "skin_condition": "healthy",
+      },
+      "ai_wound_json": {
+        "AI_analysis": {
+          "wound_stage": "Wagner Grade 2",
+          "diagnosis": "Superficial neuropathic ulcer with healthy granulation tissue.",
+          "confidence": 0.95,
+          "description": "Healthy red granulation tissue covers 90% of the wound. Minimal serous discharge. No signs of cellulitis. Callous around the edge needs reduction.",
+        },
+        "treatment_plan": {
+          "plan_text": "Continue daily saline cleaning. Apply hydrocolloid dressing to maintain moisture. Patient education on offloading importance.",
+          "plan_tasks": [
+            {"task_text": "Debride peri-wound callous", "task_due": "2026-01-29T10:00:00", "status": "Pending"},
+            {"task_text": "Check glycemic control logs", "task_due": "2026-01-28T11:00:00", "status": "Active"},
+          ],
+        },
+      }
+    },
+    {
+      "id": "PT-4022",
+      "name": "Sita Devi",
+      "age": 62,
+      "gender": "female",
+      "stage": "Wagner 1",
+      "priority": "Routine",
+      "urgency": "routine",
+      "status": "Stable",
+      "date": "2026-01-26",
+      "image": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQq3gdPb0H4GwIzPsWw4L3AVtoQAGck3uX9Gg&s",
+      "todos": [
+        {"task": "Apply moisturizer", "completed": true, "due": "Completed", "urgent": false},
+      ],
+      "nurse_reviewed": {
+        "temperature": "36.6",
+        "blood_pressure": "118/76",
+        "heart_rate": "70",
+        "location_primary": "toe",
+        "location_detail": "Great toe lateral",
+        "wound_type": "Neuropathic Ulcer",
+        "shape": "oval",
+        "size_width_cm": "1.2",
+        "size_length_cm": "1.5",
+        "depth_category": "superficial",
+        "bed_slough_pct": "0",
+        "bed_necrotic_pct": "0",
+        "edge_description": "smooth",
+        "periwound_status": "normal",
+        "discharge_volume": "none",
+        "discharge_type": "none",
+        "odor_presence": "none",
+        "pain_score": "1",
+        "has_infection": false,
+        "skin_condition": "healthy",
+      },
+      "ai_wound_json": {
+        "AI_analysis": {
+          "wound_stage": "Wagner Grade 1",
+          "diagnosis": "Minor skin break with no depth.",
+          "confidence": 0.98,
+          "description": "Minimal skin opening. No exudate. Healthy periwound skin. This is a routine maintenance case.",
+        },
+        "treatment_plan": {
+          "plan_text": "Clean with soap and water. Keep dry and monitor. Use offloading footwear.",
+          "plan_tasks": [
+            {"task_text": "Review footwear fitting", "task_due": "2026-01-30T10:00:00", "status": "Pending"},
+          ],
+        },
+      }
     }
   ];
 
@@ -346,16 +474,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       'nurse_reviewed': _reviewed, 
       'ai_prefill': _aiExtraction, 
       'ai_analysis': _aiWoundJson, 
-      'urgency': _selectedUrgency, // Send the enum value
+      'urgency': _selectedUrgency, 
       'meta': {
         'sent_at': _getFormattedTimestamp(),
       }
     };
     
-    // Your backend expects "case_data" as a string/JSON form field
     request.fields['case_data'] = jsonEncode(caseData);
     
-    // Your backend expects "image" as a File upload
     final bytes = await _capturedImage!.readAsBytes();
     request.files.add(http.MultipartFile.fromBytes(
       'image', 
@@ -365,8 +491,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
     final streamedResponse = await request.send();
     final response = await http.Response.fromStream(streamedResponse);
-    
-    debugPrint("DEBUG: /create-case Status: ${response.statusCode}");
     
     if (response.statusCode != 200) {
       throw Exception("Case submission failed (${response.statusCode}): ${response.body}");
@@ -465,9 +589,29 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   void _navigateTo(String step, {Map<String, dynamic>? patient}) {
     setState(() {
       _currentStep = step;
-      if (patient != null) _selectedPatient = patient;
+      if (patient != null) {
+        _selectedPatient = patient;
+        // Bind clinical data to state for mock patients/existing cases
+        if (patient.containsKey('ai_wound_json')) {
+          _aiWoundJson = Map<String, dynamic>.from(patient['ai_wound_json']);
+        } else {
+          _aiWoundJson = null;
+        }
+        if (patient.containsKey('nurse_reviewed')) {
+          _reviewed..clear()..addAll(Map<String, dynamic>.from(patient['nurse_reviewed']));
+        } else {
+          _reviewed.clear();
+        }
+        if (patient.containsKey('urgency')) {
+          _selectedUrgency = patient['urgency'];
+        } else {
+          _selectedUrgency = null;
+        }
+      }
     });
   }
+
+  bool _shouldShowNav() => ['dashboard', 'tasks', 'cases'].contains(_currentStep);
 
   @override
   Widget build(BuildContext context) {
@@ -491,8 +635,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
-  bool _shouldShowNav() => ['dashboard', 'tasks', 'cases'].contains(_currentStep);
-
   Widget _buildCurrentStep() {
     if (_currentStep == 'dashboard') {
       switch (_activeTab) {
@@ -510,7 +652,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       case 'response_view': return _buildResponseView();
       case 'assessment': return _buildWoundAssessmentForm();
       case 'doctor_summary': return _buildDoctorSummary();
-      case 'detail': return _buildPatientDetail();
+      case 'detail': return _buildDoctorSummary(); // Detail view uses the summary UI
       default: return _buildDashboard();
     }
   }
@@ -543,7 +685,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         const SizedBox(height: 32),
         const Text("Upcoming Care Schedule", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
         const SizedBox(height: 16),
-        ..._patients.take(2).map((p) => _buildPatientListTile(p)),
+        ..._patients.take(3).map((p) => _buildPatientListTile(p)),
       ],
     );
   }
@@ -583,24 +725,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                         onChanged: (v) => setState(() => _patientSearchQuery = v),
                       ),
                     ),
-                    if (_patientSearchQuery.isNotEmpty)
-                      IconButton(
-                        onPressed: () {
-                          _patientSearchCtrl.clear();
-                          setState(() => _patientSearchQuery = "");
-                        },
-                        icon: Icon(LucideIcons.x, size: 18, color: TWColors.slate.shade400),
-                      )
                   ],
                 ),
               ),
               const SizedBox(height: 16),
               const Text("Search Results", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
               const SizedBox(height: 12),
-              if (filtered.isEmpty)
-                const Padding(padding: EdgeInsets.only(top: 12), child: Text("No patient found.", style: TextStyle(color: Colors.grey)))
-              else
-                ...filtered.map((p) {
+              ...filtered.map((p) {
                   final bool selected = _selectedPatient != null && _selectedPatient!['id'] == p['id'];
                   return GestureDetector(
                     onTap: () => setState(() => _selectedPatient = p),
@@ -643,17 +774,19 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           child: Column(
             children: [
               ElevatedButton.icon(
-                onPressed: () {
-                  if (_selectedPatient == null) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please select a patient first."), backgroundColor: Colors.redAccent));
-                    return;
-                  }
-                  _patientProfile..clear()..addAll({'patient_id': _selectedPatient?['id'], 'patient_name': _selectedPatient?['name'], 'age': _selectedPatient?['age'], 'gender': _selectedPatient?['gender']});
+                onPressed: _selectedPatient == null ? null : () {
+                  // Prepare profile for the follow-up case and navigate directly to camera
+                  _patientProfile..clear()..addAll({
+                    'patient_id': _selectedPatient?['id'],
+                    'patient_name': _selectedPatient?['name'],
+                    'age': _selectedPatient?['age'],
+                    'gender': _selectedPatient?['gender'],
+                  });
                   setState(() => _patientProfileSaved = true);
                   _navigateTo('camera');
                 },
                 icon: const Icon(LucideIcons.camera),
-                label: const Text("Proceed To Take Wound Photo", style: TextStyle(fontWeight: FontWeight.bold)),
+                label: const Text("Take Wound Photo", style: TextStyle(fontWeight: FontWeight.bold)),
                 style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0D9488), foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 60), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
               ),
               const SizedBox(height: 12),
@@ -683,8 +816,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         child: ListView(padding: const EdgeInsets.all(24), children: [
           _buildSectionTitle(LucideIcons.user, "Step 1: Patient Details"),
           const SizedBox(height: 24),
-
-          // Patient Photo Capture Area
           Center(
             child: Column(
               children: [
@@ -697,36 +828,22 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                       color: const Color(0xFFF8FAFC),
                       shape: BoxShape.circle,
                       border: Border.all(color: const Color(0xFF0D9488).withOpacity(0.2), width: 3),
-                      boxShadow: [
-                        BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))
-                      ]
                     ),
                     child: _patientPhoto == null
                         ? Icon(LucideIcons.user, size: 48, color: TWColors.slate.shade300)
-                        : ClipOval(
-                            child: Image.file(File(_patientPhoto!.path), fit: BoxFit.cover),
-                          ),
+                        : ClipOval(child: Image.file(File(_patientPhoto!.path), fit: BoxFit.cover)),
                   ),
                 ),
-                const SizedBox(height: 12),
-                ElevatedButton.icon(
+                const SizedBox(height: 8),
+                TextButton.icon(
                   onPressed: () => _pickPatientPhoto(ImageSource.camera),
                   icon: const Icon(LucideIcons.camera, size: 16),
-                  label: Text(_patientPhoto == null ? "Capture Image" : "Retake Image"),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0D9488).withOpacity(0.1),
-                    foregroundColor: const Color(0xFF0D9488),
-                    elevation: 0,
-                    shape: const StadiumBorder(),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8)
-                  ),
+                  label: Text(_patientPhoto == null ? "Capture Patient Image" : "Change Image", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
                 ),
               ],
             ),
           ),
           const SizedBox(height: 32),
-
-          // Name
           _buildFormLabel("PATIENT NAME"),
           TextFormField(
             controller: _patientNameCtrl,
@@ -734,8 +851,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             decoration: _inputDeco(LucideIcons.userCheck, "Full name"),
           ),
           const SizedBox(height: 20),
-
-          // Date of Birth
           _buildFormLabel("DATE OF BIRTH"),
           TextFormField(
             controller: _dobCtrl,
@@ -745,8 +860,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             decoration: _inputDeco(LucideIcons.calendar, "Select Date"),
           ),
           const SizedBox(height: 20),
-
-          // Gender Selection (Tiles)
           _buildFormLabel("GENDER"),
           const SizedBox(height: 8),
           Row(
@@ -755,10 +868,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               {'label': 'Female', 'icon': LucideIcons.venus},
               {'label': 'Other', 'icon': LucideIcons.user},
             ].map((gender) {
-              final String label = gender['label'] as String;
-              final IconData icon = gender['icon'] as IconData;
+              final label = gender['label'] as String;
+              final icon = gender['icon'] as IconData;
               bool isSelected = _selectedGender == label.toLowerCase();
-
               return Expanded(
                 child: GestureDetector(
                   onTap: () => setState(() => _selectedGender = label.toLowerCase()),
@@ -768,27 +880,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                     decoration: BoxDecoration(
                       color: isSelected ? const Color(0xFF0D9488) : const Color(0xFFF8FAFC),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(
-                        color: isSelected ? const Color(0xFF0D9488) : const Color(0xFFE2E8F0),
-                      ),
+                      border: Border.all(color: isSelected ? const Color(0xFF0D9488) : const Color(0xFFE2E8F0)),
                     ),
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(
-                          icon,
-                          size: 20,
-                          color: isSelected ? Colors.white : Colors.blueGrey.shade700,
-                        ),
+                        Icon(icon, size: 20, color: isSelected ? Colors.white : Colors.blueGrey.shade700),
                         const SizedBox(height: 4),
-                        Text(
-                          label,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                            color: isSelected ? Colors.white : Colors.blueGrey.shade700,
-                          ),
-                        ),
+                        Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isSelected ? Colors.white : Colors.blueGrey.shade700)),
                       ],
                     ),
                   ),
@@ -797,38 +896,20 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             }).toList(),
           ),
           const SizedBox(height: 20),
-
-          // Occupation
           _buildFormLabel("OCCUPATION"),
-          TextFormField(
-            controller: _occupationCtrl,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-            decoration: _inputDeco(LucideIcons.briefcase, "e.g. Software Engineer"),
-          ),
+          TextFormField(controller: _occupationCtrl, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), decoration: _inputDeco(LucideIcons.briefcase, "e.g. Software Engineer")),
           const SizedBox(height: 20),
-
-          // Phone
           _buildFormLabel("PHONE NO"),
-          TextFormField(
-            controller: _patientPhoneCtrl,
-            keyboardType: TextInputType.phone,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-            decoration: _inputDeco(LucideIcons.phone, "+91 00000 00000"),
-          ),
+          TextFormField(controller: _patientPhoneCtrl, keyboardType: TextInputType.phone, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), decoration: _inputDeco(LucideIcons.phone, "+91 00000 00000")),
           const SizedBox(height: 20),
-
-          // Height/Weight
           Row(children: [
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [_buildFormLabel("HEIGHT (CM)"), TextFormField(controller: _patientHeightCtrl, decoration: _inputDeco(LucideIcons.ruler, "Height"))])),
             const SizedBox(width: 16),
             Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [_buildFormLabel("WEIGHT (KG)"), TextFormField(controller: _patientWeightCtrl, decoration: _inputDeco(LucideIcons.scale, "Weight"))])),
           ]),
           const SizedBox(height: 20),
-
-          // History
           _buildFormLabel("MEDICAL HISTORY"),
           TextFormField(controller: _patientHistoryCtrl, decoration: _inputDeco(LucideIcons.clipboard, "Diabetes, etc.")),
-          
           if (_patientProfileSaved) _buildSuccessBanner(),
           const SizedBox(height: 120),
         ]),
@@ -841,7 +922,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     final bool isFillin = _responseMode == 'fillin';
     return Column(
       children: [
-        _buildHeader(isFillin ? "AI Extraction (Fill-in JSON)" : "AI Clinical Summary (Analyze Wound)", onBack: () => isFillin ? _navigateTo('camera') : _navigateTo('assessment')),
+        _buildHeader(isFillin ? "AI Extraction" : "Clinical Summary", onBack: () => isFillin ? _navigateTo('camera') : _navigateTo('assessment')),
         Expanded(
           child: Container(
             width: double.infinity, padding: const EdgeInsets.all(24), color: const Color(0xFFF8FAFC),
@@ -854,10 +935,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                   decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFE2E8F0))),
                   child: SelectableText(_rawResponse ?? "No data available.", style: GoogleFonts.firaCode(fontSize: 13, color: Colors.blueGrey.shade800)),
                 ),
-                const SizedBox(height: 16),
-                Text("Tip: Open docs in emulator browser: $_docsUri", style: const TextStyle(fontSize: 12, color: Colors.grey)),
-                const SizedBox(height: 24),
-                Text(isFillin ? "Verify the extracted fields. Proceed to edit/confirm the checklist." : "This is an AI-generated clinical summary. Verify with a licensed clinician.", style: const TextStyle(fontSize: 12, color: Colors.grey)),
               ]),
             ),
           ),
@@ -940,42 +1017,55 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   Widget _buildDoctorSummary() {
     final data = _aiWoundJson;
-    if (data == null) return const Center(child: Text("No summary data found."));
+    if (data == null) return const Center(child: Text("No clinical summary found for this case."));
     
-    final ai = (data['AI_analysis'] is Map) 
-        ? Map<String, dynamic>.from(data['AI_analysis']) 
-        : <String, dynamic>{};
-    final plan = (data['treatment_plan'] is Map) 
-        ? Map<String, dynamic>.from(data['treatment_plan']) 
-        : <String, dynamic>{};
-    final tasks = (plan['plan_tasks'] is List) 
-        ? List<Map<String, dynamic>>.from(plan['plan_tasks']) 
-        : <Map<String, dynamic>>[];
+    final ai = (data['AI_analysis'] is Map) ? Map<String, dynamic>.from(data['AI_analysis']) : <String, dynamic>{};
+    final plan = (data['treatment_plan'] is Map) ? Map<String, dynamic>.from(data['treatment_plan']) : <String, dynamic>{};
+    final tasks = (plan['plan_tasks'] is List) ? List<Map<String, dynamic>>.from(plan['plan_tasks']) : <Map<String, dynamic>>[];
         
     final confidence = ai['confidence'];
     final confPct = (confidence is num) ? (confidence * 100).round() : null;
 
-    // Helper to format clinical task due date strings
     String fmtDue(String? iso) {
       if (iso == null || iso.isEmpty) return "TBD";
       try {
         final dt = DateTime.parse(iso).toLocal();
         return "${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}";
-      } catch (_) {
-        return iso;
-      }
+      } catch (_) { return iso; }
     }
 
     return Column(
       children: [
-        _buildHeader("Summary Before Sending to Doctor", onBack: () => _navigateTo('assessment')),
+        _buildHeader("Clinical Case Summary", onBack: () => _navigateTo('dashboard')),
         Expanded(
           child: ListView(
             padding: const EdgeInsets.all(24),
             children: [
-              if (_capturedImage != null)
-                ClipRRect(borderRadius: BorderRadius.circular(16), child: Image.file(File(_capturedImage!.path), height: 180, width: double.infinity, fit: BoxFit.cover)),
-              const SizedBox(height: 16),
+              // WOUND IMAGES SECTION IN SUMMARY
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text("CLINICAL WOUND CAPTURE", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1)),
+                  const SizedBox(height: 12),
+                  if (_capturedImage != null)
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: Image.file(File(_capturedImage!.path), height: 220, width: double.infinity, fit: BoxFit.cover),
+                    )
+                  else if (_selectedPatient != null && _selectedPatient!['image'] != null)
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(20),
+                      child: Image.network(
+                        _selectedPatient!['image'],
+                        height: 220,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        errorBuilder: (c, e, s) => Container(height: 220, color: const Color(0xFFF1F5F9), child: const Center(child: Icon(LucideIcons.image, color: Colors.grey))),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 24),
               Container(
                 padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: const Color(0xFFF0FDFA), borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFF5EEAD4))),
                 child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -991,66 +1081,53 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               ),
               
               const SizedBox(height: 24),
-              _buildSectionTitle(LucideIcons.circleAlert, "Set Clinical Urgency"),
+              _buildSectionTitle(LucideIcons.triangleAlert, "Clinical Urgency"),
               const SizedBox(height: 12),
-              // NEW: Urgency Selection Tiles
               Row(
-                children: [
-                  {'label': 'HIGH URGENT', 'val': 'high_urgent', 'color': Colors.red},
-                  {'label': 'MEDIUM', 'val': 'medium', 'color': Colors.orange},
-                  {'label': 'ROUTINE', 'val': 'routine', 'color': const Color(0xFF0D9488)},
-                ].map((urgency) {
-                  final String label = urgency['label'] as String;
-                  final String val = urgency['val'] as String;
-                  final Color color = urgency['color'] as Color;
-                  bool isSelected = _selectedUrgency == val;
-
-                  return Expanded(
-                    child: GestureDetector(
-                      onTap: () => setState(() => _selectedUrgency = val),
-                      child: Container(
-                        margin: EdgeInsets.only(right: label == "ROUTINE" ? 0 : 8),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        decoration: BoxDecoration(
-                          color: isSelected ? color : const Color(0xFFF8FAFC),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: isSelected ? color : const Color(0xFFE2E8F0),
-                          ),
-                        ),
-                        child: Center(
-                          child: Text(
-                            label, 
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 10, 
-                              fontWeight: FontWeight.bold, 
-                              color: isSelected ? Colors.white : Colors.blueGrey.shade700
-                            )
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                }).toList(),
+                 children: [
+                   {'l': 'HIGH', 'v': 'high_urgent', 'c': Colors.red},
+                   {'l': 'MEDIUM', 'v': 'medium', 'c': Colors.orange},
+                   {'l': 'ROUTINE', 'v': 'routine', 'c': Color(0xFF0D9488)},
+                 ].map((u) => Expanded(
+                   child: GestureDetector(
+                     onTap: _currentStep == 'doctor_summary' ? () => setState(() => _selectedUrgency = u['v'] as String) : null,
+                     child: Container(
+                       margin: EdgeInsets.only(right: u['l'] == 'ROUTINE' ? 0 : 8),
+                       padding: const EdgeInsets.symmetric(vertical: 12),
+                       decoration: BoxDecoration(
+                         color: _selectedUrgency == u['v'] ? u['c'] as Color : const Color(0xFFF8FAFC),
+                         borderRadius: BorderRadius.circular(12),
+                         border: Border.all(color: _selectedUrgency == u['v'] ? u['c'] as Color : const Color(0xFFE2E8F0)),
+                       ),
+                       child: Center(child: Text(u['l'] as String, style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _selectedUrgency == u['v'] ? Colors.white : Colors.blueGrey.shade700))),
+                     ),
+                   ),
+                 )).toList(),
               ),
 
               const SizedBox(height: 32),
               _buildSectionTitle(LucideIcons.clipboardCheck, "Nurse-Reviewed Data"),
               const SizedBox(height: 12),
-              _kv("Temperature", (_reviewed['temperature'] ?? '').toString()),
-              _kv("Blood Pressure", (_reviewed['blood_pressure'] ?? '').toString()),
-              _kv("Heart Rate", (_reviewed['heart_rate'] ?? '').toString()),
-              _kv("Location", (_reviewed['location_primary'] ?? '').toString()),
-              _kv("Location detail", (_reviewed['location_detail'] ?? '').toString()),
-              _kv("Wound type", (_reviewed['wound_type'] ?? '').toString()),
-              _kv("Size", "${_reviewed['size_width_cm'] ?? ''} × ${_reviewed['size_length_cm'] ?? ''} cm"),
-              _kv("Depth", (_reviewed['depth_category'] ?? '').toString()),
-              _kv("Slough / Necrotic", "${_reviewed['bed_slough_pct'] ?? ''}% / ${_reviewed['bed_necrotic_pct'] ?? ''}%"),
-              _kv("Discharge", "${_reviewed['discharge_volume'] ?? ''} / ${_reviewed['discharge_type'] ?? ''}"),
-              _kv("Odor", (_reviewed['odor_presence'] ?? '').toString()),
-              _kv("Pain score", (_reviewed['pain_score'] ?? '').toString()),
-              _kv("Infection flag", ((_reviewed['has_infection'] ?? false) == true) ? "Yes" : "No"),
+              // Displaying all 20 required fields
+              _kv("Temperature", "${_reviewed['temperature'] ?? '-'} °C"),
+              _kv("Blood Pressure", "${_reviewed['blood_pressure'] ?? '-'} mmHg"),
+              _kv("Heart Rate", "${_reviewed['heart_rate'] ?? '-'} bpm"),
+              _kv("Location Primary", _reviewed['location_primary']?.toString() ?? '-'),
+              _kv("Location Detail", _reviewed['location_detail']?.toString() ?? '-'),
+              _kv("Wound Type", _reviewed['wound_type']?.toString() ?? '-'),
+              _kv("Shape", _reviewed['shape']?.toString() ?? '-'),
+              _kv("Width / Length", "${_reviewed['size_width_cm'] ?? '-'} cm / ${_reviewed['size_length_cm'] ?? '-'} cm"),
+              _kv("Depth Category", _reviewed['depth_category']?.toString() ?? '-'),
+              _kv("Bed Slough %", "${_reviewed['bed_slough_pct'] ?? '-'}%"),
+              _kv("Bed Necrotic %", "${_reviewed['bed_necrotic_pct'] ?? '-'}%"),
+              _kv("Edge Description", _reviewed['edge_description']?.toString() ?? '-'),
+              _kv("Periwound Status", _reviewed['periwound_status']?.toString() ?? '-'),
+              _kv("Discharge Volume", _reviewed['discharge_volume']?.toString() ?? '-'),
+              _kv("Discharge Type", _reviewed['discharge_type']?.toString() ?? '-'),
+              _kv("Odor Presence", _reviewed['odor_presence']?.toString() ?? '-'),
+              _kv("Pain Score", "${_reviewed['pain_score'] ?? '-'}/10"),
+              _kv("Has Infection", (_reviewed['has_infection'] == true) ? "YES" : "NO"),
+              _kv("Skin Condition", _reviewed['skin_condition']?.toString() ?? '-'),
 
               const SizedBox(height: 20),
               _buildSectionTitle(LucideIcons.fileText, "AI Narrative"),
@@ -1065,15 +1142,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               const SizedBox(height: 20),
               _buildSectionTitle(LucideIcons.listTodo, "Task List"),
               const SizedBox(height: 12),
-              if (tasks.isEmpty)
-                const Text("No tasks provided.", style: TextStyle(fontSize: 12, color: Colors.grey))
-              else
-                ...tasks.map((t) {
-                  final txt = t['task_text']?.toString() ?? "(task)";
-                  final due = fmtDue(t['task_due']?.toString());
-                  final status = t['status']?.toString() ?? "Pending";
-                  
-                  return Container(
+              ...tasks.map((t) => Container(
                     margin: const EdgeInsets.only(bottom: 10), 
                     padding: const EdgeInsets.all(12), 
                     decoration: BoxDecoration(color: const Color(0xFFF8FAFC), borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFF1F5F9))), 
@@ -1082,57 +1151,197 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                       children: [
                         const Icon(LucideIcons.squareCheck, size: 16, color: Color(0xFF0D9488)), 
                         const SizedBox(width: 10), 
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(txt, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                              const SizedBox(height: 4),
-                              Text(
-                                "Due: $due • $status", 
-                                style: const TextStyle(fontSize: 11, color: Colors.blueGrey),
-                              ),
-                            ],
-                          ),
-                        )
+                        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                              Text(t['task_text']?.toString() ?? "(task)", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                              Text("Due: ${fmtDue(t['task_due']?.toString())} • ${t['status'] ?? 'Pending'}", style: const TextStyle(fontSize: 11, color: Colors.blueGrey)),
+                        ])),
                       ],
                     ),
-                  );
-                }),
-              
-              const SizedBox(height: 18),
-              ExpansionTile(
-                tilePadding: EdgeInsets.zero,
-                title: const Text("Raw JSON (for audit)", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                children: [
-                  Container(
-                    width: double.infinity, padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFE2E8F0))),
-                    child: SelectableText(const JsonEncoder.withIndent('  ').convert(data), style: GoogleFonts.firaCode(fontSize: 12, color: Colors.blueGrey.shade800)),
-                  ),
-                ],
-              ),
+                  )),
               const SizedBox(height: 120),
             ],
           ),
         ),
-        _buildFixedBottomButton("Send to Doctor", LucideIcons.send, _sendToDoctor),
+        if (_currentStep == 'doctor_summary')
+          _buildFixedBottomButton("Send to Doctor", LucideIcons.send, _sendToDoctor)
+        else
+          _buildFixedBottomButton("Back to Dashboard", LucideIcons.house, () => _navigateTo('dashboard')),
       ],
     );
   }
+
+  Widget _buildTasksTab() {
+    // Flatten tasks from all patients for combined view
+    List<Map<String, dynamic>> allTasks = [];
+    for (var p in _patients) {
+      final aiJson = p['ai_wound_json'];
+      if (aiJson != null) {
+        final plan = aiJson['treatment_plan'];
+        if (plan != null && plan['plan_tasks'] != null) {
+          for (var t in plan['plan_tasks']) {
+            allTasks.add({
+              ...t,
+              'patient_name': p['name'],
+              'patient_id': p['id'],
+            });
+          }
+        }
+      }
+    }
+
+    String fmtDue(String? iso) {
+      if (iso == null || iso.isEmpty) return "TBD";
+      try {
+        final dt = DateTime.parse(iso).toLocal();
+        return "${dt.hour}:${dt.minute.toString().padLeft(2, '0')}";
+      } catch (_) { return iso; }
+    }
+
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text("Care Tasks", style: GoogleFonts.plusJakartaSans(fontSize: 24, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+            Text("${allTasks.length} Active Clinical Tasks", style: const TextStyle(fontSize: 14, color: Colors.grey)),
+          ]),
+        ),
+        // Filter bar
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Row(
+            children: [
+              _buildFilterChip("All Tasks", true),
+              const SizedBox(width: 8),
+              _buildFilterChip("Urgent", false),
+              const SizedBox(width: 8),
+              _buildFilterChip("Pending", false),
+              const SizedBox(width: 8),
+              _buildFilterChip("Completed", false),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            itemCount: allTasks.length,
+            itemBuilder: (context, index) {
+              final task = allTasks[index];
+              final isUrgent = task['status'] == 'Urgent';
+              
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: isUrgent ? Colors.red.withOpacity(0.2) : const Color(0xFFF1F5F9)),
+                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))]
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: isUrgent ? Colors.red.shade50 : const Color(0xFFF0FDFA),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        isUrgent ? LucideIcons.triangleAlert : LucideIcons.circleCheck,
+                        size: 20,
+                        color: isUrgent ? Colors.red : const Color(0xFF0D9488),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(task['patient_name'], style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey)),
+                              Text(fmtDue(task['task_due']), style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: isUrgent ? Colors.red : Colors.grey)),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(task['task_text'], style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                          const SizedBox(height: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: isUrgent ? Colors.red.shade50 : const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              task['status'].toString().toUpperCase(),
+                              style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: isUrgent ? Colors.red : Colors.blueGrey),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(LucideIcons.chevronRight, size: 16, color: TWColors.slate.shade300),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFilterChip(String label, bool selected) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: selected ? const Color(0xFF0D9488) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: selected ? const Color(0xFF0D9488) : const Color(0xFFE2E8F0)),
+      ),
+      child: Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: selected ? Colors.white : Colors.blueGrey)),
+    );
+  }
+
+  Widget _buildCasesTab() {
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text("Patient Cases", style: GoogleFonts.plusJakartaSans(fontSize: 24, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B))),
+            const Text("Raipur Unit 4 progress", style: TextStyle(fontSize: 14, color: Colors.grey)),
+          ]),
+        ),
+        Expanded(
+          child: ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            itemCount: _patients.length,
+            itemBuilder: (context, index) => _buildPatientListTile(_patients[index]),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildProfileTab() => ListView(padding: const EdgeInsets.all(24), children: [Center(child: Column(children: [_buildProfileAvatar(), const SizedBox(height: 16), const Text("Nurse Ananya Sharma", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)), const Text("Registered Nurse • Senior Lead", style: TextStyle(color: Colors.grey))])), const SizedBox(height: 40), _buildProfileTile(LucideIcons.user, "Personal Information"), _buildProfileTile(LucideIcons.shieldCheck, "Security & Pin"), _buildProfileTile(LucideIcons.settings, "App Settings"), _buildProfileTile(LucideIcons.logOut, "Logout", color: Colors.redAccent)]);
 
   Widget _buildARCamera() {
     return Container(
       color: Colors.black,
       child: Stack(children: [
         Center(child: Container(width: 280, height: 280, decoration: BoxDecoration(border: Border.all(color: Colors.white30, width: 2), borderRadius: BorderRadius.circular(32)), child: const Center(child: Text("ALIGN WOUND", style: TextStyle(color: Colors.white24, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 2))))),
-        Positioned(top: 20, left: 20, right: 20, child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [CircleAvatar(backgroundColor: Colors.black38, child: IconButton(icon: const Icon(LucideIcons.x, color: Colors.white), onPressed: () => _navigateTo('patient_search'))), ElevatedButton.icon(onPressed: () => _pickImage(ImageSource.gallery), icon: const Icon(LucideIcons.folderOpen, size: 16), label: const Text("BROWSE"), style: ElevatedButton.styleFrom(backgroundColor: Colors.white10, foregroundColor: Colors.white, shape: const StadiumBorder()))])),
+        Positioned(top: 20, left: 20, right: 20, child: Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [CircleAvatar(backgroundColor: Colors.black38, child: IconButton(icon: const Icon(LucideIcons.x, color: Colors.white), onPressed: () => _navigateTo('dashboard'))), ElevatedButton.icon(onPressed: () => _pickImage(ImageSource.gallery), icon: const Icon(LucideIcons.folderOpen, size: 16), label: const Text("BROWSE"), style: ElevatedButton.styleFrom(backgroundColor: Colors.white10, foregroundColor: Colors.white, shape: const StadiumBorder()))])),
         Align(alignment: Alignment.bottomCenter, child: Padding(padding: const EdgeInsets.only(bottom: 60), child: Column(mainAxisSize: MainAxisSize.min, children: [const Text("LIGHTING OPTIMAL", style: TextStyle(color: Colors.greenAccent, fontSize: 9, fontWeight: FontWeight.bold)), const SizedBox(height: 20), InkWell(onTap: () => _pickImage(ImageSource.camera), child: Container(width: 84, height: 84, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 4)), child: Center(child: Container(width: 68, height: 68, decoration: const BoxDecoration(color: Color(0xFF0D9488), shape: BoxShape.circle)))))]))),
       ]),
     );
   }
 
-  // UI Helpers
+  // Helpers
   Widget _buildFormLabel(String label) => Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF0D9488))));
   InputDecoration _inputDeco(IconData icon, String hint) => InputDecoration(prefixIcon: Icon(icon, size: 20, color: TWColors.slate.shade400), hintText: hint, filled: true, fillColor: const Color(0xFFF8FAFC), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none));
   Widget _buildSuccessBanner() => Container(margin: const EdgeInsets.only(top: 16), padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: const Color(0xFFF0FDFA), borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFF5EEAD4))), child: const Row(children: [Icon(LucideIcons.circleCheck, size: 16, color: Color(0xFF0D9488)), SizedBox(width: 8), Text("Profile saved.", style: TextStyle(fontSize: 12, color: Color(0xFF134E4A), fontWeight: FontWeight.bold))]));
@@ -1165,11 +1374,106 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   Widget _buildHeader(String title, {required VoidCallback onBack}) => Container(padding: const EdgeInsets.all(16), decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFFF1F5F9)))), child: Row(children: [IconButton(icon: const Icon(LucideIcons.arrowLeft), onPressed: onBack), const SizedBox(width: 8), Expanded(child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)))]));
   Widget _buildSectionTitle(IconData icon, String title) => Row(children: [Icon(icon, size: 20, color: const Color(0xFF0D9488)), const SizedBox(width: 10), Expanded(child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF0D9488))))]);
   Widget _buildFixedBottomButton(String label, IconData icon, VoidCallback onPressed) => Container(padding: const EdgeInsets.all(24), decoration: const BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: Color(0xFFF1F5F9)))), child: ElevatedButton.icon(onPressed: onPressed, icon: Icon(icon), label: Text(label, style: const TextStyle(fontWeight: FontWeight.bold)), style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0D9488), foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 60), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)))));
-  Widget _buildPatientListTile(Map<String, dynamic> p) => GestureDetector(onTap: () => _navigateTo('detail', patient: p), child: Container(margin: const EdgeInsets.only(bottom: 12), padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFF1F5F9))), child: Row(children: [ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.network(p['image'], width: 50, height: 50, fit: BoxFit.cover, errorBuilder: (c,e,s) => Container(width:50,height:50,color:const Color(0xFFE2E8F0),child:const Icon(Icons.broken_image, size: 18)))), const SizedBox(width: 12), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(p['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)), Text("NEXT: ${p['todos'][0]['due']}", style: const TextStyle(fontSize: 11, color: Colors.grey))]))])));
+
+  Widget _buildPatientListTile(Map<String, dynamic> p) {
+    Color urgencyColor;
+    String urgencyText;
+    
+    switch (p['urgency']) {
+      case 'high_urgent':
+        urgencyColor = Colors.red;
+        urgencyText = "HIGH";
+        break;
+      case 'medium':
+        urgencyColor = Colors.orange;
+        urgencyText = "MEDIUM";
+        break;
+      case 'routine':
+      default:
+        urgencyColor = const Color(0xFF0D9488);
+        urgencyText = "ROUTINE";
+        break;
+    }
+
+    return GestureDetector(
+      onTap: () => _navigateTo('detail', patient: p),
+      child: Stack(
+        children: [
+          Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: const Color(0xFFF1F5F9)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.02),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                )
+              ],
+            ),
+            child: Row(
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.network(
+                    p['image'],
+                    width: 50,
+                    height: 50,
+                    fit: BoxFit.cover,
+                    errorBuilder: (c, e, s) => Container(
+                      width: 50,
+                      height: 50,
+                      color: const Color(0xFFE2E8F0),
+                      child: const Icon(Icons.broken_image, size: 18),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        p['name'],
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
+                      Text(
+                        "ID: ${p['id']} • Status: ${p['status']}",
+                        style: const TextStyle(fontSize: 11, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Positioned(
+            top: 12,
+            right: 12,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: urgencyColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                urgencyText,
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                  color: urgencyColor,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildBottomNav() => BottomNavigationBar(currentIndex: _activeTab, onTap: (index) => setState(() { _activeTab = index; _currentStep = 'dashboard'; }), selectedItemColor: const Color(0xFF0D9488), unselectedItemColor: TWColors.slate.shade400, type: BottomNavigationBarType.fixed, items: const [BottomNavigationBarItem(icon: Icon(LucideIcons.house), label: "Home"), BottomNavigationBarItem(icon: Icon(LucideIcons.listTodo), label: "Tasks"), BottomNavigationBarItem(icon: Icon(LucideIcons.clipboardList), label: "Cases"), BottomNavigationBarItem(icon: Icon(LucideIcons.user), label: "Profile")]);
-  Widget _buildTasksTab() => Column(children: [Padding(padding: const EdgeInsets.all(24.0), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text("Care Tasks", style: GoogleFonts.plusJakartaSans(fontSize: 24, fontWeight: FontWeight.bold)), const Text("Raipur Clinic Care Priority", style: TextStyle(fontSize: 14, color: Colors.grey))])), Expanded(child: ListView.builder(padding: const EdgeInsets.symmetric(horizontal: 24), itemCount: _patients.length, itemBuilder: (context, index) => Container(margin: const EdgeInsets.only(bottom: 12), padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFF1F5F9))), child: Column(children: ( _patients[index]['todos'] as List).map((todo) => ListTile(title: Text(todo['task'], style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)), subtitle: Text(todo['due'], style: const TextStyle(fontSize: 11)), trailing: Icon(todo['completed'] ? LucideIcons.circleCheck : LucideIcons.circle, color: todo['completed'] ? Colors.teal : Colors.grey), contentPadding: EdgeInsets.zero)).toList()))))]);
-  Widget _buildCasesTab() => Column(children: [Padding(padding: const EdgeInsets.all(24.0), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text("Patient Cases", style: GoogleFonts.plusJakartaSans(fontSize: 24, fontWeight: FontWeight.bold)), const Text("Raipur Unit 4 progress", style: TextStyle(fontSize: 14, color: Colors.grey))])), Expanded(child: ListView.builder(padding: const EdgeInsets.symmetric(horizontal: 24), itemCount: _patients.length, itemBuilder: (context, index) => _buildPatientListTile(_patients[index])))]);
-  Widget _buildProfileTab() => ListView(padding: const EdgeInsets.all(24), children: [Center(child: Column(children: [_buildProfileAvatar(), const SizedBox(height: 16), const Text("Nurse Ananya Sharma", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)), const Text("Registered Nurse • Senior Lead", style: TextStyle(color: Colors.grey))])), const SizedBox(height: 40), _buildProfileTile(LucideIcons.user, "Personal Information"), _buildProfileTile(LucideIcons.shieldCheck, "Security & Pin"), _buildProfileTile(LucideIcons.settings, "App Settings"), _buildProfileTile(LucideIcons.logOut, "Logout", color: Colors.redAccent)]);
   Widget _buildProfileTile(IconData icon, String label, {Color? color}) => ListTile(leading: Icon(icon, color: color ?? const Color(0xFF0D9488)), title: Text(label, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: color)), trailing: const Icon(LucideIcons.chevronRight, size: 16));
-  Widget _buildPatientDetail() => Column(children: [_buildHeader(_selectedPatient?['name'] ?? "Patient Detail", onBack: () => _navigateTo('dashboard')), Expanded(child: Center(child: Text("Clinical Details for ${_selectedPatient?['id'] ?? ''}")))]);
 }

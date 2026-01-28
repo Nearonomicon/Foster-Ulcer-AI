@@ -1,14 +1,6 @@
 patient_id,patient_name,phone_no,dob,gender,height_cm,weight_kg,status,occupation,medical_history,image_url,created_by,created_at
-PT-2601-00001,Somchai Rakdee,081-234-5678,55/05/12,Male,172,68,True,Retired,"Diabetes, HT",,Admin_01,26/01/20 9:15
-PT-2601-00002,Somsak Sripai,082-345-6789,62/11/20,Male,168,72,True,Farmer,Hypertension,,Admin_01,26/01/20 10:30
-PT-2601-00003,Malee Jaiyen,089-876-5432,48/03/15,Female,155,54,True,Housewife,CKD Stage 3,,Nurse_Joy,26/01/21 8:00
-PT-2601-00004,Anong Saetang,081-111-2222,71/09/02,Female,160,58,True,Merchant,,,Admin_02,26/01/21 13:45
-PT-2601-00005,Wanchai Maneerat,085-555-4433,59/01/30,Male,175,80,True,Office Worker,Dyslipidemia,,Admin_01,26/01/22 11:20
-PT-2601-00006,Kanya Suksamran,086-789-1234,80/07/14,Female,162,65,True,Teacher,Asthma,,Nurse_Joy,26/01/22 15:10
-PT-2601-00007,Prasert Bunma,083-444-5566,45/12/10,Male,170,62,True,Retired,Heart Disease,,Admin_02,26/01/23 9:00
-PT-2601-00008,Sunee Thongdee,084-222-3311,66/04/22,Female,158,59,True,Seller,Hypertension,,Admin_01,26/01/23 10:45
-PT-2601-00009,Chai Wongsuwan,081-999-8877,75/06/08,Male,180,85,True,Driver,,,Admin_02,26/01/24 14:00
-PT-2601-00010,Rattana Kaewmanee,087-654-3210,52/10/05,Female,156,50,True,Retired,Diabetes Type 2,,Nurse_Joy,26/01/24 16:30
-PT-2601-00011,PAWMAN,0861948565,11/06/1996,male,170,60,Active,Data analyst,etc,,admin,2026-01-28 11:05:31
-PT-2601-00012,PAWMAN,1231325125,20/02/1996,male,170,60,Active,Data analyst,Diabetes,,admin,2026-01-28 11:11:27
-PT-2601-00013,PAWMAN,0861948565,03/02/2001,male,170,60,Active,Data Analysis,Diabetes,,admin,2026-01-28 11:33:20
+PT-2601-00013,PAWMAN,861948565,03/02/2001,male,170,60,Active,Data Analysis,Diabetes,,admin,26/01/28 11:33
+PT-2601-00014,Case 6,123125125125,05/02/2001,male,170,60,Active,Data Analyst,Diabetes,,admin,2026-01-28 13:56:30
+PT-2601-00015,Case 6,123125125125,05/02/2001,male,170,60,Active,Data Analyst,Diabetes,,admin,2026-01-28 13:56:32
+PT-2601-00016,Case 6,123125125125,05/02/2001,male,170,60,Active,Data Analyst,Diabetes,,admin,2026-01-28 13:56:42
+PT-2601-00017,CASE 6,123543261,04/02/2001,male,170,60,Active,DA,Diabetes,,admin,2026-01-28 15:34:52
