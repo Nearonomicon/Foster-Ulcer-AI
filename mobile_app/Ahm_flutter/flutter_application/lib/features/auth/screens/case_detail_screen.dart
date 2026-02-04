@@ -281,7 +281,7 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                           ),
                           const Gap(10),
                           DropdownButtonFormField<String>(
-                            value: diagnosis,
+                            initialValue: diagnosis,
                             items: const [
                               DropdownMenuItem(value: "Accept AI: Wagner Grade 2", child: Text("Accept AI: Wagner Grade 2")),
                               DropdownMenuItem(value: "Override: Wagner Grade 3", child: Text("Override: Wagner Grade 3")),
@@ -374,9 +374,9 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     elevation: 0,
                   ),
-                  child: Row(
+                  child: const Row(
                     mainAxisAlignment: MainAxisAlignment.center,
-                    children: const [
+                    children: [
                       Text("Create Treatment Plan", style: TextStyle(fontWeight: FontWeight.w900)),
                       SizedBox(width: 8),
                       Icon(Icons.arrow_forward, size: 18),
@@ -400,14 +400,14 @@ class _StatusBarMimic extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
+    return const Padding(
+      padding: EdgeInsets.fromLTRB(18, 10, 18, 0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Text("9:41", style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+          Text("9:41", style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
           Row(
-            children: const [
+            children: [
               Icon(Icons.signal_cellular_alt, size: 18),
               SizedBox(width: 6),
               Icon(Icons.wifi, size: 18),

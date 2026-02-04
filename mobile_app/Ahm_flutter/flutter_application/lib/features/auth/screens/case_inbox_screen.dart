@@ -70,14 +70,14 @@ class _CaseInboxScreenState extends State<CaseInboxScreen> {
         child: Column(
           children: [
             // top status bar mimic
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text("9:41", style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
+                  Text("9:41", style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
                   Row(
-                    children: const [
+                    children: [
                       Icon(Icons.signal_cellular_alt, size: 18),
                       SizedBox(width: 6),
                       Icon(Icons.wifi, size: 18),

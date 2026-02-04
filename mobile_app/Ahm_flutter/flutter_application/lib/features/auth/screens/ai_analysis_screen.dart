@@ -258,9 +258,9 @@ Container(
                 )
               ],
             ),
-            child: Row(
+            child: const Row(
               mainAxisSize: MainAxisSize.min,
-              children: const [
+              children: [
                 Icon(Icons.auto_awesome, size: 14, color: Colors.white),
                 Gap(6),
                 Text(
@@ -574,7 +574,7 @@ String _normalizeStage(String raw) {
 
 /// UI dropdown diagnosis ต้อง match items; ถ้า AI ส่งมาเป็นประโยคยาว ให้ fallback
 String _pickDiagnosis(String aiText) {
-  final items = const [
+  const items = [
     "Diabetic Foot Ulcer (Wagner Grade 2)",
     "Venous Leg Ulcer",
     "Pressure Injury",

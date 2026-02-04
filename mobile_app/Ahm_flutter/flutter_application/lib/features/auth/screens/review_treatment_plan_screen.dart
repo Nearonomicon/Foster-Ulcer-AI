@@ -180,7 +180,7 @@ class _ReviewTreatmentPlanScreenState extends State<ReviewTreatmentPlanScreen> {
                 children: [
                   CustomScrollView(
                     slivers: [
-                      SliverToBoxAdapter(child: const Gap(12)),
+                      const SliverToBoxAdapter(child: Gap(12)),
 
                       // Top header
                       SliverToBoxAdapter(

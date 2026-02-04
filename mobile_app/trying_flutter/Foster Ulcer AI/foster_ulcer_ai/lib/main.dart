@@ -153,6 +153,75 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   Map<String, dynamic>? _aiExtraction;
   Map<String, dynamic>? _aiWoundJson;
   final Map<String, dynamic> _reviewed = {};
+    // =========================
+  // Task Detail (NEW)
+  // =========================
+  int? _selectedTaskPatientIndex;
+  int? _selectedTaskIndex;
+  XFile? _taskEvidencePhotoTemp; // temp holder (optional)
+
+  Map<String, dynamic>? _getSelectedTask() {
+    if (_selectedTaskPatientIndex == null || _selectedTaskIndex == null) return null;
+    final p = _patients[_selectedTaskPatientIndex!];
+    final aiJson = p['ai_wound_json'];
+    final plan = aiJson?['treatment_plan'];
+    final tasks = plan?['plan_tasks'];
+    if (tasks is! List) return null;
+    if (_selectedTaskIndex! < 0 || _selectedTaskIndex! >= tasks.length) return null;
+    return tasks[_selectedTaskIndex!] as Map<String, dynamic>;
+  }
+
+  Map<String, dynamic>? _getSelectedTaskPatient() {
+    if (_selectedTaskPatientIndex == null) return null;
+    return _patients[_selectedTaskPatientIndex!];
+  }
+
+  Future<void> _pickTaskEvidencePhoto(ImageSource source) async {
+    final picker = ImagePicker();
+    try {
+      final XFile? image = await picker.pickImage(source: source, imageQuality: 75);
+      if (image == null) return;
+
+      setState(() {
+        _taskEvidencePhotoTemp = image;
+        final t = _getSelectedTask();
+        if (t != null) {
+          t['evidence_path'] = image.path; // store local file path (demo)
+          t['evidence_captured_at'] = _getFormattedTimestamp();
+        }
+      });
+    } catch (e) {
+      debugPrint("Error picking task evidence: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Failed to capture evidence: $e"), backgroundColor: Colors.redAccent),
+        );
+      }
+    }
+  }
+
+  void _completeSelectedTask() {
+    final t = _getSelectedTask();
+    if (t == null) return;
+
+    final evidencePath = (t['evidence_path'] ?? '').toString();
+    if (evidencePath.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please take an evidence photo before completing."), backgroundColor: Colors.orange),
+      );
+      return;
+    }
+
+    setState(() {
+      t['status'] = "Completed";
+      t['completed_at'] = _getFormattedTimestamp();
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Task marked as completed."), backgroundColor: Color(0xFF0D9488)),
+    );
+  }
+
 
   static const String _baseUrl = "http://10.0.2.2:8000";
   final Uri _fillinUri = Uri.parse("$_baseUrl/analyze-fillin");
@@ -655,6 +724,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       case 'assessment': return _buildWoundAssessmentForm();
       case 'doctor_summary': return _buildDoctorSummary();
       case 'detail': return _buildDoctorSummary(); 
+      case 'task_detail': return _buildTaskDetailPage();
       default: return _buildDashboard();
     }
   }
@@ -674,14 +744,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           ],
         ),
         const SizedBox(height: 24),
-        _buildStatCard(icon: LucideIcons.users, label: "Total Patients", value: "48", subValue: "5 Active", color: Colors.blue.shade50, iconColor: Colors.blue.shade600),
+        _buildStatCard(icon: LucideIcons.users, label: "Total Patients", value: "48", subValue: "3 Active", color: Colors.blue.shade50, iconColor: Colors.blue.shade600),
         const SizedBox(height: 16),
         _buildActionCard(),
         const SizedBox(height: 24),
         ElevatedButton.icon(
           onPressed: () => _navigateTo('patient_search'),
-          icon: const Icon(LucideIcons.userPlus, size: 20),
-          label: const Text("New Patient Intake", style: TextStyle(fontWeight: FontWeight.bold)),
+          icon: const Icon(LucideIcons.circlePlus, size: 25),
+          label: const Text("Create Case", style: TextStyle(fontWeight: FontWeight.bold)),
           style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0D9488), foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 64), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)), elevation: 0),
         ),
         const SizedBox(height: 32),
@@ -1173,24 +1243,255 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
+  Widget _buildTaskDetailPage() {
+    final t = _getSelectedTask();
+    final p = _getSelectedTaskPatient();
+
+    if (t == null || p == null) {
+      return Column(
+        children: [
+          _buildHeader("Task Detail", onBack: () {
+            setState(() {
+              _currentStep = 'dashboard';
+              _activeTab = 1; // back to Tasks tab
+            });
+          }),
+          const Expanded(child: Center(child: Text("Task not found."))),
+        ],
+      );
+    }
+
+    String fmtDueFull(String? iso) {
+      if (iso == null || iso.isEmpty) return "TBD";
+      try {
+        final dt = DateTime.parse(iso).toLocal();
+        final hh = dt.hour.toString().padLeft(2, '0');
+        final mm = dt.minute.toString().padLeft(2, '0');
+        return "${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')} $hh:$mm";
+      } catch (_) {
+        return iso;
+      }
+    }
+
+    final status = (t['status'] ?? 'Pending').toString();
+    final due = fmtDueFull(t['task_due']?.toString());
+    final evidencePath = (t['evidence_path'] ?? '').toString();
+
+    final bool canComplete = evidencePath.isNotEmpty;
+
+    return Column(
+      children: [
+        _buildHeader("Task Detail", onBack: () {
+          setState(() {
+            _currentStep = 'dashboard';
+            _activeTab = 1; // back to Tasks tab
+          });
+        }),
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.all(24),
+            children: [
+              // Patient Card
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFF1F5F9)),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFCCFBF1),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: const Center(
+                        child: Icon(LucideIcons.user, size: 18, color: Color(0xFF0D9488)),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text((p['name'] ?? '').toString(), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                        Text("ID: ${(p['id'] ?? '-')} • Status: ${(p['status'] ?? '-')}",
+                            style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                      ]),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              _buildSectionTitle(LucideIcons.clipboardCheck, "Task"),
+              const SizedBox(height: 12),
+
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text((t['task_text'] ?? '(task)').toString(),
+                      style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
+                  const SizedBox(height: 10),
+                  _kv("Due", due),
+                  _kv("Status", status),
+                  if ((t['completed_at'] ?? '').toString().isNotEmpty) _kv("Completed At", (t['completed_at']).toString()),
+                ]),
+              ),
+
+              const SizedBox(height: 20),
+
+              _buildSectionTitle(LucideIcons.camera, "Evidence Photo"),
+              const SizedBox(height: 12),
+
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFFF1F5F9)),
+                ),
+                child: Column(
+                  children: [
+                    if (evidencePath.isNotEmpty)
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(14),
+                        child: Image.file(
+                          File(evidencePath),
+                          height: 220,
+                          width: double.infinity,
+                          fit: BoxFit.cover,
+                          errorBuilder: (c, e, s) => Container(
+                            height: 220,
+                            color: const Color(0xFFE2E8F0),
+                            child: const Center(child: Icon(Icons.broken_image)),
+                          ),
+                        ),
+                      )
+                    else
+                      Container(
+                        height: 220,
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: const [
+                            Icon(LucideIcons.image, color: Colors.grey),
+                            SizedBox(height: 8),
+                            Text("No evidence photo yet", style: TextStyle(color: Colors.grey)),
+                          ],
+                        ),
+                      ),
+
+                    const SizedBox(height: 12),
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => _pickTaskEvidencePhoto(ImageSource.camera),
+                            icon: const Icon(LucideIcons.camera, size: 18),
+                            label: const Text("Take Photo", style: TextStyle(fontWeight: FontWeight.bold)),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF0D9488),
+                              side: const BorderSide(color: Color(0xFF0D9488)),
+                              minimumSize: const Size(double.infinity, 52),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => _pickTaskEvidencePhoto(ImageSource.gallery),
+                            icon: const Icon(LucideIcons.folderOpen, size: 18),
+                            label: const Text("Browse", style: TextStyle(fontWeight: FontWeight.bold)),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: const Color(0xFF0D9488),
+                              side: const BorderSide(color: Color(0xFF0D9488)),
+                              minimumSize: const Size(double.infinity, 52),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    if ((t['evidence_captured_at'] ?? '').toString().isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      _kv("Captured At", (t['evidence_captured_at']).toString()),
+                    ],
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 140),
+            ],
+          ),
+        ),
+
+        // Bottom action: complete task
+        Container(
+          padding: const EdgeInsets.all(24),
+          decoration: const BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: Color(0xFFF1F5F9)))),
+          child: ElevatedButton.icon(
+            onPressed: status == "Completed" ? null : (canComplete ? _completeSelectedTask : _completeSelectedTask),
+            icon: const Icon(LucideIcons.circleCheck),
+            label: Text(
+              status == "Completed" ? "Completed" : (canComplete ? "Mark Completed" : "Take Evidence to Complete"),
+              style: const TextStyle(fontWeight: FontWeight.bold),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: canComplete ? const Color(0xFF0D9488) : TWColors.slate.shade300,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(double.infinity, 60),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildTasksTab() {
     // Flatten tasks from all patients for combined view
     List<Map<String, dynamic>> allTasks = [];
-    for (var p in _patients) {
+    for (int pi = 0; pi < _patients.length; pi++) {
+      final p = _patients[pi];
       final aiJson = p['ai_wound_json'];
       if (aiJson != null) {
         final plan = aiJson['treatment_plan'];
         if (plan != null && plan['plan_tasks'] != null) {
-          for (var t in plan['plan_tasks']) {
-            allTasks.add({
-              ...t,
-              'patient_name': p['name'],
-              'patient_id': p['id'],
-            });
+          final taskList = plan['plan_tasks'];
+          if (taskList is List) {
+            for (int ti = 0; ti < taskList.length; ti++) {
+              final t = taskList[ti];
+              if (t is Map) {
+                allTasks.add({
+                  ...Map<String, dynamic>.from(t),
+                  'patient_name': p['name'],
+                  'patient_id': p['id'],
+                  '_pi': pi,
+                  '_ti': ti,
+                });
+              }
+            }
           }
         }
       }
     }
+
 
     String fmtDue(String? iso) {
       if (iso == null || iso.isEmpty) return "TBD";
@@ -1233,19 +1534,27 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             itemBuilder: (context, index) {
               final task = allTasks[index];
               final isUrgent = task['status'] == 'Urgent';
-              
-              return Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: isUrgent ? Colors.red.withOpacity(0.2) : const Color(0xFFF1F5F9)),
-                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))]
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+
+              return GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _selectedTaskPatientIndex = task['_pi'] as int;
+                    _selectedTaskIndex = task['_ti'] as int;
+                    _currentStep = 'task_detail';
+                  });
+                },
+                child: Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: isUrgent ? Colors.red.withOpacity(0.2) : const Color(0xFFF1F5F9)),
+                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))]
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                     Container(
                       padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
@@ -1289,9 +1598,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                     ),
                     Icon(LucideIcons.chevronRight, size: 16, color: TWColors.slate.shade300),
                   ],
+                  ),
                 ),
               );
-            },
+            }
           ),
         ),
       ],
@@ -1369,7 +1679,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   // Static UI Blocks
   Widget _buildStatCard({required IconData icon, required String label, required String value, required String subValue, required Color color, required Color iconColor}) => Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: const Color(0xFFF8FAFC), borderRadius: BorderRadius.circular(24), border: Border.all(color: const Color(0xFFF1F5F9))), child: Row(children: [Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(16)), child: Icon(icon, color: iconColor, size: 24)), const SizedBox(width: 16), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(value, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)), Text(label.toUpperCase(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey))])), Text(subValue, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: iconColor))]));
-  Widget _buildActionCard() => Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: const Color(0xFFD97706), borderRadius: BorderRadius.circular(24)), child: const Row(children: [Icon(LucideIcons.listTodo, color: Colors.white), SizedBox(width: 16), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text("12", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)), Text("TASKS FOR TODAY", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white70))])), Icon(LucideIcons.chevronRight, color: Colors.white70)]));
+  Widget _buildActionCard() => Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: const Color(0xFFD97706), borderRadius: BorderRadius.circular(24)), child: const Row(children: [Icon(LucideIcons.listTodo, color: Colors.white), SizedBox(width: 16), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text("4", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)), Text("TASKS FOR TODAY", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white70))])), Icon(LucideIcons.chevronRight, color: Colors.white70)]));
   Widget _buildProfileAvatar() => Container(width: 44, height: 44, decoration: BoxDecoration(color: const Color(0xFFCCFBF1), borderRadius: BorderRadius.circular(14)), child: const Center(child: Text("RN", style: TextStyle(color: Color(0xFF0D9488), fontWeight: FontWeight.bold))));
   Widget _kv(String k, String v) => Padding(padding: const EdgeInsets.only(bottom: 8), child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [SizedBox(width: 140, child: Text(k, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.grey))), Expanded(child: Text(v.isEmpty ? "-" : v, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF1E293B))))]));
   Widget _buildAISuggestionBox() => Container(margin: const EdgeInsets.only(bottom: 24), padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: const Color(0xFFF0FDFA), borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFF5EEAD4))), child: Row(children: [const Icon(LucideIcons.sparkles, size: 16, color: Color(0xFF0D9488)), const SizedBox(width: 8), Expanded(child: Text("Analysis successful. Please verify clinical data.", style: GoogleFonts.plusJakartaSans(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF134E4A))))]));

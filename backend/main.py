@@ -194,7 +194,7 @@ TASK LIST
 
 INPUT YOU WILL RECEIVE (example structure; adapt to actual)
 - Demographics: age, sex, medical history, comorbidities, meds, allergies
-- Vitals: temp, BP, HR, RR, SpO2, glucose (if available)
+- Vitals: temp, blood pressure, heart rate, RR, SpO2, glucose (if available)
 - Wound checklist: location, size (LxW, depth), tissue %, exudate, odor, pain, edges, periwound, infection signs, ischemia signs, neuropathy, pulses, cap refill, probe-to-bone, prior ulcers/amputation
 - Photo: one wound image
 
@@ -320,7 +320,6 @@ async def create_patient_profile(
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-
 @app.post("/analyze-fillin")
 async def fill_in(
     image: UploadFile = File(...)   # Received as a file upload
@@ -394,7 +393,7 @@ async def analyze_wound(
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/create-case")
-async def analyze_wound(
+async def create_case(
     case_data: str = Form(...),  # Received as a string/JSON from frontend
     image: UploadFile = File(...)   # Received as a file upload
 ):
@@ -408,7 +407,6 @@ async def analyze_wound(
         return {"status": "success"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
 
 
 if __name__ == "__main__":

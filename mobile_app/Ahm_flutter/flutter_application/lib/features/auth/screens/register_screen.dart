@@ -50,8 +50,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       const Spacer(),
                       const Text("9:41", style: TextStyle(fontWeight: FontWeight.w700)),
                       const Spacer(),
-                      Row(
-                        children: const [
+                      const Row(
+                        children: [
                           Icon(Icons.signal_cellular_alt, size: 18),
                           SizedBox(width: 6),
                           Icon(Icons.wifi, size: 18),
@@ -114,7 +114,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             _LabeledField(
                               label: "SPECIALTY",
                               child: DropdownButtonFormField<String>(
-                                value: specialty.isEmpty ? null : specialty,
+                                initialValue: specialty.isEmpty ? null : specialty,
                                 items: const [
                                   DropdownMenuItem(value: "", child: Text("Select Specialty")),
                                   DropdownMenuItem(value: "dermatology", child: Text("Dermatology")),
@@ -211,9 +211,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                     borderRadius: BorderRadius.circular(16),
                                   ),
                                 ),
-                                child: Row(
+                                child: const Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
-                                  children: const [
+                                  children: [
                                     Text("Create Account", style: TextStyle(fontWeight: FontWeight.w900)),
                                     SizedBox(width: 8),
                                     Icon(Icons.arrow_forward, size: 18),

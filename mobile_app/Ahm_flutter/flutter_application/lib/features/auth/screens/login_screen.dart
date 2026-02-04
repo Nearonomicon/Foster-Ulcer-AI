@@ -55,11 +55,11 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               children: [
                 // top status bar mimic
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 24, vertical: 8),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: const [
+                    children: [
                       Text("9:41", style: TextStyle(fontWeight: FontWeight.w700)),
                       Row(
                         children: [
@@ -166,9 +166,9 @@ class _LoginScreenState extends State<LoginScreen> {
                                     ),
                                     shadowColor: cs.primary.withOpacity(0.35),
                                   ),
-                                  child: Row(
+                                  child: const Row(
                                     mainAxisAlignment: MainAxisAlignment.center,
-                                    children: const [
+                                    children: [
                                       Text("Log In", style: TextStyle(fontWeight: FontWeight.w900)),
                                       SizedBox(width: 8),
                                       Icon(Icons.arrow_forward, size: 18),
@@ -183,7 +183,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                   onPressed: () {
                                       Navigator.push(
                                         context,
-                                        MaterialPageRoute(builder: (_) => RegisterScreen()),
+                                        MaterialPageRoute(builder: (_) => const RegisterScreen()),
                                       );
                                     },
 

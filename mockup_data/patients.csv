@@ -2,3 +2,9 @@ patient_id,patient_name,phone_no,dob,gender,height_cm,weight_kg,status,occupatio
 PT-2601-00013,PAWMAN,861948565,03/02/2001,male,170,60,Active,Data Analysis,Diabetes,,admin,26/01/28 11:33
 PT-2601-00014,CASE 6,12356789,01/02/2001,female,180,90,Active,TESTER,Diabetes,,admin,2026-01-28 15:49:08
 PT-2601-00015,CASE 6,909569857,01/02/2001,female,160,90,Active,TESTER,Diabetes,,admin,2026-01-28 15:56:32
+PT-2601-00016,Case 6,8652358570,01/02/2001,female,160,80,Active,Maid,Diabetes,,admin,2026-01-29 12:31:10
+PT-2601-00017,PAWMAN,861948565,03/02/2001,male,170,60,Active,Data Analyst,Diabetes,,admin,2026-01-29 14:13:30
+PT-2601-00018,PAWMAN,861948565,03/02/2001,male,170,60,Active,Data Analyst,Diabetes,,admin,2026-01-29 14:13:38
+PT-2601-00019,PAWMAN,861948565,03/02/2001,male,170,60,Active,Data Analyst,Diabetes,,admin,2026-01-29 14:15:06
+PT-2601-00020,PAWMAN,90925809835,03/02/2001,male,170,89,Active,Farmer,Diabetes,,admin,2026-01-29 16:46:31
+PT-2601-00021,asdf,1343457,01/02/2001,male,170,90,Active,farmer,Diabetes,,admin,2026-01-29 17:13:52
