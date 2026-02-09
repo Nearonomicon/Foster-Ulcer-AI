@@ -269,15 +269,15 @@ async def load_dashboard():
 @app.post("/create-patient-profile")
 async def create_patient_profile(
     patient_data: str = Form(...),
-    image: UploadFile = File(...)
+    image: UploadFile = File(None)
 ):
     global df_patients # Required to update the global DataFrame
     try:
         # Decode JSON string
         data = json.loads(patient_data)
 
-        if not data.get("patient_name", "").strip():
-            raise HTTPException(status_code=400, detail="patient_name is required")
+        if not data.get("phone_no", "").strip():
+            raise HTTPException(status_code=400, detail="phone_no is required")
 
         ## generate patient_id
         patient_id = generate_patient_id(df_patients)
@@ -296,7 +296,6 @@ async def create_patient_profile(
             "height_cm": str(data.get("height_cm", "")).strip(),
             "weight_kg": str(data.get("weight_kg", "")).strip(),
             "status": 'Active',
-            "occupation": data.get("occupation"),
             "medical_history": data.get("medical_history"),
             "image_url": None, # You can handle file saving logic here to update this
             "created_by": "admin",

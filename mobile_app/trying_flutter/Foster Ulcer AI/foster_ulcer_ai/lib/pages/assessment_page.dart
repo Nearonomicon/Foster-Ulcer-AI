@@ -1,0 +1,710 @@
+﻿part of '../widgets/main_navigation_screen.dart';
+
+const List<Offset> _neuropathyPointAnchors = [
+  Offset(0.62, 0.18),
+  Offset(0.47, 0.19),
+  Offset(0.38, 0.28),
+  Offset(0.62, 0.30),
+  Offset(0.50, 0.32),
+  Offset(0.38, 0.36),
+  Offset(0.55, 0.56),
+  Offset(0.40, 0.58),
+  Offset(0.53, 0.85),
+];
+
+extension _AssessmentPage on _MainNavigationScreenState {
+  int _calcSinbadScore() {
+    var score = 0;
+    if (_sinbadSite == "Midfoot/Hindfoot") score++;
+    if (_sinbadIschemia == "Yes") score++;
+    if (_sinbadNeuropathy == "Yes") score++;
+    if (_sinbadInfection == "Yes") score++;
+    if (_sinbadArea == "=1 cm²") score++;
+    if (_sinbadDepth == "Deep/Bone") score++;
+    return score;
+  }
+
+  Color _scoreColor(int score) {
+    if (score >= 3) return Colors.red;
+    if (score == 2) return Colors.amber;
+    return const Color(0xFF0D9488);
+  }
+
+  void _maybeShowHighRisk(int newScore) {
+    if (newScore >= 3 && _sinbadScoreLast < 3) {
+      showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text("High Risk Case"),
+          content: const Text("Referral recommended."),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text("OK"),
+            ),
+          ],
+        ),
+      );
+    }
+    _sinbadScoreLast = newScore;
+  }
+
+  Widget _buildWoundAssessmentForm() {
+    final score = _calcSinbadScore();
+    final scoreColor = _scoreColor(score);
+    return Column(
+      children: [
+        _buildHeader("SINBAD Assessment", onBack: () => _navigateTo('response_view')),
+        Expanded(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+            child: Column(
+              children: [
+                if (_capturedImage != null)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Image.file(
+                      File(_capturedImage!.path),
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                _buildSinbadCard(
+                  icon: LucideIcons.mapPin,
+                  title: "Where is it?",
+                  subtitle: "Site",
+                  helpText: null,
+                  visualText: "Hindfoot = higher risk",
+                  group: "site",
+                  options: const [
+                    _SinbadOption(label: "Forefoot", isRisk: false),
+                    _SinbadOption(label: "Midfoot/Hindfoot", isRisk: true),
+                  ],
+                ),
+                _buildSinbadCard(
+                  icon: LucideIcons.triangleAlert,
+                  title: "Is the pulse weak?",
+                  subtitle: "Ischemia",
+                  helpText: "Is the foot cold? Is the skin shiny and hairless?",
+                  onHelp: _showIschemiaHelp,
+                  visualText: "Check pulse points",
+                  group: "ischemia",
+                  options: const [
+                    _SinbadOption(label: "No", isRisk: false),
+                    _SinbadOption(label: "Yes", isRisk: true),
+                  ],
+                ),
+                _buildSinbadCard(
+                  icon: LucideIcons.zap,
+                  title: "Loss of feeling?",
+                  subtitle: "Neuropathy",
+                  helpText: "Touch test: can they feel your finger on the big toe?",
+                  onHelp: _showNeuropathyHelp,
+                  visualText: "4 touch points",
+                  group: "neuropathy",
+                  options: const [
+                    _SinbadOption(label: "No", isRisk: false),
+                    _SinbadOption(label: "Yes", isRisk: true),
+                  ],
+                ),
+                _buildSinbadCard(
+                  icon: LucideIcons.bandage,
+                  title: "Signs of infection?",
+                  subtitle: "Bacterial",
+                  helpText: null,
+                  onHelp: _showBacterialHelp,
+                  visualText: "Redness/Swelling/Pus",
+                  group: "infection",
+                  options: const [
+                    _SinbadOption(label: "No", isRisk: false),
+                    _SinbadOption(label: "Yes", isRisk: true),
+                  ],
+                ),
+                _buildSinbadCard(
+                  icon: LucideIcons.maximize2,
+                  title: "Size of the wound?",
+                  subtitle: "Area",
+                  helpText: null,
+                  visualText: "Bigger than 10-rupee coin",
+                  group: "area",
+                  options: const [
+                    _SinbadOption(label: "< 1 cm²", isRisk: false),
+                    _SinbadOption(label: ">= 1 cm²", isRisk: true),
+                  ],
+                ),
+                _buildSinbadCard(
+                  icon: Icons.layers,
+                  title: "How deep is it?",
+                  subtitle: "Depth",
+                  helpText: null,
+                  visualText: "Deep tissue visible",
+                  group: "depth",
+                  options: const [
+                    _SinbadOption(label: "Skin only", isRisk: false),
+                    _SinbadOption(label: "Deep/Bone", isRisk: true),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                _buildSinbadMeter(score, scoreColor),
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+        ),
+        _buildFixedBottomButton("Submit Assessment", LucideIcons.circleCheck, _submitToAnalyzeWound),
+      ],
+    );
+  }
+
+  Widget _buildSinbadCard({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required String? helpText,
+    VoidCallback? onHelp,
+    required String visualText,
+    required String group,
+    required List<_SinbadOption> options,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: const Color(0xFF0D9488)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    Text(subtitle, style: const TextStyle(fontSize: 12, color: Colors.blueGrey)),
+                  ],
+                ),
+              ),
+              if ((helpText != null && helpText.isNotEmpty) || onHelp != null)
+                IconButton(
+                  icon: const Icon(Icons.help_outline, size: 20),
+                  onPressed: onHelp ?? () => _showHelp(helpText ?? ""),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.image_outlined, size: 18, color: Colors.blueGrey),
+                const SizedBox(width: 8),
+                Expanded(child: Text(visualText, style: const TextStyle(fontSize: 12, color: Colors.blueGrey))),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 12,
+            runSpacing: 12,
+            children: options
+                .map((opt) => _sinbadChoice(label: opt.label, group: group, isRisk: opt.isRisk))
+                .toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSinbadMeter(int score, Color scoreColor) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text("SINBAD score: $score / 6", style: TextStyle(fontWeight: FontWeight.bold, color: scoreColor)),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              value: score / 6,
+              minHeight: 10,
+              backgroundColor: const Color(0xFFE2E8F0),
+              valueColor: AlwaysStoppedAnimation<Color>(scoreColor),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            score >= 3 ? "High risk: referral recommended." : "Low risk: continue assessment.",
+            style: const TextStyle(fontSize: 12, color: Colors.blueGrey),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showHelp(String text) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Help"),
+        content: Text(text),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text("OK"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showIschemiaHelp() {
+    showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Pulse Check"),
+          content: StatefulBuilder(
+            builder: (context, setLocal) {
+              final checklist = const [
+                "Color (pale/blue)",
+                "Cold foot",
+                "Black tissue (tissue loss)",
+              ];
+              final maxHeight = MediaQuery.of(context).size.height * 0.7;
+              return ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: maxHeight),
+                child: SingleChildScrollView(
+                  child: SizedBox(
+                    width: double.maxFinite,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    const Text("Tap pulse points you cannot feel."),
+                        const SizedBox(height: 4),
+                        AspectRatio(
+                          aspectRatio: 4 / 3,
+                          child: Image.asset(
+                            "pic/palpation.png",
+                            fit: BoxFit.contain,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                    const Text("Pulse points you cannot feel:", style: TextStyle(color: Colors.blueGrey)),
+                    const SizedBox(height: 8),
+                        Column(
+                          children: List.generate(2, (i) {
+                            final selected = _ischemiaPoints.contains(i);
+                            return Padding(
+                              padding: EdgeInsets.only(bottom: i == 1 ? 0 : 10),
+                              child: InkWell(
+                                onTap: () {
+                                  setState(() {
+                                    if (selected) {
+                                      _ischemiaPoints.remove(i);
+                                    } else {
+                                      _ischemiaPoints.add(i);
+                                    }
+                                    _reviewed['ischemia_points'] = _ischemiaPoints.toList()..sort();
+                                    if (_ischemiaPoints.length == 2 || _ischemiaChecklist.isNotEmpty || _ischemiaPulse == "no_weak") {
+                                      _sinbadIschemia = "Yes";
+                                      _reviewed['sinbad_ischemia'] = "Yes";
+                                    }
+                                  });
+                                  setLocal(() {});
+                                },
+                                borderRadius: BorderRadius.circular(16),
+                                child: Container(
+                                  width: double.infinity,
+                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                                  decoration: BoxDecoration(
+                                    color: selected ? Colors.red.withOpacity(0.12) : Colors.white,
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: selected ? Colors.red : const Color(0xFFE2E8F0)),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 28,
+                                        height: 28,
+                                        decoration: BoxDecoration(
+                                          color: selected ? Colors.red : const Color(0xFFE2E8F0),
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: Icon(Icons.place, size: 16, color: selected ? Colors.white : Colors.blueGrey),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Text(
+                                          i == 0 ? "Posterior Tibial Artery" : "Dorsalis Pedis Artery",
+                                          style: TextStyle(color: selected ? Colors.red : Colors.blueGrey, fontWeight: FontWeight.bold),
+                                        ),
+                                      ),
+                                      if (selected)
+                                        const Icon(Icons.check_circle, size: 18, color: Colors.red),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          }),
+                        ),
+                    const SizedBox(height: 12),
+                        const Text("Checklist:", style: TextStyle(color: Colors.blueGrey)),
+                        CheckboxListTile(
+                          dense: true,
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text("No/Weak Pulse"),
+                          value: _ischemiaPulse == "yes",
+                          onChanged: (v) {
+                            setState(() {
+                              _ischemiaPulse = v == true ? "yes" : null;
+                          _reviewed['ischemia_pulse'] = _ischemiaPulse;
+                          if (_ischemiaPulse == "no_weak" || _ischemiaChecklist.isNotEmpty || _ischemiaPoints.length == 2) {
+                            _sinbadIschemia = "Yes";
+                            _reviewed['sinbad_ischemia'] = "Yes";
+                          }
+                        });
+                        setLocal(() {});
+                      },
+                        ),
+                    for (final item in checklist)
+                      CheckboxListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(item),
+                        value: _ischemiaChecklist.contains(item),
+                        onChanged: (v) {
+                          setState(() {
+                            if (v == true) {
+                              _ischemiaChecklist.add(item);
+                            } else {
+                              _ischemiaChecklist.remove(item);
+                            }
+                            _reviewed['ischemia_checklist'] = _ischemiaChecklist.toList()..sort();
+                            if (_ischemiaChecklist.isNotEmpty || _ischemiaPoints.length == 2) {
+                              _sinbadIschemia = "Yes";
+                              _reviewed['sinbad_ischemia'] = "Yes";
+                            }
+                          });
+                          setLocal(() {});
+                        },
+                      ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text("Done"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showBacterialHelp() {
+    showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Infection Checklist"),
+          content: StatefulBuilder(
+            builder: (context, setLocal) {
+              final maxHeight = MediaQuery.of(context).size.height * 0.7;
+              final items = const [
+                "Pus / Goo (Purulent discharge)",
+                "Redness (Erythema > 0.5 cm)",
+                "Warmth (hotter than other foot)",
+                "Swelling (puffy, tight, hard)",
+                "Pain (tender or hurts to touch)",
+              ];
+              final notes = const [
+                "Thick white/yellow/bloody liquid from wound.",
+                "Red skin spreading around the sore.",
+                "Use back of hand to compare both feet.",
+                "Local swelling or induration.",
+                "May be absent with neuropathy; don’t rely on pain alone.",
+              ];
+              return ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: maxHeight),
+                child: SingleChildScrollView(
+                  child: SizedBox(
+                    width: double.maxFinite,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text("Check all that apply."),
+                        const SizedBox(height: 8),
+                        for (var i = 0; i < items.length; i++)
+                          CheckboxListTile(
+                            dense: true,
+                            contentPadding: EdgeInsets.zero,
+                            title: Text(items[i]),
+                            subtitle: Text(notes[i]),
+                            value: _infectionChecklist.contains(items[i]),
+                            onChanged: (v) {
+                              setState(() {
+                                if (v == true) {
+                                  _infectionChecklist.add(items[i]);
+                                } else {
+                                  _infectionChecklist.remove(items[i]);
+                                }
+                                _reviewed['infection_checklist'] = _infectionChecklist.toList()..sort();
+                                if (_infectionChecklist.length >= 2) {
+                                  _sinbadInfection = "Yes";
+                                  _reviewed['sinbad_infection'] = "Yes";
+                                }
+                              });
+                              setLocal(() {});
+                            },
+                          ),
+                        const SizedBox(height: 4),
+                        Text(
+                          "Selected: ${_infectionChecklist.length}/5",
+                          style: const TextStyle(color: Colors.blueGrey),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text("Done"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showNeuropathyHelp() {
+    showDialog<void>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Touch Test"),
+          content: StatefulBuilder(
+            builder: (context, setLocal) {
+              final maxHeight = MediaQuery.of(context).size.height * 0.7;
+              return ConstrainedBox(
+                constraints: BoxConstraints(maxHeight: maxHeight),
+                child: SingleChildScrollView(
+                  child: SizedBox(
+                    width: double.maxFinite,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                    const Text("Tap the points the patient cannot feel."),
+                    const SizedBox(height: 12),
+                    AspectRatio(
+                      aspectRatio: 3 / 4,
+                      child: LayoutBuilder(
+                        builder: (context, constraints) {
+                          final w = constraints.maxWidth;
+                          final h = constraints.maxHeight;
+                          const r = 12.0;
+                          return Stack(
+                            children: [
+                              Positioned.fill(
+                                child: Image.asset(
+                                  "pic/right_foot_numbtest.png",
+                                  fit: BoxFit.contain,
+                                ),
+                              ),
+                              for (var i = 0; i < _neuropathyPointAnchors.length; i++)
+                                Positioned(
+                                  left: (w * _neuropathyPointAnchors[i].dx) - r,
+                                  top: (h * _neuropathyPointAnchors[i].dy) - r,
+                                  child: GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        if (_neuropathyPoints.contains(i)) {
+                                          _neuropathyPoints.remove(i);
+                                        } else {
+                                          _neuropathyPoints.add(i);
+                                        }
+                                        if (_neuropathyPoints.isNotEmpty) {
+                                          _sinbadNeuropathy = "Yes";
+                                          _reviewed['sinbad_neuropathy'] = "Yes";
+                                        }
+                                        _reviewed['neuropathy_points'] = _neuropathyPoints.toList()..sort();
+                                      });
+                                      setLocal(() {});
+                                    },
+                                    child: Container(
+                                      width: r * 2,
+                                      height: r * 2,
+                                      decoration: BoxDecoration(
+                                        color: _neuropathyPoints.contains(i) ? Colors.red : Colors.white,
+                                        border: Border.all(color: Colors.red, width: 2),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: Center(
+                                        child: Text(
+                                          "${i + 1}",
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.bold,
+                                            color: _neuropathyPoints.contains(i) ? Colors.white : Colors.red,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          );
+                        },
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text("Selected: ${_neuropathyPoints.length}/9", style: const TextStyle(color: Colors.blueGrey)),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text("Done"),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _sinbadChoice({required String label, required String group, required bool isRisk}) {
+    bool selected;
+    switch (group) {
+      case "site":
+        selected = _sinbadSite == label;
+        break;
+      case "ischemia":
+        selected = _sinbadIschemia == label;
+        break;
+      case "neuropathy":
+        selected = _sinbadNeuropathy == label;
+        break;
+      case "infection":
+        selected = _sinbadInfection == label;
+        break;
+      case "area":
+        selected = _sinbadArea == label;
+        break;
+      case "depth":
+        selected = _sinbadDepth == label;
+        break;
+      default:
+        selected = false;
+    }
+
+    final Color selectedColor = isRisk ? Colors.red : const Color(0xFF0D9488);
+    final Color bg = selected ? selectedColor.withOpacity(0.12) : Colors.white;
+    final Color border = selected ? selectedColor : const Color(0xFFE2E8F0);
+    final Color textColor = selected ? selectedColor : Colors.blueGrey;
+
+    return InkWell(
+      onTap: () {
+        setState(() {
+          switch (group) {
+            case "site":
+              _sinbadSite = label;
+              _reviewed['sinbad_site'] = label;
+              break;
+            case "ischemia":
+              _sinbadIschemia = label;
+              _reviewed['sinbad_ischemia'] = label;
+              break;
+            case "neuropathy":
+              _sinbadNeuropathy = label;
+              _reviewed['sinbad_neuropathy'] = label;
+              break;
+            case "infection":
+              _sinbadInfection = label;
+              _reviewed['sinbad_infection'] = label;
+              break;
+            case "area":
+              _sinbadArea = label;
+              _reviewed['sinbad_area'] = label;
+              break;
+            case "depth":
+              _sinbadDepth = label;
+              _reviewed['sinbad_depth'] = label;
+              break;
+          }
+          _maybeShowHighRisk(_calcSinbadScore());
+        });
+      },
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        constraints: const BoxConstraints(minWidth: 140),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: border),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isRisk ? Icons.warning_amber_rounded : LucideIcons.circleCheck,
+              size: 16,
+              color: textColor,
+            ),
+            const SizedBox(width: 8),
+            Text(label, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: textColor)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SinbadOption {
+  final String label;
+  final bool isRisk;
+  const _SinbadOption({required this.label, required this.isRisk});
+}
