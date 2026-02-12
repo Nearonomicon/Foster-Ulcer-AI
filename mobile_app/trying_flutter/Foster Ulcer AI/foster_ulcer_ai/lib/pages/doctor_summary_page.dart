@@ -1,4 +1,4 @@
-part of '../widgets/main_navigation_screen.dart';
+﻿part of '../widgets/main_navigation_screen.dart';
 
 extension _DoctorSummaryPage on _MainNavigationScreenState {
   Widget _buildDoctorSummary() {
@@ -11,6 +11,8 @@ extension _DoctorSummaryPage on _MainNavigationScreenState {
 
     final confidence = ai['confidence'];
     final confPct = (confidence is num) ? (confidence * 100).round() : null;
+    final redFlag = ai['red_flag'] == true;
+    final creator = ai['creator']?.toString();
 
     String fmtDue(String? iso) {
       if (iso == null || iso.isEmpty) return "TBD";
@@ -58,6 +60,19 @@ extension _DoctorSummaryPage on _MainNavigationScreenState {
                 ],
               ),
               const SizedBox(height: 24),
+              if (redFlag)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 16),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: const Color(0xFFFEE2E2), borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFFCA5A5))),
+                  child: const Row(
+                    children: [
+                      Icon(LucideIcons.triangleAlert, size: 16, color: Color(0xFFB91C1C)),
+                      SizedBox(width: 8),
+                      Expanded(child: Text("Red Flag: Urgent review recommended.", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF991B1B)))),
+                    ],
+                  ),
+                ),
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(color: const Color(0xFFF0FDFA), borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFF5EEAD4))),
@@ -70,6 +85,13 @@ extension _DoctorSummaryPage on _MainNavigationScreenState {
                         (ai['wound_stage'] ?? 'Wound Stage').toString(),
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF134E4A)),
                       ),
+                      if (creator != null && creator.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          creator,
+                          style: const TextStyle(fontSize: 11, color: Color(0xFF0F766E)),
+                        ),
+                      ],
                       const SizedBox(height: 6),
                       Text(
                         ai['diagnosis']?.toString() ?? "No diagnosis provided.",
@@ -127,9 +149,9 @@ extension _DoctorSummaryPage on _MainNavigationScreenState {
               _buildSectionTitle(LucideIcons.clipboardCheck, "Nurse-Reviewed Data"),
               const SizedBox(height: 12),
               // Displaying all clinical fields
-              _kv("Temperature", "${_reviewed['temperature'] ?? '-'} °C"),
-              _kv("Blood Pressure", "${_reviewed['blood_pressure'] ?? '-'} mmHg"),
-              _kv("Heart Rate", "${_reviewed['heart_rate'] ?? '-'} bpm"),
+              _kv("Temperature", _tempLevel?.toString() ?? '-'),
+              _kv("Blood Pressure", _bpLevel?.toString() ?? '-'),
+              _kv("Heart Rate", _heartRateLevel?.toString() ?? '-'),
               _kv("Location Primary", _reviewed['location_primary']?.toString() ?? '-'),
               _kv("Location Detail", _reviewed['location_detail']?.toString() ?? '-'),
               _kv("Wound Type", _reviewed['wound_type']?.toString() ?? '-'),
@@ -144,7 +166,7 @@ extension _DoctorSummaryPage on _MainNavigationScreenState {
               _kv("Discharge Type", _reviewed['discharge_type']?.toString() ?? '-'),
               _kv("Odor Presence", _reviewed['odor_presence']?.toString() ?? '-'),
               _kv("Pain Score", "${_reviewed['pain_score'] ?? '-'}/10"),
-              _kv("Has Infection", (_reviewed['has_infection'] == true) ? "YES" : "NO"),
+              _kv("Has Infection", (_reviewed['has_infection']?.toString().toLowerCase() == 'true') ? "YES" : "NO"),
               _kv("Skin Condition", _reviewed['skin_condition']?.toString() ?? '-'),
 
               const SizedBox(height: 20),
@@ -170,6 +192,11 @@ extension _DoctorSummaryPage on _MainNavigationScreenState {
                   style: const TextStyle(fontSize: 12, color: Colors.black87, height: 1.3),
                 ),
               ),
+              if (plan['followup_days'] != null || plan['status'] != null) ...[
+                const SizedBox(height: 8),
+                _kv("Follow-up (days)", plan['followup_days']?.toString() ?? '-'),
+                _kv("Plan Status", plan['status']?.toString() ?? '-'),
+              ],
 
               const SizedBox(height: 20),
               _buildSectionTitle(LucideIcons.listTodo, "Task List"),
@@ -187,7 +214,7 @@ extension _DoctorSummaryPage on _MainNavigationScreenState {
                           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                             Text(t['task_text']?.toString() ?? "(task)", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
                             Text(
-                              "Due: ${fmtDue(t['task_due']?.toString())} • ${t['status'] ?? 'Pending'}",
+                              "Due: ${fmtDue(t['task_due']?.toString())} || Status: ${t['status'] ?? 'Pending'}",
                               style: const TextStyle(fontSize: 11, color: Colors.blueGrey),
                             ),
                           ]),
@@ -207,3 +234,4 @@ extension _DoctorSummaryPage on _MainNavigationScreenState {
     );
   }
 }
+

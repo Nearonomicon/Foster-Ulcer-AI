@@ -19,7 +19,7 @@ extension _AssessmentPage on _MainNavigationScreenState {
     if (_sinbadIschemia == "Yes") score++;
     if (_sinbadNeuropathy == "Yes") score++;
     if (_sinbadInfection == "Yes") score++;
-    if (_sinbadArea == "=1 cm²") score++;
+    if (_sinbadArea == kSinbadAreaLarge) score++;
     if (_sinbadDepth == "Deep/Bone") score++;
     return score;
   }
@@ -73,12 +73,181 @@ extension _AssessmentPage on _MainNavigationScreenState {
                       fit: BoxFit.cover,
                     ),
                   ),
+                Theme(
+                  data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                  child: ExpansionTile(
+                    tilePadding: const EdgeInsets.symmetric(horizontal: 4),
+                    title: Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            "Fill-in Answers (Review)",
+                            style: TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                        TextButton.icon(
+                          onPressed: () => setState(() => _fillinReviewed = !_fillinReviewed),
+                          icon: Icon(
+                            _fillinReviewed ? Icons.check_circle : Icons.check_circle,
+                            color: _fillinReviewed ? const Color(0xFF0D9488) : Colors.blueGrey,
+                            size: 18,
+                          ),
+                          label: Text(
+                            _fillinReviewed ? "Reviewed" : "Review",
+                            style: TextStyle(
+                              color: _fillinReviewed ? const Color(0xFF0D9488) : Colors.blueGrey,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    trailing: const Icon(Icons.expand_more),
+                    children: [
+                      _buildDropdownField(
+                        label: "Location Primary",
+                        options: const [
+                          "toe",
+                          "sole",
+                          "side",
+                          "heel",
+                          "dorsal_aspect",
+                          "medial_malleolus",
+                          "lateral_malleolus",
+                        ],
+                        value: _reviewed['location_primary']?.toString(),
+                        bindKey: "location_primary",
+                      ),
+                      _buildTextField(
+                        label: "Location Detail",
+                        placeholder: "Enter detail",
+                        bindKey: "location_detail",
+                      ),
+                      _buildDropdownField(
+                        label: "Wound Type",
+                        options: const [
+                          "ulcer",
+                          "surgical",
+                          "traumatic",
+                          "pressure",
+                          "burn",
+                          "other",
+                        ],
+                        value: _reviewed['wound_type']?.toString(),
+                        bindKey: "wound_type",
+                      ),
+                      _buildDropdownField(
+                        label: "Shape",
+                        options: const ["round", "oval", "irregular", "linear", "punched_out"],
+                        value: _reviewed['shape']?.toString(),
+                        bindKey: "shape",
+                      ),
+                      _buildTextField(
+                        label: "Width (cm)",
+                        placeholder: "e.g. 2.5",
+                        keyboardType: TextInputType.number,
+                        bindKey: "size_width_cm",
+                      ),
+                      _buildTextField(
+                        label: "Length (cm)",
+                        placeholder: "e.g. 3.0",
+                        keyboardType: TextInputType.number,
+                        bindKey: "size_length_cm",
+                      ),
+                      _buildDropdownField(
+                        label: "Depth Category",
+                        options: const [
+                          "superficial",
+                          "partial_thickness",
+                          "full_thickness",
+                          "deep",
+                          "very_deep_exposed_bone_tendon",
+                        ],
+                        value: _reviewed['depth_category']?.toString(),
+                        bindKey: "depth_category",
+                      ),
+                      _buildTextField(
+                        label: "Bed Slough (%)",
+                        placeholder: "0-100",
+                        keyboardType: TextInputType.number,
+                        bindKey: "bed_slough_pct",
+                      ),
+                      _buildTextField(
+                        label: "Bed Necrotic (%)",
+                        placeholder: "0-100",
+                        keyboardType: TextInputType.number,
+                        bindKey: "bed_necrotic_pct",
+                      ),
+                      _buildDropdownField(
+                        label: "Edge Description",
+                        options: const ["smooth", "thickened", "irregular", "rolled_epibole", "undermined", "calloused"],
+                        value: _reviewed['edge_description']?.toString(),
+                        bindKey: "edge_description",
+                      ),
+                      _buildDropdownField(
+                        label: "Periwound Status",
+                        options: const [
+                          "normal",
+                          "erythematous",
+                          "edematous",
+                          "indurated",
+                          "macerated",
+                          "fluctuant",
+                          "hyperpigmented",
+                        ],
+                        value: _reviewed['periwound_status']?.toString(),
+                        bindKey: "periwound_status",
+                      ),
+                      _buildDropdownField(
+                        label: "Discharge Volume",
+                        options: const ["none", "minimal", "moderate", "heavy"],
+                        value: _reviewed['discharge_volume']?.toString(),
+                        bindKey: "discharge_volume",
+                      ),
+                      _buildDropdownField(
+                        label: "Discharge Type",
+                        options: const [
+                          "serous (clear)",
+                          "sanguineous (bloody)",
+                          "serosanguineous (pink)",
+                          "purulent (yellow/pus)",
+                          "seropurulent (cloudy yellow)",
+                        ],
+                        value: _reviewed['discharge_type']?.toString(),
+                        bindKey: "discharge_type",
+                      ),
+                      _buildDropdownField(
+                        label: "Odor Presence",
+                        options: const ["none", "faint", "moderate", "foul", "putrid"],
+                        value: _reviewed['odor_presence']?.toString(),
+                        bindKey: "odor_presence",
+                      ),
+                      _buildTextField(
+                        label: "Pain Score (0-10)",
+                        placeholder: "0-10",
+                        keyboardType: TextInputType.number,
+                        bindKey: "pain_score",
+                      ),
+                      _buildDropdownField(
+                        label: "Has Infection",
+                        options: const ["true", "false"],
+                        value: _reviewed['has_infection']?.toString(),
+                        bindKey: "has_infection",
+                      ),
+                      _buildDropdownField(
+                        label: "Skin Condition",
+                        options: const ["healthy", "dry", "cracked", "macerated", "fragile", "scaling"],
+                        value: _reviewed['skin_condition']?.toString(),
+                        bindKey: "skin_condition",
+                      ),
+                    ],
+                  ),
+                ),
                 _buildSinbadCard(
                   icon: LucideIcons.mapPin,
-                  title: "Where is it?",
-                  subtitle: "Site",
+                  title: "Site",
+                  subtitle: "Where is it?",
                   helpText: null,
-                  visualText: "Hindfoot = higher risk",
                   group: "site",
                   options: const [
                     _SinbadOption(label: "Forefoot", isRisk: false),
@@ -87,11 +256,10 @@ extension _AssessmentPage on _MainNavigationScreenState {
                 ),
                 _buildSinbadCard(
                   icon: LucideIcons.triangleAlert,
-                  title: "Is the pulse weak?",
-                  subtitle: "Ischemia",
+                  title: "Ischemia",
+                  subtitle: "Is the pulse weak?",
                   helpText: "Is the foot cold? Is the skin shiny and hairless?",
                   onHelp: _showIschemiaHelp,
-                  visualText: "Check pulse points",
                   group: "ischemia",
                   options: const [
                     _SinbadOption(label: "No", isRisk: false),
@@ -100,11 +268,10 @@ extension _AssessmentPage on _MainNavigationScreenState {
                 ),
                 _buildSinbadCard(
                   icon: LucideIcons.zap,
-                  title: "Loss of feeling?",
-                  subtitle: "Neuropathy",
+                  title: "Neuropathy",
+                  subtitle: "Loss of feeling?",
                   helpText: "Touch test: can they feel your finger on the big toe?",
                   onHelp: _showNeuropathyHelp,
-                  visualText: "4 touch points",
                   group: "neuropathy",
                   options: const [
                     _SinbadOption(label: "No", isRisk: false),
@@ -113,11 +280,10 @@ extension _AssessmentPage on _MainNavigationScreenState {
                 ),
                 _buildSinbadCard(
                   icon: LucideIcons.bandage,
-                  title: "Signs of infection?",
-                  subtitle: "Bacterial",
+                  title: "Bacterial",
+                  subtitle: "Signs of infection?",
                   helpText: null,
                   onHelp: _showBacterialHelp,
-                  visualText: "Redness/Swelling/Pus",
                   group: "infection",
                   options: const [
                     _SinbadOption(label: "No", isRisk: false),
@@ -126,22 +292,20 @@ extension _AssessmentPage on _MainNavigationScreenState {
                 ),
                 _buildSinbadCard(
                   icon: LucideIcons.maximize2,
-                  title: "Size of the wound?",
-                  subtitle: "Area",
+                  title: "Area",
+                  subtitle: "Size of the wound?",
                   helpText: null,
-                  visualText: "Bigger than 10-rupee coin",
                   group: "area",
                   options: const [
-                    _SinbadOption(label: "< 1 cm²", isRisk: false),
-                    _SinbadOption(label: ">= 1 cm²", isRisk: true),
+                    _SinbadOption(label: kSinbadAreaSmall, isRisk: false),
+                    _SinbadOption(label: kSinbadAreaLarge, isRisk: true),
                   ],
                 ),
                 _buildSinbadCard(
                   icon: Icons.layers,
-                  title: "How deep is it?",
-                  subtitle: "Depth",
+                  title: "Depth",
+                  subtitle: "How deep is it?",
                   helpText: null,
-                  visualText: "Deep tissue visible",
                   group: "depth",
                   options: const [
                     _SinbadOption(label: "Skin only", isRisk: false),
@@ -166,7 +330,6 @@ extension _AssessmentPage on _MainNavigationScreenState {
     required String subtitle,
     required String? helpText,
     VoidCallback? onHelp,
-    required String visualText,
     required String group,
     required List<_SinbadOption> options,
   }) {
@@ -207,22 +370,6 @@ extension _AssessmentPage on _MainNavigationScreenState {
                   onPressed: onHelp ?? () => _showHelp(helpText ?? ""),
                 ),
             ],
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF8FAFC),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.image_outlined, size: 18, color: Colors.blueGrey),
-                const SizedBox(width: 8),
-                Expanded(child: Text(visualText, style: const TextStyle(fontSize: 12, color: Colors.blueGrey))),
-              ],
-            ),
           ),
           const SizedBox(height: 12),
           Wrap(

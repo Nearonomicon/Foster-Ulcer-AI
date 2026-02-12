@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 
 import 'package:foster_ulcer_ai/models/mock_patients.dart';
 
+
 part '../pages/dashboard_page.dart';
 part '../pages/patient_search_page.dart';
 part '../pages/intake_page.dart';
@@ -21,6 +22,10 @@ part '../pages/profile_page.dart';
 part '../pages/camera_page.dart';
 part '../pages/vital_check_page.dart';
 part '../pages/assessment_page.dart';
+
+const String kSinbadAreaSmall = "< 1 cm²";
+const String kSinbadAreaLarge = "≥ 1 cm²";
+
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({super.key});
@@ -111,7 +116,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       'size_length_cm',
       'bed_slough_pct',
       'bed_necrotic_pct',
-      'pain_score',
     ];
     for (final k in keys) {
       final v = _reviewed[k];
@@ -156,6 +160,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   final Set<String> _ischemiaChecklist = {};
   String? _ischemiaPulse;
   final Set<String> _infectionChecklist = {};
+  bool _fillinReviewed = false;
   Map<String, dynamic>? _selectedPatient;
   bool _isAnalyzing = false;
   String _analysisTitle = "GEMINI CLOUD";
@@ -336,8 +341,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           _aiExtraction = extracted;
           _rawResponse = const JsonEncoder.withIndent('  ').convert(extracted ?? analysisData);
           _reviewed..clear()..addAll(extracted ?? {});
+          _reviewed.remove('odor_presence');
+          _reviewed.remove('pain_score');
+          _reviewed.remove('has_infection');
         });
         _applyPrefillControllersFromReviewed();
+        _maybeComputeSinbadAreaFromSize();
       }
       _navigateTo('response_view');
     } catch (e) {
@@ -362,7 +371,20 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     try {
       final request = http.MultipartRequest('POST', _analyzeWoundUri);
       final reviewed = Map<String, dynamic>.from(_reviewed);
-      final payload = {'patient_profile': Map<String, dynamic>.from(_patientProfile), 'selected_patient': _selectedPatient, 'nurse_reviewed': reviewed};
+      reviewed.putIfAbsent('odor_presence', () => '');
+      reviewed.putIfAbsent('pain_score', () => '');
+      reviewed.putIfAbsent('has_infection', () => null);
+      final filteredProfile = Map<String, dynamic>.from(_patientProfile)
+        ..remove('patient_name')
+        ..remove('phone_no')
+        ..remove('patient_photo_url')
+        ..remove('patient_photo');
+      final payload = {
+        'patient_profile': filteredProfile,
+        'selected_patient': _selectedPatient,
+        'nurse_reviewed': reviewed,
+        'ai_prefill': _aiExtraction,
+      };
       request.fields['patient_data'] = jsonEncode(payload);
       final bytes = await _capturedImage!.readAsBytes();
       request.files.add(http.MultipartFile.fromBytes('image', bytes, filename: _capturedImage!.name));
@@ -506,7 +528,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         'gender': _selectedGender,
         'height_cm': _patientHeightCtrl.text.trim(),
         'weight_kg': _patientWeightCtrl.text.trim(),
-        'medical_history': _patientHistoryCtrl.text.trim(),
+        'medical_history': _otherCompCtrl.text.trim(),
+        'diabetes': {
+          'has_diabetes': _hasDiabetes,
+          'years': _diabetesYears,
+          'risk_history': _riskHistory.toList()..sort(),
+          'complications': _complications.toList()..sort(),
+        },
         'created_at': _getFormattedTimestamp(),
       };
       
@@ -691,12 +719,27 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   Widget _buildTextField({required String label, required String placeholder, IconData? icon, String? initialValue, TextInputType keyboardType = TextInputType.text, String? bindKey}) {
     final TextEditingController? controller = bindKey == null ? null : _ctrl(bindKey, initial: initialValue ?? '');
-    return Padding(padding: const EdgeInsets.only(bottom: 20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF0D9488))), const SizedBox(height: 8), TextFormField(controller: controller, keyboardType: keyboardType, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), onChanged: (v) { if (bindKey != null) _reviewed[bindKey] = v; }, decoration: _inputDeco(icon ?? LucideIcons.fileText, placeholder))]));
+    return Padding(padding: const EdgeInsets.only(bottom: 20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF0D9488))), const SizedBox(height: 8), TextFormField(controller: controller, keyboardType: keyboardType, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), onChanged: (v) { if (bindKey != null) { _reviewed[bindKey] = v; if (bindKey == 'size_width_cm' || bindKey == 'size_length_cm') { _maybeComputeSinbadAreaFromSize(); } } }, decoration: _inputDeco(icon ?? LucideIcons.fileText, placeholder))]));
+  }
+
+  void _maybeComputeSinbadAreaFromSize() {
+    final widthRaw = _reviewed['size_width_cm']?.toString();
+    final lengthRaw = _reviewed['size_length_cm']?.toString();
+    if (widthRaw == null || lengthRaw == null) return;
+    final width = double.tryParse(widthRaw);
+    final length = double.tryParse(lengthRaw);
+    if (width == null || length == null) return;
+    final area = width * length;
+    final areaLabel = area >= 1.0 ? kSinbadAreaLarge : kSinbadAreaSmall;
+    setState(() {
+      _sinbadArea = areaLabel;
+      _reviewed['sinbad_area'] = areaLabel;
+    });
   }
 
   Widget _buildDropdownField({required String label, required List<String> options, String? value, String? bindKey}) {
     final String? effectiveValue = _coerceEnum(value, options);
-    return Padding(padding: const EdgeInsets.only(bottom: 20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF0D9488))), const SizedBox(height: 8), DropdownButtonFormField<String>(isExpanded: true, key: ValueKey('drop_${label}_${effectiveValue ?? 'none'}'), value: effectiveValue, decoration: InputDecoration(filled: true, fillColor: const Color(0xFFF8FAFC), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none), contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12)), items: options.map((s) => DropdownMenuItem<String>(value: s, child: Text(s.replaceAll('_', ' '), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)))).toList(), onChanged: (v) { if (bindKey != null) _reviewed[bindKey] = v; })]));
+    return Padding(padding: const EdgeInsets.only(bottom: 20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF0D9488))), const SizedBox(height: 8), DropdownButtonFormField<String>(isExpanded: true, key: ValueKey('drop_${label}_${effectiveValue ?? 'none'}'), value: effectiveValue, decoration: InputDecoration(filled: true, fillColor: const Color(0xFFF8FAFC), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none), contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12)), items: options.map((s) => DropdownMenuItem<String>(value: s, child: Text(s.replaceAll('_', ' '), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)))).toList(), onChanged: (v) { if (bindKey == null) return; setState(() { _reviewed[bindKey] = v; if (bindKey == 'has_infection' && v == 'true') { _sinbadInfection = 'Yes'; _reviewed['sinbad_infection'] = 'Yes'; } }); })]));
   }
 
   Widget _buildChoiceChip(String label, {bool initialSelected = false, String? bindKey}) {
