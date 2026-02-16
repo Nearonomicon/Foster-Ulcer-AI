@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Foster Ulcer AI — Assessment</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark"></div>
+        <div>
+          <div class="brand-title">Foster Ulcer AI</div>
+          <div class="brand-subtitle">Clinical Assistant Mockup</div>
+        </div>
+      </div>
+      <div class="top-actions">
+        <a class="ghost" href="patient_search.html">New Case</a>
+        <button class="primary">Sync</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="sidebar">
+        <nav class="nav">
+          <a class="nav-item" href="dashboard.html">Dashboard</a>
+          <a class="nav-item" href="patient_search.html">Patient Search</a>
+          <a class="nav-item" href="intake.html">Intake</a>
+          <a class="nav-item" href="vital_check.html">Vital Check</a>
+          <a class="nav-item" href="camera.html">Camera</a>
+          <a class="nav-item" href="response_view.html">Response View</a>
+          <a class="nav-item active" href="assessment.html">Assessment</a>
+          <a class="nav-item" href="doctor_summary.html">Doctor Summary</a>
+          <a class="nav-item" href="cases.html">Cases</a>
+          <a class="nav-item" href="tasks.html">Tasks</a>
+          <a class="nav-item" href="profile.html">Profile</a>
+        </nav>
+        <div class="sidebar-card">
+          <div class="card-label">Today</div>
+          <div class="card-value">4 Tasks</div>
+          <div class="card-sub">2 High Priority</div>
+        </div>
+      </aside>
+
+      <section class="content">
+        <section class="panel">
+          <div class="panel-head">
+            <h2>SINBAD Assessment</h2>
+            <div class="meter">
+              <div class="meter-label">Score: 2 / 6</div>
+              <div class="meter-bar"><span style="width:33%"></span></div>
+            </div>
+          </div>
+          <div class="card image-card">
+            <div class="image-placeholder">Captured Wound Image</div>
+          </div>
+          <div class="accordion">
+            <div class="accordion-head">
+              <div class="accordion-title">Fill-in Answers (Review)</div>
+              <button class="chip">Review</button>
+            </div>
+            <div class="accordion-body">
+              <div class="form-grid">
+                <div class="field"><label>Location Primary</label><select><option>Dorsal Aspect</option></select></div>
+                <div class="field"><label>Location Detail</label><input type="text" value="Foot" /></div>
+                <div class="field"><label>Wound Type</label><select><option>Ulcer</option></select></div>
+                <div class="field"><label>Shape</label><select><option>Irregular</option></select></div>
+              </div>
+            </div>
+          </div>
+          <div class="grid">
+            <div class="card tile">
+              <div class="tile-title">Site</div>
+              <div class="tile-sub">Where is it?</div>
+              <div class="tile-actions">
+                <button class="toggle">Forefoot</button>
+                <button class="toggle active">Midfoot/Hindfoot</button>
+              </div>
+            </div>
+            <div class="card tile">
+              <div class="tile-title">Ischemia</div>
+              <div class="tile-sub">Is the pulse weak?</div>
+              <div class="tile-actions">
+                <button class="toggle">No</button>
+                <button class="toggle danger active">Yes</button>
+              </div>
+            </div>
+            <div class="card tile">
+              <div class="tile-title">Neuropathy</div>
+              <div class="tile-sub">Loss of feeling?</div>
+              <div class="tile-actions">
+                <button class="toggle">No</button>
+                <button class="toggle danger active">Yes</button>
+              </div>
+            </div>
+            <div class="card tile">
+              <div class="tile-title">Bacterial</div>
+              <div class="tile-sub">Signs of infection?</div>
+              <div class="tile-actions">
+                <button class="toggle">No</button>
+                <button class="toggle danger">Yes</button>
+              </div>
+            </div>
+            <div class="card tile">
+              <div class="tile-title">Area</div>
+              <div class="tile-sub">Size of wound?</div>
+              <div class="tile-actions">
+                <button class="toggle">&lt; 1 cm²</button>
+                <button class="toggle danger active">= 1 cm²</button>
+              </div>
+            </div>
+            <div class="card tile">
+              <div class="tile-title">Depth</div>
+              <div class="tile-sub">How deep is it?</div>
+              <div class="tile-actions">
+                <button class="toggle">Skin only</button>
+                <button class="toggle danger">Deep/Bone</button>
+              </div>
+            </div>
+          </div>
+          <div class="panel-head">
+            <a class="primary" href="doctor_summary.html">Submit Assessment</a>
+          </div>
+        </section>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
