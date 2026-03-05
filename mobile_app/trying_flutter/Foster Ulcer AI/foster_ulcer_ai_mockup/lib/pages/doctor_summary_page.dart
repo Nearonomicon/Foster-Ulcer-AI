@@ -43,7 +43,13 @@ extension _DoctorSummaryPage on _MainNavigationScreenState {
                   if (_capturedImage != null)
                     ClipRRect(
                       borderRadius: BorderRadius.circular(20),
-                      child: Image.file(File(_capturedImage!.path), height: 220, width: double.infinity, fit: BoxFit.cover),
+                      child: _buildXFileImage(
+                        _capturedImage!,
+                        bytes: _capturedImageBytes,
+                        height: 220,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                      ),
                     )
                   else if (_selectedPatient != null && _selectedPatient!['image'] != null)
                     ClipRRect(
@@ -234,4 +240,3 @@ extension _DoctorSummaryPage on _MainNavigationScreenState {
     );
   }
 }
-

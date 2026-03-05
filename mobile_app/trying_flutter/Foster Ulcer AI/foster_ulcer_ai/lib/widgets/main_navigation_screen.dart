@@ -44,6 +44,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
     // patient profile controllers
     _patientNameCtrl.dispose();
+    _nrcIdCtrl.dispose();
     _dobCtrl.dispose();
     _patientPhoneCtrl.dispose();
     _patientHeightCtrl.dispose();
@@ -116,6 +117,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       'size_length_cm',
       'bed_slough_pct',
       'bed_necrotic_pct',
+      'lab_wbc_count',
+      'lab_crp',
+      'lab_esr',
+      'lab_procalcitonin',
+      'vascular_abi_value',
+      'vascular_ankle_pressure_mmHg',
+      'vascular_toe_pressure_mmHg',
+      'vascular_tcpo2_mmHg',
     ];
     for (final k in keys) {
       final v = _reviewed[k];
@@ -131,6 +140,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   bool _emergencyBypassProfile = false;
 
   final TextEditingController _patientNameCtrl = TextEditingController();
+  final TextEditingController _nrcIdCtrl = TextEditingController();
   final TextEditingController _dobCtrl = TextEditingController();
   String? _selectedGender;
   String? _selectedUrgency; 
@@ -147,6 +157,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   String? _sugarLevel;
   String? _tempLevel;
   String? _heartRateLevel;
+  String? _respRateLevel;
    int _activeTab = 0;
   String? _sinbadSite;
   String? _sinbadIschemia;
@@ -161,6 +172,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   String? _ischemiaPulse;
   final Set<String> _infectionChecklist = {};
   bool _fillinReviewed = false;
+  bool _fillinExpanded = false;
+  final Map<String, bool> _sinbadHelpExpanded = {};
+  bool _showInflammatoryLabs = false;
+  bool _showDeepInfectionIndicators = false;
+  bool _showObjectiveIschemia = false;
   Map<String, dynamic>? _selectedPatient;
   bool _isAnalyzing = false;
   String _analysisTitle = "GEMINI CLOUD";
@@ -171,6 +187,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   Map<String, dynamic>? _aiExtraction;
   Map<String, dynamic>? _aiWoundJson;
   final Map<String, dynamic> _reviewed = {};
+  final Map<String, dynamic> _caseRefs = {};
     // =========================
   // Task Detail (NEW)
   // =========================
@@ -244,8 +261,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   static const String _baseUrl = "http://10.0.2.2:8000";
   final Uri _fillinUri = Uri.parse("$_baseUrl/analyze-fillin");
   final Uri _analyzeWoundUri = Uri.parse("$_baseUrl/analyze-wound");
-  final Uri _createCaseUri = Uri.parse("$_baseUrl/create-case"); 
   final Uri _createPatientUri = Uri.parse("$_baseUrl/create-patient-profile");
+  final Uri _createCaseUri = Uri.parse("$_baseUrl/create-case");
+  final Uri _sendToDoctorUri = Uri.parse("$_baseUrl/send-to-doctor");
   final Uri _docsUri = Uri.parse("$_baseUrl/docs");
 
   // Mock Clinical Data with Wound Images
@@ -279,6 +297,16 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       if (o == raw || o == normalized) return opt;
     }
     return null;
+  }
+
+  double? _toDouble(dynamic v) {
+    if (v == null) return null;
+    return double.tryParse(v.toString());
+  }
+
+  int? _toInt(dynamic v) {
+    if (v == null) return null;
+    return int.tryParse(v.toString());
   }
 
   Future<void> _pickImage(ImageSource source) async {
@@ -326,8 +354,18 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       _isAnalyzing = true;
     });
     try {
+      if (_caseRefs['record_id'] == null || _caseRefs['case_id'] == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Missing case/record ID. Please complete Vital Check first."), backgroundColor: Colors.orange),
+          );
+        }
+        return;
+      }
       final request = http.MultipartRequest('POST', _fillinUri);
       final bytes = await imageFile.readAsBytes();
+      request.fields['record_id'] = _caseRefs['record_id'].toString();
+      request.fields['case_id'] = _caseRefs['case_id'].toString();
       request.files.add(http.MultipartFile.fromBytes('image', bytes, filename: imageFile.name));
       final streamed = await request.send().timeout(const Duration(seconds: 60));
       final response = await http.Response.fromStream(streamed);
@@ -351,7 +389,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       _navigateTo('response_view');
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Upload failed: $e"), backgroundColor: Colors.redAccent));
-      _navigateTo('assessment');
     } finally {
       if (mounted) setState(() => _isAnalyzing = false);
     }
@@ -361,6 +398,36 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     if (_capturedImage == null) return;
     if (!_patientProfileSaved || _patientProfile.isEmpty) {
       _navigateTo('patient_search');
+      return;
+    }
+    if (_caseRefs.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Missing case reference. Please complete Vital Check first."), backgroundColor: Colors.orange),
+        );
+      }
+      return;
+    }
+    final missing = <String>[];
+    if ((_reviewed['sinbad_site'] ?? _reviewed['location_primary']) == null) missing.add('SINBAD site/location');
+    if ((_reviewed['sinbad_ischemia'] ?? _reviewed['ischemia_pulse']) == null) missing.add('Ischemia');
+    if ((_reviewed['sinbad_neuropathy'] ?? _reviewed['neuropathy_points']) == null) missing.add('Neuropathy');
+    if ((_reviewed['sinbad_infection'] ?? _reviewed['infection_checklist']) == null) missing.add('Infection signs');
+    if (_reviewed['sinbad_area'] == null &&
+        (_reviewed['size_width_cm'] == null || _reviewed['size_length_cm'] == null)) {
+      missing.add('Wound size (width & length)');
+    }
+    if ((_reviewed['sinbad_depth'] ?? _reviewed['depth_category']) == null) missing.add('Depth');
+
+    if (missing.isNotEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Missing required fields: ${missing.join(', ')}"),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
       return;
     }
     setState(() {
@@ -384,7 +451,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         'selected_patient': _selectedPatient,
         'nurse_reviewed': reviewed,
         'ai_prefill': _aiExtraction,
+        'case_ref': _caseRefs.isEmpty ? null : Map<String, dynamic>.from(_caseRefs),
       };
+      debugPrint("Analyze-wound payload: ${jsonEncode(payload)}");
       request.fields['patient_data'] = jsonEncode(payload);
       final bytes = await _capturedImage!.readAsBytes();
       request.files.add(http.MultipartFile.fromBytes('image', bytes, filename: _capturedImage!.name));
@@ -396,6 +465,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         final analysisVal = body['analysis'];
         final parsed = _parseAnalysis(analysisVal);
         if (parsed != null && (parsed.containsKey('AI_analysis') || parsed.containsKey('treatment_plan'))) {
+          if (!parsed.containsKey('treatment_plan')) {
+            final ai = parsed['AI_analysis'];
+            if (ai is Map && ai['treatment_plan'] != null) {
+              parsed['treatment_plan'] = ai['treatment_plan'];
+            }
+          }
           setState(() {
             _aiWoundJson = parsed;
             _selectedUrgency = null; 
@@ -418,80 +493,135 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     }
   }
 
-  // API Trigger: /create-case
-  Future<String> _createCase() async {
-    if (_capturedImage == null || _aiWoundJson == null) throw Exception("Missing clinical data or wound image.");
-    if (_selectedUrgency == null) throw Exception("Please select a clinical urgency level.");
-    
-    final request = http.MultipartRequest('POST', _createCaseUri);
-    
-    // Bundle all information into caseData
-    final caseData = {
-      'patient_profile': _patientProfile, 
-      'selected_patient': _selectedPatient, 
-      'nurse_reviewed': _reviewed, 
-      'ai_prefill': _aiExtraction, 
-      'ai_analysis': _aiWoundJson, 
-      'urgency': _selectedUrgency, 
-      'meta': {
-        'sent_at': _getFormattedTimestamp(),
-      }
-    };
-    
-    request.fields['case_data'] = jsonEncode(caseData);
-    
-    final bytes = await _capturedImage!.readAsBytes();
-    request.files.add(http.MultipartFile.fromBytes(
-      'image', 
-      bytes, 
-      filename: 'wound_analysis_case.png'
-    ));
-
-    final streamedResponse = await request.send();
-    final response = await http.Response.fromStream(streamedResponse);
-    
-    if (response.statusCode != 200) {
-      throw Exception("Case submission failed (${response.statusCode}): ${response.body}");
-    }
-    
-    return response.body;
-  }
-
   Future<void> _sendToDoctor() async {
-    if (_selectedUrgency == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please set an urgency level before sending."), backgroundColor: Colors.orange),
-      );
+    if (_caseRefs.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Missing case reference. Please complete Vital Check first."), backgroundColor: Colors.orange),
+        );
+      }
       return;
     }
 
+    final urgencyMap = {
+      'high_urgent': 'URGENT',
+      'medium': 'MEDIUM',
+      'routine': 'ROUTINE',
+    };
+    final urgency = _selectedUrgency == null ? null : urgencyMap[_selectedUrgency];
+
+    final woundDetail = {
+      'location_primary': _reviewed['location_primary'],
+      'location_detail': _reviewed['location_detail'],
+      'wound_type': _reviewed['wound_type'],
+      'shape': _reviewed['shape'],
+      'size': {
+        'width_cm': _toDouble(_reviewed['size_width_cm']),
+        'length_cm': _toDouble(_reviewed['size_length_cm']),
+      },
+      'depth_category': _reviewed['depth_category'],
+      'bed': {
+        'slough_pct': _toInt(_reviewed['bed_slough_pct']),
+        'necrotic_pct': _toInt(_reviewed['bed_necrotic_pct']),
+      },
+      'edge_description': _reviewed['edge_description'],
+      'periwound_status': _reviewed['periwound_status'],
+      'discharge': {
+        'volume': _reviewed['discharge_volume'],
+        'type': _reviewed['discharge_type'],
+      },
+      'odor_presence': _reviewed['odor_presence'],
+      'pain_score': _toInt(_reviewed['pain_score']),
+      'has_infection': _reviewed['has_infection']?.toString().toLowerCase() == 'true',
+      'skin_condition': _reviewed['skin_condition'],
+    };
+
+    final payload = {
+      'record_id': _caseRefs['record_id'],
+      'case_id': _caseRefs['case_id'],
+      'patient_id': _caseRefs['patient_id'],
+      'status': 'DOCTOR_REVIEW',
+      'urgency': urgency,
+      'vital_signs': {
+        'temperature': _reviewed['temperature'],
+        'blood_pressure': _reviewed['blood_pressure'],
+        'blood_glucose': _reviewed['blood_sugar'],
+        'heart_rate': _reviewed['heart_rate'],
+        'respiratory_rate': _reviewed['repiratory_rate'],
+      },
+      'wound_detail': woundDetail,
+      'ischemia': {
+        'points': _reviewed['ischemia_points'] ?? [],
+        'pulse': _reviewed['ischemia_pulse'],
+        'checklist': _reviewed['ischemia_checklist'] ?? [],
+      },
+      'infection': {
+        'checklist': _reviewed['infection_checklist'] ?? [],
+        'erythema_extent': _reviewed['erythema_extent'],
+        'probe_to_bone_test': _reviewed['probe_to_bone_test'],
+        'has_deep_abscess_or_fasciitis': _reviewed['has_deep_abscess_or_fasciitis'],
+      },
+      'neuropathy': {
+        'points': _reviewed['neuropathy_points'] ?? [],
+      },
+      'sinbad': {
+        'site': _reviewed['sinbad_site'],
+        'ischemia': _reviewed['sinbad_ischemia'],
+        'neuropathy': _reviewed['sinbad_neuropathy'],
+        'infection': _reviewed['sinbad_infection'],
+        'area': _reviewed['sinbad_area'],
+        'depth': _reviewed['sinbad_depth'],
+      },
+      'lab_results': {
+        'wbc_count': _reviewed['lab_wbc_count'],
+        'crp': _reviewed['lab_crp'],
+        'esr': _reviewed['lab_esr'],
+        'procalcitonin': _reviewed['lab_procalcitonin'],
+      },
+      'vascular': {
+        'abi_value': _reviewed['vascular_abi_value'],
+        'ankle_pressure_mmHg': _reviewed['vascular_ankle_pressure_mmHg'],
+        'toe_pressure_mmHg': _reviewed['vascular_toe_pressure_mmHg'],
+        'tcpo2_mmHg': _reviewed['vascular_tcpo2_mmHg'],
+      },
+      'gangrene_extent': _reviewed['gangrene_extent'],
+      'analysis': _aiWoundJson?['AI_analysis'],
+      'treatment_plan': _aiWoundJson?['treatment_plan'],
+      'task_list': _aiWoundJson?['treatment_plan']?['plan_tasks'],
+    };
+
+    debugPrint("Send-to-doctor payload: ${jsonEncode(payload)}");
+
     setState(() {
-      _analysisTitle = "GEMINI CLOUD";
-      _analysisMessage = "Analyzing...";
+      _analysisTitle = "SENDING";
+      _analysisMessage = "Sending to doctor...";
       _isAnalyzing = true;
     });
     try {
-      final bodyText = await _createCase();
-      if (!mounted) return;
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Clinical case successfully sent to doctor."),
-          backgroundColor: Color(0xFF0D9488),
-        ),
-      );
+      final resp = await http
+          .post(
+            _sendToDoctorUri,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 30));
+      if (resp.statusCode != 200) {
+        throw Exception("Send failed (${resp.statusCode}): ${resp.body}");
+      }
 
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Clinical case successfully sent to doctor."), backgroundColor: Color(0xFF0D9488)),
+      );
       setState(() {
         _responseMode = 'analysis';
-        _rawResponse = bodyText;
-        _capturedImage = null; // Clear image after submission
-        _aiWoundJson = null;   // Reset session state
-        _reviewed.clear();
+        _rawResponse = resp.body;
       });
-      _navigateTo('dashboard');
     } catch (e) {
-      debugPrint("API Error: $e");
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Send failed: $e"), backgroundColor: Colors.redAccent));
+      debugPrint("Send-to-doctor error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Send failed: $e"), backgroundColor: Colors.redAccent));
+      }
     } finally {
       if (mounted) setState(() => _isAnalyzing = false);
     }
@@ -522,6 +652,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     });
     try {
       final payload = {
+        'nrc_id': _nrcIdCtrl.text.trim(),
         'patient_name': _patientNameCtrl.text.trim(),
         'phone_no': phone,
         'dob': _dobCtrl.text, 
@@ -537,6 +668,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         },
         'created_at': _getFormattedTimestamp(),
       };
+      debugPrint("Create patient payload: ${jsonEncode(payload)}");
       
       final req = http.MultipartRequest('POST', _createPatientUri);
       req.fields['patient_data'] = jsonEncode(payload);
@@ -551,6 +683,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       final decoded = jsonDecode(resp.body);
       if (decoded['status'] == 'success') {
         _patientProfile..clear()..addAll(payload);
+        final backendId = decoded['patient_id'] ?? decoded['id'];
+        if (backendId != null && backendId.toString().isNotEmpty) {
+          _patientProfile['patient_id'] = backendId;
+        }
         setState(() => _patientProfileSaved = true);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -571,6 +707,71 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           _isAnalyzing = false;
         });
       }
+    }
+  }
+
+  Future<bool> _createCaseFromVitals() async {
+    final patientId = _patientProfile['patient_id'];
+    if (patientId == null || patientId.toString().isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Missing patient ID."), backgroundColor: Colors.orange),
+        );
+      }
+      return false;
+    }
+
+    final vitals = {
+      'temperature': _reviewed['temperature'],
+      'blood_pressure': _reviewed['blood_pressure'],
+      'heart_rate': _reviewed['heart_rate'],
+      'repiratory_rate': _reviewed['repiratory_rate'],
+      'blood_sugar': _reviewed['blood_sugar'],
+    };
+
+    final payload = {
+      'patient_id': patientId,
+      'status': 'CREATION',
+      'vitals': vitals,
+      'meta': {
+        'sent_at': _getFormattedTimestamp(),
+      }
+    };
+    debugPrint("Create case payload: ${jsonEncode(payload)}");
+
+    try {
+      final resp = await http
+          .post(
+            _createCaseUri,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 20));
+      if (resp.statusCode != 200) {
+        throw Exception("Create-case failed (${resp.statusCode}): ${resp.body}");
+      }
+      final decoded = jsonDecode(resp.body);
+      if (decoded is Map) {
+        final pid = decoded['patient_id'];
+        final caseId = decoded['case_id'];
+        final recordId = decoded['record_id'];
+        if (pid != null && caseId != null && recordId != null) {
+          _caseRefs
+            ..clear()
+            ..addAll({'patient_id': pid, 'case_id': caseId, 'record_id': recordId});
+        } else {
+          throw Exception("Create-case missing IDs.");
+        }
+      }
+      return true;
+    } catch (e) {
+      debugPrint("Create-case error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Create case failed: $e"), backgroundColor: Colors.redAccent),
+        );
+      }
+      return false;
     }
   }
 
@@ -739,7 +940,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   Widget _buildDropdownField({required String label, required List<String> options, String? value, String? bindKey}) {
     final String? effectiveValue = _coerceEnum(value, options);
-    return Padding(padding: const EdgeInsets.only(bottom: 20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF0D9488))), const SizedBox(height: 8), DropdownButtonFormField<String>(isExpanded: true, key: ValueKey('drop_${label}_${effectiveValue ?? 'none'}'), value: effectiveValue, decoration: InputDecoration(filled: true, fillColor: const Color(0xFFF8FAFC), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none), contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12)), items: options.map((s) => DropdownMenuItem<String>(value: s, child: Text(s.replaceAll('_', ' '), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)))).toList(), onChanged: (v) { if (bindKey == null) return; setState(() { _reviewed[bindKey] = v; if (bindKey == 'has_infection' && v == 'true') { _sinbadInfection = 'Yes'; _reviewed['sinbad_infection'] = 'Yes'; } }); })]));
+    return Padding(padding: const EdgeInsets.only(bottom: 20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF0D9488))), const SizedBox(height: 8), DropdownButtonFormField<String>(isExpanded: true, key: ValueKey('drop_${label}_${effectiveValue ?? 'none'}'), initialValue: effectiveValue, decoration: InputDecoration(filled: true, fillColor: const Color(0xFFF8FAFC), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none), contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12)), items: options.map((s) => DropdownMenuItem<String>(value: s, child: Text(s.replaceAll('_', ' '), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)))).toList(), onChanged: (v) { if (bindKey == null) return; setState(() { _reviewed[bindKey] = v; if (bindKey == 'has_infection') { if (v == 'true') { _sinbadInfection = 'Yes'; _reviewed['sinbad_infection'] = 'Yes'; } else if (v == 'false') { _sinbadInfection = 'No'; _reviewed['sinbad_infection'] = 'No'; } } }); })]));
   }
 
   Widget _buildChoiceChip(String label, {bool initialSelected = false, String? bindKey}) {

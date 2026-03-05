@@ -20,8 +20,8 @@ extension _VitalCheckPage on _MainNavigationScreenState {
                   ["High", "130-139/80-89"],
                   ["Very High", ">= 140/90"],
                 ].map((parts) {
-                  final label = parts[0] as String;
-                  final range = parts[1] as String;
+                  final label = parts[0];
+                  final range = parts[1];
                   final selected = _bpLevel == label;
                   return FilterChip(
                     label: SizedBox(
@@ -51,7 +51,10 @@ extension _VitalCheckPage on _MainNavigationScreenState {
                       ),
                     ),
                     selected: selected,
-                    onSelected: (_) => setState(() => _bpLevel = label),
+                    onSelected: (_) => setState(() {
+                      _bpLevel = label;
+                      _reviewed['blood_pressure'] = label;
+                    }),
                     selectedColor: const Color(0xFF0D9488).withOpacity(0.15),
                     checkmarkColor: const Color(0xFF0D9488),
                   );
@@ -70,8 +73,8 @@ extension _VitalCheckPage on _MainNavigationScreenState {
                   ["High", "141 - 200"],
                   ["Very High", "> 200"],
                 ].map((parts) {
-                  final label = parts[0] as String;
-                  final range = parts[1] as String;
+                  final label = parts[0];
+                  final range = parts[1];
                   final selected = _sugarLevel == label;
                   return FilterChip(
                     label: SizedBox(
@@ -101,7 +104,10 @@ extension _VitalCheckPage on _MainNavigationScreenState {
                       ),
                     ),
                     selected: selected,
-                    onSelected: (_) => setState(() => _sugarLevel = label),
+                    onSelected: (_) => setState(() {
+                      _sugarLevel = label;
+                      _reviewed['blood_sugar'] = label;
+                    }),
                     selectedColor: const Color(0xFF0D9488).withOpacity(0.15),
                     checkmarkColor: const Color(0xFF0D9488),
                   );
@@ -119,8 +125,8 @@ extension _VitalCheckPage on _MainNavigationScreenState {
                   ["Normal", "60 - 100"],
                   ["High", "> 100"],
                 ].map((parts) {
-                  final label = parts[0] as String;
-                  final range = parts[1] as String;
+                  final label = parts[0];
+                  final range = parts[1];
                   final selected = _heartRateLevel == label;
                   return FilterChip(
                     label: SizedBox(
@@ -150,7 +156,62 @@ extension _VitalCheckPage on _MainNavigationScreenState {
                       ),
                     ),
                     selected: selected,
-                    onSelected: (_) => setState(() => _heartRateLevel = label),
+                    onSelected: (_) => setState(() {
+                      _heartRateLevel = label;
+                      _reviewed['heart_rate'] = label;
+                    }),
+                    selectedColor: const Color(0xFF0D9488).withOpacity(0.15),
+                    checkmarkColor: const Color(0xFF0D9488),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 24),
+
+              _buildSectionTitle(LucideIcons.wind, "Respiratory Rate"),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ["Low", "< 12"],
+                  ["Normal", "12 - 20"],
+                  ["High", "> 20"],
+                ].map((parts) {
+                  final label = parts[0];
+                  final range = parts[1];
+                  final selected = _respRateLevel == label;
+                  return FilterChip(
+                    label: SizedBox(
+                      width: 120,
+                      child: Center(
+                        child: RichText(
+                          textAlign: TextAlign.center,
+                          text: TextSpan(
+                            style: TextStyle(
+                              fontWeight: selected ? FontWeight.w800 : FontWeight.bold,
+                              color: selected ? const Color(0xFF0D9488) : Colors.blueGrey,
+                            ),
+                            children: [
+                              TextSpan(text: label),
+                              const TextSpan(text: "\n"),
+                              TextSpan(
+                                text: range,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.normal,
+                                  fontSize: 11,
+                                  color: selected ? const Color(0xFF0D9488) : Colors.blueGrey,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    selected: selected,
+                    onSelected: (_) => setState(() {
+                      _respRateLevel = label;
+                      _reviewed['repiratory_rate'] = label;
+                    }),
                     selectedColor: const Color(0xFF0D9488).withOpacity(0.15),
                     checkmarkColor: const Color(0xFF0D9488),
                   );
@@ -168,8 +229,8 @@ extension _VitalCheckPage on _MainNavigationScreenState {
                   ["Warm", "37.3 - 37.9°C"],
                   ["High", "> 38°C"],
                 ].map((parts) {
-                  final label = parts[0] as String;
-                  final range = parts[1] as String;
+                  final label = parts[0];
+                  final range = parts[1];
                   final selected = _tempLevel == label;
                   return FilterChip(
                     label: SizedBox(
@@ -199,7 +260,10 @@ extension _VitalCheckPage on _MainNavigationScreenState {
                       ),
                     ),
                     selected: selected,
-                    onSelected: (_) => setState(() => _tempLevel = label),
+                    onSelected: (_) => setState(() {
+                      _tempLevel = label;
+                      _reviewed['temperature'] = label;
+                    }),
                     selectedColor: const Color(0xFF0D9488).withOpacity(0.15),
                     checkmarkColor: const Color(0xFF0D9488),
                   );
@@ -215,7 +279,11 @@ extension _VitalCheckPage on _MainNavigationScreenState {
           child: Column(
             children: [
               ElevatedButton.icon(
-                onPressed: () => _navigateTo('camera'),
+                onPressed: () async {
+                  final ok = await _createCaseFromVitals();
+                  if (!mounted || !ok) return;
+                  _navigateTo('camera');
+                },
                 icon: const Icon(LucideIcons.camera),
                 label: const Text("Wound is present", style: TextStyle(fontWeight: FontWeight.bold)),
                 style: ElevatedButton.styleFrom(
@@ -227,7 +295,11 @@ extension _VitalCheckPage on _MainNavigationScreenState {
               ),
               const SizedBox(height: 12),
               OutlinedButton.icon(
-                onPressed: () => _navigateTo('dashboard'),
+                onPressed: () async {
+                  final ok = await _createCaseFromVitals();
+                  if (!mounted || !ok) return;
+                  _navigateTo('dashboard');
+                },
                 icon: const Icon(LucideIcons.house),
                 label: const Text("Wound is not present", style: TextStyle(fontWeight: FontWeight.bold)),
                 style: OutlinedButton.styleFrom(

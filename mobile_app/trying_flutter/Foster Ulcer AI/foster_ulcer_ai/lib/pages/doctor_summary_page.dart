@@ -13,6 +13,16 @@ extension _DoctorSummaryPage on _MainNavigationScreenState {
     final confPct = (confidence is num) ? (confidence * 100).round() : null;
     final redFlag = ai['red_flag'] == true;
     final creator = ai['creator']?.toString();
+    final diag = ai['diagnosis'];
+    final diagnosisRaw = (diag is Map ? diag['text'] : diag) ?? ai['diagnosis_text'] ?? ai['dx'] ?? data['diagnosis'];
+    final diagnosis = (diagnosisRaw == null || diagnosisRaw.toString().trim().isEmpty)
+        ? "No diagnosis provided."
+        : diagnosisRaw.toString();
+    final classifications = (ai['classifications'] is Map) ? Map<String, dynamic>.from(ai['classifications']) : <String, dynamic>{};
+    final idsaStage = classifications['IDSA_infection_stage'];
+    final wIfi = (classifications['WIfI'] is Map) ? Map<String, dynamic>.from(classifications['WIfI']) : <String, dynamic>{};
+    final sinbad = (classifications['SINBAD'] is Map) ? Map<String, dynamic>.from(classifications['SINBAD']) : <String, dynamic>{};
+    final treatmentSummary = ai['treatment_plan_summary']?.toString();
 
     String fmtDue(String? iso) {
       if (iso == null || iso.isEmpty) return "TBD";
@@ -24,9 +34,16 @@ extension _DoctorSummaryPage on _MainNavigationScreenState {
       }
     }
 
+    String fmtList(dynamic v) {
+      if (v is List) return v.join(', ');
+      if (v == null) return '-';
+      final s = v.toString();
+      return s.isEmpty ? '-' : s;
+    }
+
     return Column(
       children: [
-        _buildHeader("Clinical Case Summary", onBack: () => _navigateTo('dashboard')),
+        _buildHeader("Clinical Case Summary", onBack: () => _navigateTo('assessment')),
         Expanded(
           child: ListView(
             padding: const EdgeInsets.all(24),
@@ -76,37 +93,102 @@ extension _DoctorSummaryPage on _MainNavigationScreenState {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(color: const Color(0xFFF0FDFA), borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFF5EEAD4))),
-                child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  const Icon(LucideIcons.stethoscope, color: Color(0xFF0D9488), size: 18),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(
-                        (ai['wound_stage'] ?? 'Wound Stage').toString(),
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF134E4A)),
-                      ),
-                      if (creator != null && creator.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          creator,
-                          style: const TextStyle(fontSize: 11, color: Color(0xFF0F766E)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(LucideIcons.stethoscope, color: Color(0xFF0D9488), size: 18),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                diagnosis,
+                                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Color(0xFF134E4A)),
+                              ),
+                              if (creator != null && creator.isNotEmpty) ...[
+                                const SizedBox(height: 2),
+                                Text(creator, style: const TextStyle(fontSize: 11, color: Color(0xFF0F766E))),
+                              ],
+                              if (confPct != null) ...[
+                                const SizedBox(height: 6),
+                                Text(
+                                  "Confidence: $confPct%",
+                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF0D9488)),
+                                )
+                              ]
+                            ],
+                          ),
                         ),
                       ],
-                      const SizedBox(height: 6),
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE2F7F3),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: const Color(0xFF5EEAD4)),
+                          ),
+                          child: Text(
+                            "IDSA Stage: ${(idsaStage ?? '-').toString()}",
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF134E4A)),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE2F7F3),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: const Color(0xFF5EEAD4)),
+                          ),
+                          child: Text(
+                            "WIfI W:${(wIfi['wound_grade'] ?? '-').toString()} I:${(wIfi['ischemia_grade'] ?? '-').toString()} FI:${(wIfi['foot_infection_grade'] ?? '-').toString()}",
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF134E4A)),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE2F7F3),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: const Color(0xFF5EEAD4)),
+                          ),
+                          child: Text(
+                            "WIfI Stage: ${(wIfi['clinical_stage'] ?? '-').toString()}",
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF134E4A)),
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE2F7F3),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: const Color(0xFF5EEAD4)),
+                          ),
+                          child: Text(
+                            "SINBAD: ${(sinbad['total'] ?? '-').toString()}",
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF134E4A)),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (treatmentSummary != null && treatmentSummary.isNotEmpty) ...[
+                      const SizedBox(height: 10),
                       Text(
-                        ai['diagnosis']?.toString() ?? "No diagnosis provided.",
+                        treatmentSummary,
                         style: const TextStyle(fontSize: 12, color: Color(0xFF134E4A)),
                       ),
-                      if (confPct != null) ...[
-                        const SizedBox(height: 8),
-                        Text(
-                          "Confidence: $confPct%",
-                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF0D9488)),
-                        )
-                      ]
-                    ]),
-                  ),
-                ]),
+                    ],
+                  ],
+                ),
               ),
 
               const SizedBox(height: 24),
@@ -146,38 +228,228 @@ extension _DoctorSummaryPage on _MainNavigationScreenState {
               ),
 
               const SizedBox(height: 32),
-              _buildSectionTitle(LucideIcons.clipboardCheck, "Nurse-Reviewed Data"),
+              _buildSectionTitle(LucideIcons.clipboardCheck, "Assessment Inputs"),
               const SizedBox(height: 12),
-              // Displaying all clinical fields
-              _kv("Temperature", _tempLevel?.toString() ?? '-'),
-              _kv("Blood Pressure", _bpLevel?.toString() ?? '-'),
-              _kv("Heart Rate", _heartRateLevel?.toString() ?? '-'),
-              _kv("Location Primary", _reviewed['location_primary']?.toString() ?? '-'),
-              _kv("Location Detail", _reviewed['location_detail']?.toString() ?? '-'),
-              _kv("Wound Type", _reviewed['wound_type']?.toString() ?? '-'),
-              _kv("Shape", _reviewed['shape']?.toString() ?? '-'),
-              _kv("Width / Length", "${_reviewed['size_width_cm'] ?? '-'} cm / ${_reviewed['size_length_cm'] ?? '-'} cm"),
-              _kv("Depth Category", _reviewed['depth_category']?.toString() ?? '-'),
-              _kv("Bed Slough %", "${_reviewed['bed_slough_pct'] ?? '-'}%"),
-              _kv("Bed Necrotic %", "${_reviewed['bed_necrotic_pct'] ?? '-'}%"),
-              _kv("Edge Description", _reviewed['edge_description']?.toString() ?? '-'),
-              _kv("Periwound Status", _reviewed['periwound_status']?.toString() ?? '-'),
-              _kv("Discharge Volume", _reviewed['discharge_volume']?.toString() ?? '-'),
-              _kv("Discharge Type", _reviewed['discharge_type']?.toString() ?? '-'),
-              _kv("Odor Presence", _reviewed['odor_presence']?.toString() ?? '-'),
-              _kv("Pain Score", "${_reviewed['pain_score'] ?? '-'}/10"),
-              _kv("Has Infection", (_reviewed['has_infection']?.toString().toLowerCase() == 'true') ? "YES" : "NO"),
-              _kv("Skin Condition", _reviewed['skin_condition']?.toString() ?? '-'),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final isWide = constraints.maxWidth > 560;
+                  final cardWidth = isWide ? (constraints.maxWidth - 12) / 2 : constraints.maxWidth;
+                  Widget card(String title, List<Widget> children) {
+                    return SizedBox(
+                      width: cardWidth,
+                      child: Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                          boxShadow: [
+                            BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4)),
+                          ],
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF0D9488))),
+                            const SizedBox(height: 8),
+                            ...children,
+                          ],
+                        ),
+                      ),
+                    );
+                  }
+
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 12,
+                        children: [
+                          card("Vitals", [
+                            _kv("Temperature", _tempLevel?.toString() ?? '-'),
+                            _kv("Blood Pressure", _bpLevel?.toString() ?? '-'),
+                            _kv("Heart Rate", _heartRateLevel?.toString() ?? '-'),
+                            _kv("Respiratory Rate", _respRateLevel?.toString() ?? _reviewed['repiratory_rate']?.toString() ?? '-'),
+                            _kv("Blood Sugar", _sugarLevel?.toString() ?? _reviewed['blood_sugar']?.toString() ?? '-'),
+                          ]),
+                          card("SINBAD", [
+                            _kv("Site", _reviewed['sinbad_site']?.toString() ?? '-'),
+                            _kv("Ischemia", _reviewed['sinbad_ischemia']?.toString() ?? '-'),
+                            _kv("Neuropathy", _reviewed['sinbad_neuropathy']?.toString() ?? '-'),
+                            _kv("Infection", _reviewed['sinbad_infection']?.toString() ?? '-'),
+                            _kv("Area", _reviewed['sinbad_area']?.toString() ?? '-'),
+                            _kv("Depth", _reviewed['sinbad_depth']?.toString() ?? '-'),
+                            _kv("Total Score", _calcSinbadScore().toString()),
+                          ]),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      Theme(
+                        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                        child: ExpansionTile(
+                          tilePadding: EdgeInsets.zero,
+                          title: const Text("Wound Details", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                          children: [
+                            Wrap(
+                              spacing: 12,
+                              runSpacing: 12,
+                              children: [
+                                card("Wound Basics", [
+                                  _kv("Location Primary", _reviewed['location_primary']?.toString() ?? '-'),
+                                  _kv("Location Detail", _reviewed['location_detail']?.toString() ?? '-'),
+                                  _kv("Wound Type", _reviewed['wound_type']?.toString() ?? '-'),
+                                  _kv("Shape", _reviewed['shape']?.toString() ?? '-'),
+                                ]),
+                                card("Size & Depth", [
+                                  _kv("Width / Length", "${_reviewed['size_width_cm'] ?? '-'} cm / ${_reviewed['size_length_cm'] ?? '-'} cm"),
+                                  _kv("Depth Category", _reviewed['depth_category']?.toString() ?? '-'),
+                                ]),
+                                card("Tissue & Edge", [
+                                  _kv("Bed Slough %", "${_reviewed['bed_slough_pct'] ?? '-'}%"),
+                                  _kv("Bed Necrotic %", "${_reviewed['bed_necrotic_pct'] ?? '-'}%"),
+                                  _kv("Edge Description", _reviewed['edge_description']?.toString() ?? '-'),
+                                  _kv("Periwound Status", _reviewed['periwound_status']?.toString() ?? '-'),
+                                ]),
+                                card("Discharge & Symptoms", [
+                                  _kv("Discharge Volume", _reviewed['discharge_volume']?.toString() ?? '-'),
+                                  _kv("Discharge Type", _reviewed['discharge_type']?.toString() ?? '-'),
+                                  _kv("Odor Presence", _reviewed['odor_presence']?.toString() ?? '-'),
+                                  _kv("Pain Score", "${_reviewed['pain_score'] ?? '-'}/10"),
+                                  _kv("Has Infection", (_reviewed['has_infection']?.toString().toLowerCase() == 'true') ? "YES" : "NO"),
+                                  _kv("Skin Condition", _reviewed['skin_condition']?.toString() ?? '-'),
+                                ]),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Theme(
+                        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                        child: ExpansionTile(
+                          tilePadding: EdgeInsets.zero,
+                          title: const Text("Advanced Inputs (WIfI / IDSA)", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                          children: [
+                            Wrap(
+                              spacing: 12,
+                              runSpacing: 12,
+                              children: [
+                                card("WIfI: Ischemia", [
+                                  _kv("Pulse Check", _reviewed['ischemia_pulse']?.toString() ?? '-'),
+                                  _kv("Ischemia Checklist", fmtList(_reviewed['ischemia_checklist'])),
+                                  _kv("Ischemia Points", fmtList(_reviewed['ischemia_points'])),
+                                  _kv("ABI", _reviewed['vascular_abi_value']?.toString() ?? '-'),
+                                  _kv("Ankle Pressure", _reviewed['vascular_ankle_pressure_mmHg']?.toString() ?? '-'),
+                                  _kv("Toe Pressure", _reviewed['vascular_toe_pressure_mmHg']?.toString() ?? '-'),
+                                  _kv("TcPO2", _reviewed['vascular_tcpo2_mmHg']?.toString() ?? '-'),
+                                ]),
+                                card("WIfI: Wound", [
+                                  _kv("Gangrene Extent", _reviewed['gangrene_extent']?.toString() ?? '-'),
+                                  _kv("Depth Category", _reviewed['depth_category']?.toString() ?? '-'),
+                                  _kv("Location Primary", _reviewed['location_primary']?.toString() ?? '-'),
+                                ]),
+                                card("IDSA: Infection", [
+                                  _kv("Infection Checklist", fmtList(_reviewed['infection_checklist'])),
+                                  _kv("Erythema Extent", _reviewed['erythema_extent']?.toString() ?? '-'),
+                                  _kv("Probe-to-Bone", _reviewed['probe_to_bone_test']?.toString() ?? '-'),
+                                  _kv("Deep Abscess/Fasciitis", _reviewed['has_deep_abscess_or_fasciitis']?.toString() ?? '-'),
+                                ]),
+                                card("Neuropathy", [
+                                  _kv("Neuropathy Points", fmtList(_reviewed['neuropathy_points'])),
+                                ]),
+                                card("Labs", [
+                                  _kv("WBC Count", _reviewed['lab_wbc_count']?.toString() ?? '-'),
+                                  _kv("CRP", _reviewed['lab_crp']?.toString() ?? '-'),
+                                  _kv("ESR", _reviewed['lab_esr']?.toString() ?? '-'),
+                                  _kv("Procalcitonin", _reviewed['lab_procalcitonin']?.toString() ?? '-'),
+                                ]),
+                                card("Advanced Inputs", [
+                                  _kv("Erythema Extent", _reviewed['erythema_extent']?.toString() ?? '-'),
+                                  _kv("Probe-to-Bone", _reviewed['probe_to_bone_test']?.toString() ?? '-'),
+                                  _kv("Deep Abscess/Fasciitis", _reviewed['has_deep_abscess_or_fasciitis']?.toString() ?? '-'),
+                                  _kv("Gangrene Extent", _reviewed['gangrene_extent']?.toString() ?? '-'),
+                                ]),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                },
+              ),
 
               const SizedBox(height: 20),
-              _buildSectionTitle(LucideIcons.fileText, "AI Narrative"),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFE2E8F0))),
-                child: Text(
-                  ai['description']?.toString() ?? "No description provided.",
-                  style: const TextStyle(fontSize: 12, color: Colors.black87, height: 1.3),
+              _buildSectionTitle(LucideIcons.fileText, "AI Results"),
+              const SizedBox(height: 8),
+              Theme(
+                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  title: const Text("View AI results", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  children: [
+                    const SizedBox(height: 12),
+                    LayoutBuilder(
+                      builder: (context, constraints) {
+                        final isWide = constraints.maxWidth > 560;
+                        final cardWidth = isWide ? (constraints.maxWidth - 12) / 2 : constraints.maxWidth;
+                        Widget card(String title, List<Widget> children) {
+                          return SizedBox(
+                            width: cardWidth,
+                            child: Container(
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: const Color(0xFFE2E8F0)),
+                                boxShadow: [
+                                  BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4)),
+                                ],
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF0D9488))),
+                                  const SizedBox(height: 8),
+                                  ...children,
+                                ],
+                              ),
+                            ),
+                          );
+                        }
+
+                        return Wrap(
+                          spacing: 12,
+                          runSpacing: 12,
+                          children: [
+                            card("AI Narrative", [
+                              Text(
+                                ai['description']?.toString() ?? "No description provided.",
+                                style: const TextStyle(fontSize: 12, color: Colors.black87, height: 1.3),
+                              ),
+                            ]),
+                            card("AI Classifications", [
+                              _kv("IDSA Stage", (idsaStage ?? '-').toString()),
+                              _kv("WIfI Wound", (wIfi['wound_grade'] ?? '-').toString()),
+                              _kv("WIfI Ischemia", (wIfi['ischemia_grade'] ?? '-').toString()),
+                              _kv("WIfI Foot Infection", (wIfi['foot_infection_grade'] ?? '-').toString()),
+                              _kv("WIfI Clinical Stage", (wIfi['clinical_stage'] ?? '-').toString()),
+                              _kv("SINBAD Total", (sinbad['total'] ?? '-').toString()),
+                            ]),
+                            card("SINBAD Breakdown", [
+                              _kv("Site", (sinbad['site'] ?? '-').toString()),
+                              _kv("Ischemia", (sinbad['ischemia'] ?? '-').toString()),
+                              _kv("Neuropathy", (sinbad['neuropathy'] ?? '-').toString()),
+                              _kv("Infection", (sinbad['bacterial_infection'] ?? '-').toString()),
+                              _kv("Area", (sinbad['area'] ?? '-').toString()),
+                              _kv("Depth", (sinbad['depth'] ?? '-').toString()),
+                            ]),
+                          ],
+                        );
+                      },
+                    ),
+                  ],
                 ),
               ),
 
@@ -234,4 +506,3 @@ extension _DoctorSummaryPage on _MainNavigationScreenState {
     );
   }
 }
-

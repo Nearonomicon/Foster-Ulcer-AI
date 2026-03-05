@@ -68,8 +68,9 @@ extension _AssessmentPage on _MainNavigationScreenState {
                       border: Border.all(color: const Color(0xFFE2E8F0)),
                     ),
                     clipBehavior: Clip.antiAlias,
-                    child: Image.file(
-                      File(_capturedImage!.path),
+                    child: _buildXFileImage(
+                      _capturedImage!,
+                      bytes: _capturedImageBytes,
                       fit: BoxFit.cover,
                     ),
                   ),

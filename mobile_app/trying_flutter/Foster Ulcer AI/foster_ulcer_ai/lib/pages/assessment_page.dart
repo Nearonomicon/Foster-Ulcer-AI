@@ -54,7 +54,7 @@ extension _AssessmentPage on _MainNavigationScreenState {
     final scoreColor = _scoreColor(score);
     return Column(
       children: [
-        _buildHeader("SINBAD Assessment", onBack: () => _navigateTo('response_view')),
+        _buildHeader("Wound Assessment", onBack: () => _navigateTo('response_view')),
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
@@ -76,6 +76,7 @@ extension _AssessmentPage on _MainNavigationScreenState {
                 Theme(
                   data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
                   child: ExpansionTile(
+                    onExpansionChanged: (v) => setState(() => _fillinExpanded = v),
                     tilePadding: const EdgeInsets.symmetric(horizontal: 4),
                     title: Row(
                       children: [
@@ -102,7 +103,10 @@ extension _AssessmentPage on _MainNavigationScreenState {
                         ),
                       ],
                     ),
-                    trailing: const Icon(Icons.expand_more),
+                    trailing: Icon(
+                      _fillinExpanded ? Icons.keyboard_arrow_down : Icons.chevron_right,
+                      color: Colors.blueGrey,
+                    ),
                     children: [
                       _buildDropdownField(
                         label: "Location Primary",
@@ -222,12 +226,7 @@ extension _AssessmentPage on _MainNavigationScreenState {
                         value: _reviewed['odor_presence']?.toString(),
                         bindKey: "odor_presence",
                       ),
-                      _buildTextField(
-                        label: "Pain Score (0-10)",
-                        placeholder: "0-10",
-                        keyboardType: TextInputType.number,
-                        bindKey: "pain_score",
-                      ),
+                      _buildPainScoreSlider(),
                       _buildDropdownField(
                         label: "Has Infection",
                         options: const ["true", "false"],
@@ -258,8 +257,8 @@ extension _AssessmentPage on _MainNavigationScreenState {
                   icon: LucideIcons.triangleAlert,
                   title: "Ischemia",
                   subtitle: "Is the pulse weak?",
-                  helpText: "Is the foot cold? Is the skin shiny and hairless?",
-                  onHelp: _showIschemiaHelp,
+                  helpText: null,
+                  helpWidget: _buildIschemiaGuide(),
                   group: "ischemia",
                   options: const [
                     _SinbadOption(label: "No", isRisk: false),
@@ -270,8 +269,8 @@ extension _AssessmentPage on _MainNavigationScreenState {
                   icon: LucideIcons.zap,
                   title: "Neuropathy",
                   subtitle: "Loss of feeling?",
-                  helpText: "Touch test: can they feel your finger on the big toe?",
-                  onHelp: _showNeuropathyHelp,
+                  helpText: null,
+                  helpWidget: _buildNeuropathyGuide(),
                   group: "neuropathy",
                   options: const [
                     _SinbadOption(label: "No", isRisk: false),
@@ -283,7 +282,7 @@ extension _AssessmentPage on _MainNavigationScreenState {
                   title: "Bacterial",
                   subtitle: "Signs of infection?",
                   helpText: null,
-                  onHelp: _showBacterialHelp,
+                  helpWidget: _buildBacterialGuide(),
                   group: "infection",
                   options: const [
                     _SinbadOption(label: "No", isRisk: false),
@@ -329,10 +328,12 @@ extension _AssessmentPage on _MainNavigationScreenState {
     required String title,
     required String subtitle,
     required String? helpText,
-    VoidCallback? onHelp,
+    Widget? helpWidget,
     required String group,
     required List<_SinbadOption> options,
   }) {
+    final hasHelp = (helpText != null && helpText.isNotEmpty) || helpWidget != null;
+    final isExpanded = _sinbadHelpExpanded[group] == true;
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
@@ -364,13 +365,40 @@ extension _AssessmentPage on _MainNavigationScreenState {
                   ],
                 ),
               ),
-              if ((helpText != null && helpText.isNotEmpty) || onHelp != null)
-                IconButton(
-                  icon: const Icon(Icons.help_outline, size: 20),
-                  onPressed: onHelp ?? () => _showHelp(helpText ?? ""),
+              if (hasHelp)
+                InkWell(
+                  onTap: () => setState(() => _sinbadHelpExpanded[group] = !isExpanded),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(
+                      isExpanded ? Icons.keyboard_arrow_down : Icons.chevron_right,
+                      size: 24,
+                      color: Colors.blueGrey,
+                    ),
+                  ),
                 ),
             ],
           ),
+          if (hasHelp) ...[
+            const SizedBox(height: 8),
+            AnimatedCrossFade(
+              firstChild: const SizedBox.shrink(),
+              secondChild: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (helpText != null && helpText.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Text(helpText, style: const TextStyle(fontSize: 12, color: Colors.blueGrey)),
+                    ),
+                  if (helpWidget != null) helpWidget,
+                ],
+              ),
+              crossFadeState: isExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+              duration: const Duration(milliseconds: 200),
+            ),
+          ],
           const SizedBox(height: 12),
           Wrap(
             spacing: 12,
@@ -413,6 +441,524 @@ extension _AssessmentPage on _MainNavigationScreenState {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildPainScoreSlider() {
+    final raw = _reviewed['pain_score']?.toString();
+    final parsed = int.tryParse(raw ?? '');
+    final value = parsed == null ? 0 : parsed.clamp(0, 10);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text("Pain Score (0-10)", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF0D9488))),
+        const SizedBox(height: 8),
+        Slider(
+          value: value.toDouble(),
+          min: 0,
+          max: 10,
+          divisions: 10,
+          label: value.toString(),
+          onChanged: (v) {
+            setState(() {
+              _reviewed['pain_score'] = v.round().toString();
+            });
+          },
+        ),
+        Text("Selected: $value/10", style: const TextStyle(fontSize: 12, color: Colors.blueGrey)),
+        const SizedBox(height: 20),
+      ],
+    );
+  }
+
+  Widget _buildProbeToBoneButtons() {
+    final value = _reviewed['probe_to_bone_test']?.toString();
+    final isYes = value == 'positive' || value == 'yes';
+    final isNo = value == 'negative' || value == 'no';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                "Probe-to-Bone",
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF0D9488)),
+              ),
+            ),
+            OutlinedButton(
+              onPressed: () {
+                setState(() {
+                  _reviewed['probe_to_bone_test'] = isNo ? 'not_performed' : 'negative';
+                });
+              },
+              style: OutlinedButton.styleFrom(
+                backgroundColor: isNo ? Colors.blueGrey.withOpacity(0.12) : Colors.white,
+                side: BorderSide(color: isNo ? Colors.blueGrey : const Color(0xFFE2E8F0)),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                minimumSize: const Size(0, 36),
+              ),
+              child: Text(
+                "No",
+                style: TextStyle(color: isNo ? Colors.blueGrey : Colors.blueGrey, fontWeight: FontWeight.bold),
+              ),
+            ),
+            const SizedBox(width: 8),
+            OutlinedButton(
+              onPressed: () {
+                setState(() {
+                  _reviewed['probe_to_bone_test'] = isYes ? 'not_performed' : 'positive';
+                });
+              },
+              style: OutlinedButton.styleFrom(
+                backgroundColor: isYes ? Colors.red.withOpacity(0.12) : Colors.white,
+                side: BorderSide(color: isYes ? Colors.red : const Color(0xFFE2E8F0)),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                minimumSize: const Size(0, 36),
+              ),
+              child: Text(
+                "Yes",
+                style: TextStyle(color: isYes ? Colors.red : Colors.blueGrey, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDeepAbscessButtons() {
+    final value = _reviewed['has_deep_abscess_or_fasciitis']?.toString();
+    final isYes = value == 'true' || value == 'yes';
+    final isNo = value == 'false' || value == 'no';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Expanded(
+              child: Text(
+                "Deep Abscess/Fasciitis",
+                style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF0D9488)),
+              ),
+            ),
+            OutlinedButton(
+              onPressed: () {
+                setState(() {
+                  _reviewed['has_deep_abscess_or_fasciitis'] = isNo ? null : 'false';
+                });
+              },
+              style: OutlinedButton.styleFrom(
+                backgroundColor: isNo ? Colors.blueGrey.withOpacity(0.12) : Colors.white,
+                side: BorderSide(color: isNo ? Colors.blueGrey : const Color(0xFFE2E8F0)),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                minimumSize: const Size(0, 36),
+              ),
+              child: Text(
+                "No",
+                style: TextStyle(color: isNo ? Colors.blueGrey : Colors.blueGrey, fontWeight: FontWeight.bold),
+              ),
+            ),
+            const SizedBox(width: 8),
+            OutlinedButton(
+              onPressed: () {
+                setState(() {
+                  _reviewed['has_deep_abscess_or_fasciitis'] = isYes ? null : 'true';
+                });
+              },
+              style: OutlinedButton.styleFrom(
+                backgroundColor: isYes ? Colors.red.withOpacity(0.12) : Colors.white,
+                side: BorderSide(color: isYes ? Colors.red : const Color(0xFFE2E8F0)),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                minimumSize: const Size(0, 36),
+              ),
+              child: Text(
+                "Yes",
+                style: TextStyle(color: isYes ? Colors.red : Colors.blueGrey, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _buildIschemiaGuide() {
+    const checklist = [
+      "Color (pale/blue)",
+      "Cold foot",
+      "Black tissue (tissue loss)",
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text("Tap pulse points you cannot feel.", style: TextStyle(fontSize: 12, color: Colors.blueGrey)),
+        const SizedBox(height: 6),
+        AspectRatio(
+          aspectRatio: 4 / 3,
+          child: Image.asset("pic/palpation.png", fit: BoxFit.contain),
+        ),
+        const SizedBox(height: 6),
+        const Text("Pulse points you cannot feel:", style: TextStyle(color: Colors.blueGrey)),
+        const SizedBox(height: 8),
+        Column(
+          children: List.generate(2, (i) {
+            final selected = _ischemiaPoints.contains(i);
+            return Padding(
+              padding: EdgeInsets.only(bottom: i == 1 ? 0 : 10),
+              child: InkWell(
+                onTap: () {
+                  setState(() {
+                    if (selected) {
+                      _ischemiaPoints.remove(i);
+                    } else {
+                      _ischemiaPoints.add(i);
+                    }
+                    _reviewed['ischemia_points'] = _ischemiaPoints.toList()..sort();
+                    if (_ischemiaPoints.length == 2 || _ischemiaChecklist.isNotEmpty || _ischemiaPulse == "no_weak") {
+                      _sinbadIschemia = "Yes";
+                      _reviewed['sinbad_ischemia'] = "Yes";
+                    }
+                  });
+                },
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: selected ? Colors.red.withOpacity(0.12) : Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: selected ? Colors.red : const Color(0xFFE2E8F0)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 28,
+                        height: 28,
+                        decoration: BoxDecoration(
+                          color: selected ? Colors.red : const Color(0xFFE2E8F0),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(Icons.place, size: 16, color: selected ? Colors.white : Colors.blueGrey),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          i == 0 ? "Posterior Tibial Artery" : "Dorsalis Pedis Artery",
+                          style: TextStyle(color: selected ? Colors.red : Colors.blueGrey, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                      if (selected) const Icon(Icons.check_circle, size: 18, color: Colors.red),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          }),
+        ),
+        const SizedBox(height: 12),
+        const Text("Checklist:", style: TextStyle(color: Colors.blueGrey)),
+        CheckboxListTile(
+          dense: true,
+          contentPadding: EdgeInsets.zero,
+          title: const Text("No/Weak Pulse"),
+          value: _ischemiaPulse == "yes",
+          onChanged: (v) {
+            setState(() {
+              _ischemiaPulse = v == true ? "yes" : null;
+              _reviewed['ischemia_pulse'] = _ischemiaPulse;
+              if (_ischemiaPulse == "no_weak" || _ischemiaChecklist.isNotEmpty || _ischemiaPoints.length == 2) {
+                _sinbadIschemia = "Yes";
+                _reviewed['sinbad_ischemia'] = "Yes";
+              }
+            });
+          },
+        ),
+        for (final item in checklist)
+          CheckboxListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: Text(item),
+            value: _ischemiaChecklist.contains(item),
+            onChanged: (v) {
+              setState(() {
+                if (v == true) {
+                  _ischemiaChecklist.add(item);
+                } else {
+                  _ischemiaChecklist.remove(item);
+                }
+                _reviewed['ischemia_checklist'] = _ischemiaChecklist.toList()..sort();
+                if (_ischemiaChecklist.isNotEmpty || _ischemiaPoints.length == 2) {
+                  _sinbadIschemia = "Yes";
+                  _reviewed['sinbad_ischemia'] = "Yes";
+                }
+              });
+            },
+          ),
+        const SizedBox(height: 12),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text("Objective Ischemia Measures", style: TextStyle(color: Colors.blueGrey)),
+            TextButton(
+              onPressed: () => setState(() => _showObjectiveIschemia = !_showObjectiveIschemia),
+              child: Text(_showObjectiveIschemia ? "Hide" : "Show"),
+            ),
+          ],
+        ),
+        if (_showObjectiveIschemia) ...[
+          const SizedBox(height: 8),
+          _buildTextField(
+            label: "ABI Value",
+            placeholder: "e.g. 0.9",
+            keyboardType: TextInputType.number,
+            bindKey: "vascular_abi_value",
+          ),
+          _buildTextField(
+            label: "Ankle Pressure (mmHg)",
+            placeholder: "e.g. 70",
+            keyboardType: TextInputType.number,
+            bindKey: "vascular_ankle_pressure_mmHg",
+          ),
+          _buildTextField(
+            label: "Toe Pressure (mmHg)",
+            placeholder: "e.g. 45",
+            keyboardType: TextInputType.number,
+            bindKey: "vascular_toe_pressure_mmHg",
+          ),
+          _buildTextField(
+            label: "TcPO2 (mmHg)",
+            placeholder: "e.g. 30",
+            keyboardType: TextInputType.number,
+            bindKey: "vascular_tcpo2_mmHg",
+          ),
+          _buildDropdownField(
+            label: "Gangrene Extent",
+            options: const ["none", "digits_only", "forefoot_midfoot", "heel_full_thickness"],
+            value: _reviewed['gangrene_extent']?.toString(),
+            bindKey: "gangrene_extent",
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildBacterialGuide() {
+    const items = [
+      "Pus / Goo (Purulent discharge)",
+      "Warmth (hotter than other foot)",
+      "Swelling (puffy, tight, hard)",
+      "Pain (tender or hurts to touch)",
+    ];
+    const notes = [
+      "Thick white/yellow/bloody liquid from wound.",
+      "Use back of hand to compare both feet.",
+      "Local swelling or induration.",
+      "May be absent with neuropathy; don’t rely on pain alone.",
+    ];
+    final String erythemaExtent = (_reviewed['erythema_extent'] ?? 'none').toString();
+    int erythemaIndex;
+    switch (erythemaExtent) {
+      case 'gt_0_5_cm':
+        erythemaIndex = 1;
+        break;
+      case 'gt_2_cm':
+        erythemaIndex = 2;
+        break;
+      case 'none':
+      default:
+        erythemaIndex = 0;
+        break;
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text("Check all that apply.", style: TextStyle(fontSize: 12, color: Colors.blueGrey)),
+        const SizedBox(height: 8),
+        const Text("Erythema (Redness) Extent", style: TextStyle(color: Colors.blueGrey)),
+        Slider(
+          value: erythemaIndex.toDouble(),
+          min: 0,
+          max: 2,
+          divisions: 2,
+          label: erythemaIndex == 0
+              ? "None"
+              : (erythemaIndex == 1 ? "> 0.5 cm" : "> 2 cm"),
+          onChanged: (v) {
+            final idx = v.round();
+            String extent;
+            switch (idx) {
+              case 1:
+                extent = 'gt_0_5_cm';
+                break;
+              case 2:
+                extent = 'gt_2_cm';
+                break;
+              case 0:
+              default:
+                extent = 'none';
+                break;
+            }
+            setState(() {
+              _reviewed['erythema_extent'] = extent;
+            });
+          },
+        ),
+        Text(
+          erythemaIndex == 0 ? "None" : (erythemaIndex == 1 ? "> 0.5 cm" : "> 2 cm"),
+          style: const TextStyle(fontSize: 12, color: Colors.blueGrey),
+        ),
+        for (var i = 0; i < items.length; i++)
+          CheckboxListTile(
+            dense: true,
+            contentPadding: EdgeInsets.zero,
+            title: Text(items[i]),
+            subtitle: Text(notes[i]),
+            value: _infectionChecklist.contains(items[i]),
+            onChanged: (v) {
+              setState(() {
+                if (v == true) {
+                  _infectionChecklist.add(items[i]);
+                } else {
+                  _infectionChecklist.remove(items[i]);
+                }
+                _reviewed['infection_checklist'] = _infectionChecklist.toList()..sort();
+                if (_infectionChecklist.length >= 2) {
+                  _sinbadInfection = "Yes";
+                  _reviewed['sinbad_infection'] = "Yes";
+                }
+              });
+            },
+          ),
+        const SizedBox(height: 4),
+        Text("Selected: ${_infectionChecklist.length}/4", style: const TextStyle(color: Colors.blueGrey)),
+        const SizedBox(height: 12),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text("Deep Infection Indicators", style: TextStyle(color: Colors.blueGrey)),
+            TextButton(
+              onPressed: () => setState(() => _showDeepInfectionIndicators = !_showDeepInfectionIndicators),
+              child: Text(_showDeepInfectionIndicators ? "Hide" : "Show"),
+            ),
+          ],
+        ),
+        if (_showDeepInfectionIndicators) ...[
+          const SizedBox(height: 8),
+          _buildProbeToBoneButtons(),
+          _buildDeepAbscessButtons(),
+        ],
+        const SizedBox(height: 12),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text("Inflammatory Labs", style: TextStyle(color: Colors.blueGrey)),
+            TextButton(
+              onPressed: () => setState(() => _showInflammatoryLabs = !_showInflammatoryLabs),
+              child: Text(_showInflammatoryLabs ? "Hide" : "Show"),
+            ),
+          ],
+        ),
+        if (_showInflammatoryLabs) ...[
+          const SizedBox(height: 8),
+          _buildTextField(
+            label: "WBC Count (cells/µL)",
+            placeholder: "e.g. 6500",
+            keyboardType: TextInputType.number,
+            bindKey: "lab_wbc_count",
+          ),
+          _buildTextField(
+            label: "CRP (mg/L)",
+            placeholder: "e.g. 5",
+            keyboardType: TextInputType.number,
+            bindKey: "lab_crp",
+          ),
+          _buildTextField(
+            label: "ESR (mm/hr)",
+            placeholder: "e.g. 20",
+            keyboardType: TextInputType.number,
+            bindKey: "lab_esr",
+          ),
+          _buildTextField(
+            label: "Procalcitonin (ng/mL)",
+            placeholder: "e.g. 0.2",
+            keyboardType: TextInputType.number,
+            bindKey: "lab_procalcitonin",
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildNeuropathyGuide() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text("Tap the points the patient cannot feel.", style: TextStyle(fontSize: 12, color: Colors.blueGrey)),
+        const SizedBox(height: 12),
+        AspectRatio(
+          aspectRatio: 3 / 4,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final w = constraints.maxWidth;
+              final h = constraints.maxHeight;
+              const r = 12.0;
+              return Stack(
+                children: [
+                  Positioned.fill(
+                    child: Image.asset(
+                      "pic/right_foot_numbtest.png",
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                  for (var i = 0; i < _neuropathyPointAnchors.length; i++)
+                    Positioned(
+                      left: (w * _neuropathyPointAnchors[i].dx) - r,
+                      top: (h * _neuropathyPointAnchors[i].dy) - r,
+                      child: GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            if (_neuropathyPoints.contains(i)) {
+                              _neuropathyPoints.remove(i);
+                            } else {
+                              _neuropathyPoints.add(i);
+                            }
+                            if (_neuropathyPoints.isNotEmpty) {
+                              _sinbadNeuropathy = "Yes";
+                              _reviewed['sinbad_neuropathy'] = "Yes";
+                            }
+                            _reviewed['neuropathy_points'] = _neuropathyPoints.toList()..sort();
+                          });
+                        },
+                        child: Container(
+                          width: r * 2,
+                          height: r * 2,
+                          decoration: BoxDecoration(
+                            color: _neuropathyPoints.contains(i) ? Colors.red : Colors.white,
+                            border: Border.all(color: Colors.red, width: 2),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Center(
+                            child: Text(
+                              "${i + 1}",
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: _neuropathyPoints.contains(i) ? Colors.white : Colors.red,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 8),
+        Text("Selected: ${_neuropathyPoints.length}/9", style: const TextStyle(color: Colors.blueGrey)),
+      ],
     );
   }
 
@@ -634,6 +1180,11 @@ extension _AssessmentPage on _MainNavigationScreenState {
                                 if (_infectionChecklist.length >= 2) {
                                   _sinbadInfection = "Yes";
                                   _reviewed['sinbad_infection'] = "Yes";
+                                  _reviewed['has_infection'] = 'true';
+                                } else {
+                                  _sinbadInfection = "No";
+                                  _reviewed['sinbad_infection'] = "No";
+                                  _reviewed['has_infection'] = 'false';
                                 }
                               });
                               setLocal(() {});
@@ -811,6 +1362,7 @@ extension _AssessmentPage on _MainNavigationScreenState {
             case "infection":
               _sinbadInfection = label;
               _reviewed['sinbad_infection'] = label;
+              _reviewed['has_infection'] = (label == 'Yes') ? 'true' : 'false';
               break;
             case "area":
               _sinbadArea = label;

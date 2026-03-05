@@ -23,7 +23,13 @@ extension _IntakePage on _MainNavigationScreenState {
                     ),
                     child: _patientPhoto == null
                         ? Icon(LucideIcons.user, size: 48, color: TWColors.slate.shade300)
-                        : ClipOval(child: Image.file(File(_patientPhoto!.path), fit: BoxFit.cover)),
+                        : ClipOval(
+                            child: _buildXFileImage(
+                              _patientPhoto!,
+                              bytes: _patientPhotoBytes,
+                              fit: BoxFit.cover,
+                            ),
+                          ),
                   ),
                 ),
                 const SizedBox(height: 8),

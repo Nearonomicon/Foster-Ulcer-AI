@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_tailwind_colors/flutter_tailwind_colors.dart';
@@ -22,6 +24,8 @@ part '../pages/profile_page.dart';
 part '../pages/camera_page.dart';
 part '../pages/vital_check_page.dart';
 part '../pages/assessment_page.dart';
+
+const String kDemoWoundImageUrl = "https://blog.wcei.net/wp-content/uploads/2019/03/diabetic_foot_ulcer.jpg";
 
 const String kSinbadAreaSmall = "< 1 cm²";
 const String kSinbadAreaLarge = "≥ 1 cm²";
@@ -166,7 +170,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   String _analysisTitle = "GEMINI CLOUD";
   String _analysisMessage = "Analyzing...";
   XFile? _capturedImage;
+  Uint8List? _capturedImageBytes;
   XFile? _patientPhoto; 
+  Uint8List? _patientPhotoBytes;
   String? _rawResponse;
   Map<String, dynamic>? _aiExtraction;
   Map<String, dynamic>? _aiWoundJson;
@@ -177,6 +183,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int? _selectedTaskPatientIndex;
   int? _selectedTaskIndex;
   XFile? _taskEvidencePhotoTemp; // temp holder (optional)
+  Uint8List? _taskEvidencePhotoTempBytes;
 
   Map<String, dynamic>? _getSelectedTask() {
     if (_selectedTaskPatientIndex == null || _selectedTaskIndex == null) return null;
@@ -199,12 +206,15 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     try {
       final XFile? image = await picker.pickImage(source: source, imageQuality: 75);
       if (image == null) return;
+      final Uint8List bytes = await image.readAsBytes();
 
       setState(() {
         _taskEvidencePhotoTemp = image;
+        _taskEvidencePhotoTempBytes = bytes;
         final t = _getSelectedTask();
         if (t != null) {
           t['evidence_path'] = image.path; // store local file path (demo)
+          t['evidence_bytes'] = bytes;
           t['evidence_captured_at'] = _getFormattedTimestamp();
         }
       });
@@ -251,66 +261,58 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   // Mock Clinical Data with Wound Images
   final List<Map<String, dynamic>> _patients = buildMockPatients();
   final Map<String, dynamic> _mockFillin = {
-    "location_primary": "dorsal_aspect",
-    "location_detail": "foot",
-    "wound_type": "ulcer",
-    "shape": "irregular",
-    "size_width_cm": 4.0,
-    "size_length_cm": 5.0,
+    "location_primary": "sole",
+    "location_detail": "Plantar aspect of the first metatarsal head (ball of the foot)",
+    "wound_type": "Diabetic Foot Ulcer (DFU)",
+    "shape": "punched_out",
+    "size_width_cm": 2.5,
+    "size_length_cm": 3.0,
     "depth_category": "full_thickness",
-    "bed_slough_pct": 60,
-    "bed_necrotic_pct": 40,
-    "edge_description": "irregular",
+    "bed_slough_pct": 80,
+    "bed_necrotic_pct": 5,
+    "edge_description": "calloused",
     "periwound_status": "erythematous",
     "discharge_volume": "moderate",
     "discharge_type": "seropurulent (cloudy yellow)",
-    "odor_presence": "moderate",
-    "pain_score": 6,
+    "odor_presence": "faint",
+    "pain_score": 2,
     "has_infection": true,
-    "skin_condition": "fragile",
+    "skin_condition": "dry"
   };
   final Map<String, dynamic> _mockAiWound = {
     "AI_analysis": {
       "creator": "Gemini AI",
-      "wound_stage": "UT Grade 1 Stage D",
-      "description":
-          "1. Patient & Clinical Overview: The patient has a diabetic foot ulcer (DFU) on the dorsal foot, with a history of diabetes for 1-5 years. The wound is noted to be a full-thickness ulcer. The patient reports a pain score of 6.\n2. Formal Wound Description: The wound is located on the dorsal aspect of the foot, described as an irregular ulcer measuring 4.0 cm x 5.0 cm. The wound bed is composed of 60% slough and 40% necrotic tissue. The wound edges are irregular, and the periwound area is erythematous. There is a moderate amount of seropurulent (cloudy yellow) discharge. The skin condition is fragile. SINBAD criteria indicate forefoot location, ischemia, infection, area \u2265 1 cm\u00b2, and skin-only depth.\n3. Image Analysis Insights: The image shows a large ulcer on the dorsal foot with significant slough and some necrotic tissue. The periwound area exhibits erythema and edema. The image supports the presence of both ischemia and infection.\n4. Wound Staging: Based on the information provided, the wound is staged as UT Grade 1 Stage D. Grade 1 is assigned due to the superficial nature of the wound, not involving tendon/capsule/bone. Stage D is assigned due to the presence of both infection and ischemia.\n5. Red Flags: The presence of both ischemia and infection is a significant concern. The moderate odor reported in the AI prefill also raises concern for infection. The fragile skin condition increases the risk of further complications.\n\nThis is an AI-generated draft for clinical documentation support only and must be reviewed and verified by a licensed medical professional before use. Seek urgent medical care if there are signs of severe infection, rapidly worsening redness/swelling, fever, severe pain, or gangrene.",
-      "diagnosis": "Diabetic foot ulcer on the dorsal foot with clinical signs of infection and ischemia. Concern for possible deep tissue infection.",
-      "confidence": 0.8,
-      "red_flag": true,
-      "treatment_plan":
-          "Given the presence of infection and ischemia, the treatment plan should focus on infection control, optimizing perfusion, and wound care. Consider vascular assessment and optimization of glycemic control. Debridement of necrotic tissue is needed. Initiate appropriate wound care with frequent dressing changes. Monitor closely for signs of worsening infection or ischemia. Consider antimicrobial therapy per clinician/local protocol. Offloading is crucial.\n\nThis is an AI-generated draft for clinical documentation support only and must be reviewed and verified by a licensed medical professional before use. Seek urgent medical care if there are signs of severe infection, rapidly worsening redness/swelling, fever, severe pain, or gangrene."
+      "wound_stage": "UT Grade 1 Stage B",
+      "description": "1. Patient & Clinical Overview: Patient presents with a chronic ulcer on the plantar aspect of the foot. History and presentation are consistent with a neuropathic diabetic foot ulcer (DFU). 2. Formal Wound Description: Location: Plantar aspect of the first metatarsal head. Size: Approximately 2.5cm x 3.0cm. Shape: Punched-out with hyperkeratotic (calloused) borders. Wound Bed: Predominantly yellow slough (~80%) with minimal visible granulation tissue. Discharge: Moderate seropurulent (cloudy yellow) exudate. Periwound: Significant erythema and dry skin. 3. Image Analysis Insights: Visual inspection confirms a classic neuropathic DFU. The thick callous ring suggests repetitive mechanical stress. The presence of cloudy exudate and surrounding redness strongly suggests localized infection. No deep structures (tendon/bone) are clearly visible in the photo, though depth must be confirmed via probing. 4. Wound Staging: UT Grade 1 Stage B. Justification: Grade 1 due to superficial involvement without visible deep structures; Stage B due to clinical signs of infection (erythema, seropurulent discharge, slough). 5. Red Flags: None immediately visible (no gangrene or systemic signs reported), but erythema requires monitoring for cellulitis. FINAL SAFETY DISCLAIMER: This is an AI-generated draft for clinical documentation support only and must be reviewed and verified by a licensed medical professional before use. Seek urgent medical care if there are signs of severe infection, rapidly worsening redness/swelling, fever, severe pain, or gangrene.",
+      "diagnosis": "Infected neuropathic diabetic foot ulcer (plantar surface).",
+      "confidence": 0.65,
+      "red_flag": false,
+      "treatment_plan": "Focus on infection control, offloading, and debridement. 1. Infection Management: Consider topical or systemic antimicrobials per clinician/local protocol given Stage B status. 2. Debridement: Sharp debridement of the hyperkeratotic rim and non-viable slough to stimulate the wound bed. 3. Offloading: Essential to use therapeutic footwear or total contact casting to reduce pressure on the metatarsal head. 4. Moisture Balance: Use dressings capable of managing moderate seropurulent exudate (e.g., foams or alginates). FINAL SAFETY DISCLAIMER: This is an AI-generated draft for clinical documentation support only and must be reviewed and verified by a licensed medical professional before use. Seek urgent medical care if there are signs of severe infection, rapidly worsening redness/swelling, fever, severe pain, or gangrene."
     },
     "treatment_plan": {
-      "plan_text":
-          "Infected and ischemic DFU on dorsal foot. Assess vascular status. Debride necrotic tissue. Apply appropriate wound dressing. Monitor for worsening infection/ischemia. Consider antimicrobial therapy per clinician/local protocol. Strict offloading.",
-      "followup_days": 1,
+      "plan_text": "Nurse-led care for infected DFU: Cleanse wound, apply prescribed antimicrobial dressing, ensure patient is using offloading device, and monitor for spreading redness or fever. FINAL SAFETY DISCLAIMER: This is an AI-generated draft for clinical documentation support only and must be reviewed and verified by a licensed medical professional before use. Seek urgent medical care if there are signs of severe infection, rapidly worsening redness/swelling, fever, severe pain, or gangrene.",
+      "followup_days": 3,
       "status": "DRAFT",
       "plan_tasks": [
         {
-          "task_text": "Debride necrotic tissue.",
+          "task_text": "Cleanse wound and apply antimicrobial dressing per protocol.",
           "status": "DRAFT",
-          "task_due": "2026-02-11T16:00:00+07:00"
+          "task_due": "2026-02-16T16:00:00+07:00"
         },
         {
-          "task_text": "Apply appropriate wound dressing.",
+          "task_text": "Verify patient has and is using appropriate offloading footwear.",
           "status": "DRAFT",
-          "task_due": "2026-02-11T16:00:00+07:00"
+          "task_due": "2026-02-16T16:00:00+07:00"
         },
         {
-          "task_text": "Monitor for worsening infection/ischemia.",
+          "task_text": "Monitor periwound erythema for signs of spreading (cellulitis).",
           "status": "DRAFT",
-          "task_due": "2026-02-12T10:00:00+07:00"
+          "task_due": "2026-02-17T10:00:00+07:00"
         },
         {
-          "task_text": "Strict offloading of the affected foot.",
+          "task_text": "Assess for systemic symptoms (fever, chills, malaise).",
           "status": "DRAFT",
-          "task_due": "2026-02-11T16:00:00+07:00"
-        },
-        {
-          "task_text": "Consult vascular surgery.",
-          "status": "DRAFT",
-          "task_due": "2026-02-11T16:00:00+07:00"
+          "task_due": "2026-02-17T10:00:00+07:00"
         }
       ]
     }
@@ -359,15 +361,39 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     if (_emergencyBypassProfile && !_patientProfileSaved) {
       setState(() => _patientProfileSaved = true);
     }
-    final picker = ImagePicker();
     try {
-      final XFile? image = await picker.pickImage(source: source, imageQuality: 85);
-      if (image != null) {
-        setState(() => _capturedImage = image);
+      if (kIsWeb) {
+        final XFile image = XFile(kDemoWoundImageUrl);
+        setState(() {
+          _capturedImage = image;
+          _capturedImageBytes = null;
+        });
         await _uploadAndAnalyzeFillin(image);
+        return;
       }
+      // Demo mode: use a fixed online image instead of taking a real photo.
+      final response = await http.get(Uri.parse(kDemoWoundImageUrl));
+      if (response.statusCode != 200) {
+        throw Exception("Failed to load demo image (HTTP ${response.statusCode}).");
+      }
+      final Uint8List bytes = response.bodyBytes;
+      final XFile image = XFile.fromData(
+        bytes,
+        name: "demo_wound.jpg",
+        mimeType: "image/jpeg",
+      );
+      setState(() {
+        _capturedImage = image;
+        _capturedImageBytes = bytes;
+      });
+      await _uploadAndAnalyzeFillin(image);
     } catch (e) {
-      debugPrint("Error picking image: $e");
+      debugPrint("Error loading demo image: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Failed to load demo image: $e"), backgroundColor: Colors.redAccent),
+        );
+      }
     }
   }
 
@@ -377,7 +403,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     try {
       final XFile? image = await picker.pickImage(source: source, imageQuality: 60);
       if (image != null) {
-        setState(() => _patientPhoto = image);
+        final Uint8List bytes = await image.readAsBytes();
+        setState(() {
+          _patientPhoto = image;
+          _patientPhotoBytes = bytes;
+        });
       }
     } catch (e) {
       debugPrint("Error picking patient photo: $e");
@@ -680,6 +710,47 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   
 
   // Helpers
+  Widget _buildXFileImage(
+    XFile file, {
+    Uint8List? bytes,
+    double? height,
+    double? width,
+    BoxFit fit = BoxFit.cover,
+  }) {
+    if (kIsWeb) {
+      if (bytes != null) {
+        return Image.memory(bytes, height: height, width: width, fit: fit);
+      }
+      final path = file.path;
+      if (path.isNotEmpty) {
+        return Image.network(path, height: height, width: width, fit: fit);
+      }
+      return const SizedBox.shrink();
+    }
+    return Image.file(File(file.path), height: height, width: width, fit: fit);
+  }
+
+  Widget _buildEvidenceImage(
+    String path, {
+    Uint8List? bytes,
+    double? height,
+    double? width,
+    BoxFit fit = BoxFit.cover,
+  }) {
+    if (kIsWeb) {
+      if (bytes != null) {
+        return Image.memory(bytes, height: height, width: width, fit: fit);
+      }
+      return Container(
+        height: height,
+        width: width,
+        color: const Color(0xFFE2E8F0),
+        child: const Center(child: Icon(Icons.broken_image)),
+      );
+    }
+    return Image.file(File(path), height: height, width: width, fit: fit);
+  }
+
   Widget _buildFormLabel(String label) => Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF0D9488))));
   InputDecoration _inputDeco(IconData icon, String hint) => InputDecoration(prefixIcon: Icon(icon, size: 20, color: TWColors.slate.shade400), hintText: hint, filled: true, fillColor: const Color(0xFFF8FAFC), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none));
   Widget _buildSuccessBanner() => Container(margin: const EdgeInsets.only(top: 16), padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: const Color(0xFFF0FDFA), borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFF5EEAD4))), child: const Row(children: [Icon(LucideIcons.circleCheck, size: 16, color: Color(0xFF0D9488)), SizedBox(width: 8), Text("Profile saved.", style: TextStyle(fontSize: 12, color: Color(0xFF134E4A), fontWeight: FontWeight.bold))]));

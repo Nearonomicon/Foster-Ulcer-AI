@@ -34,6 +34,7 @@ extension _TaskDetailPage on _MainNavigationScreenState {
     final status = (t['status'] ?? 'Pending').toString();
     final due = fmtDueFull(t['task_due']?.toString());
     final evidencePath = (t['evidence_path'] ?? '').toString();
+    final Uint8List? evidenceBytes = t['evidence_bytes'] is Uint8List ? t['evidence_bytes'] as Uint8List : null;
 
     final bool canComplete = evidencePath.isNotEmpty;
 
@@ -125,16 +126,12 @@ extension _TaskDetailPage on _MainNavigationScreenState {
                     if (evidencePath.isNotEmpty)
                       ClipRRect(
                         borderRadius: BorderRadius.circular(14),
-                        child: Image.file(
-                          File(evidencePath),
+                        child: _buildEvidenceImage(
+                          evidencePath,
+                          bytes: evidenceBytes,
                           height: 220,
                           width: double.infinity,
                           fit: BoxFit.cover,
-                          errorBuilder: (c, e, s) => Container(
-                            height: 220,
-                            color: const Color(0xFFE2E8F0),
-                            child: const Center(child: Icon(Icons.broken_image)),
-                          ),
                         ),
                       )
                     else

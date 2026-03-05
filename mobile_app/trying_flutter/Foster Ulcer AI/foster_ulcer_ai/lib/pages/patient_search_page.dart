@@ -118,6 +118,7 @@ extension _PatientSearchPage on _MainNavigationScreenState {
                   _patientProfileSaved = false;
                   _selectedPatient = null;
                   _patientNameCtrl.clear();
+                  _nrcIdCtrl.clear();
                   _dobCtrl.clear();
                   _patientPhoneCtrl.clear();
                   _patientHeightCtrl.clear();
