@@ -33,14 +33,20 @@ async def create_patient_profile(
     image: UploadFile = File(None)
 ):
     try:
+        print("[create-patient-profile] received request")
         raw_json = json.loads(patient_data)
+        print("[create-patient-profile] parsed patient_data json")
         patient_obj = PatientSchema(**raw_json)
+        print("[create-patient-profile] validated PatientSchema")
 
         transaction = db.transaction()
+        print("[create-patient-profile] created Firestore transaction")
         new_id = get_next_patient_id(transaction)
+        print(f"[create-patient-profile] new patient id: {new_id}")
 
         photo_url = None
         if image is not None:
+            print("[create-patient-profile] image provided, uploading")
             image_content = await image.read()
             content_type = image.content_type
             photo_url = upload_file_to_firebase(
@@ -50,6 +56,7 @@ async def create_patient_profile(
                 filename="profile_photo.jpg",
                 content_type=content_type,
             )
+            print("[create-patient-profile] image uploaded")
 
         doc_data = {
             "patient_name": patient_obj.patient_name,
@@ -67,6 +74,7 @@ async def create_patient_profile(
         }
 
         db.collection("patients").document(new_id).set(doc_data)
+        print("[create-patient-profile] patient document written")
 
         print(f"Successfully registered: {new_id} for {patient_obj.patient_name}")
 
@@ -78,5 +86,7 @@ async def create_patient_profile(
         }
 
     except Exception as e:
-        print(f"Validation Error: {str(e)}")
+        import traceback
+        print(f"[create-patient-profile ERROR] {e}")
+        print(traceback.format_exc())
         raise HTTPException(status_code=400, detail=f"Data format error: {str(e)}")
