@@ -16,14 +16,14 @@ def get_next_patient_id(transaction):
     prefix_label = "PT"
     counter_ref = db.collection("metadata").document(f"counters_{current_prefix}")
 
-    snapshot = counter_ref.get(transaction=transaction)
+    snapshot = transaction.get(counter_ref)
     if snapshot.exists:
-        last_num = snapshot.get("last_running_num")
+        last_num = snapshot.get("last_running_num") or 0
         new_num = last_num + 1
     else:
         new_num = 1
 
-    transaction.set(counter_ref, {"last_running_num": new_num})
+    transaction.set(counter_ref, {"last_running_num": new_num}, merge=True)
     return f"{prefix_label}-{current_prefix}-{new_num:05d}"
 
 
