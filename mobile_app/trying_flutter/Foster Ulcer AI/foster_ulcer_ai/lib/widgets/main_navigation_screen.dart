@@ -258,7 +258,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   }
 
 
-  static const String _baseUrl = "http://10.0.2.2:8000";
+  static const String _baseUrl = "https://foster-ulcer-backend-583037019860.asia-southeast3.run.app";
   final Uri _fillinUri = Uri.parse("$_baseUrl/analyze-fillin");
   final Uri _analyzeWoundUri = Uri.parse("$_baseUrl/analyze-wound");
   final Uri _createPatientUri = Uri.parse("$_baseUrl/create-patient-profile");
@@ -681,6 +681,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
       final streamed = await req.send().timeout(const Duration(seconds: 30));
       final resp = await http.Response.fromStream(streamed);
+      debugPrint("Create patient response: ${resp.statusCode} ${resp.body}");
       final decoded = jsonDecode(resp.body);
       if (decoded['status'] == 'success') {
         _patientProfile..clear()..addAll(payload);
@@ -696,9 +697,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         }
         _navigateTo('vital_check_page');
       } else {
-        throw Exception(decoded['detail'] ?? "Registration failed.");
+        throw Exception(decoded['detail'] ?? resp.body ?? "Registration failed.");
       }
     } catch (e) {
+      debugPrint("Create patient error: $e");
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Save failed: $e"), backgroundColor: Colors.redAccent));
     } finally {
       if (mounted) {
