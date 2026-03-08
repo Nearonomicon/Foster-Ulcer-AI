@@ -19,6 +19,9 @@ from schemas import (
     LabResults,
     Vascular,
     WoundCaseRecord,
+    WoundCaseRecordUpdate,
+    Timestamps,
+    CaseImage,
 )
 from services.firebase import db
 from utils import _model_to_dict
@@ -58,6 +61,13 @@ async def create_case(payload: CreateCaseRequest):
             status = Status(status_str)
         except ValueError:
             status = Status.CREATION
+        
+        urgency = None
+        if payload.urgency:
+            try:
+                urgency = Urgency(payload.urgency.strip().upper())
+            except ValueError:
+                urgency = None
 
         vital_signs = VitalSigns(
             temperature=(payload.vitals.temperature if payload.vitals else None),
@@ -79,16 +89,16 @@ async def create_case(payload: CreateCaseRequest):
             except ValueError:
                 created_at = datetime.utcnow()
 
-        timestamps = {
-            "created_at": created_at,
-            "updated_at": created_at,
-            "analyze_at": None,
-            "doctor_review_at": None,
-            "plan_issued_at": None,
-            "treatment_active_at": None,
-            "appointment_at": None,
-            "completed_at": None,
-        }
+        timestamps = Timestamps(
+            created_at=created_at,
+            updated_at=created_at,
+            analyze_at=None,
+            doctor_review_at=None,
+            plan_issued_at=None,
+            treatment_active_at=None,
+            appointment_at=None,
+            completed_at=None,
+        )
 
         wound_detail = WoundDetail(
             location_primary=None,
@@ -115,7 +125,13 @@ async def create_case(payload: CreateCaseRequest):
             record_id=record_id,
             case_id=case_id,
             patient_id=patient_id,
+            record_created_by=payload.created_by_nurse,
+            record_created_at=created_at,
+            record_updated_at=created_at,
+            created_by_nurse=payload.created_by_nurse,
+            assigned_doctor=payload.assigned_doctor,
             status=status,
+            urgency=urgency,
             vital_signs=vital_signs,
             wound_detail=wound_detail,
             ischemia=Ischemia(),
@@ -125,18 +141,25 @@ async def create_case(payload: CreateCaseRequest):
             lab_results=LabResults(),
             vascular=Vascular(),
             gangrene_extent=None,
+            timestamps=timestamps,
+            image=CaseImage(image_folder_url=None),
         )
 
-        case_doc_ref = db.collection("wound_cases").document(case_id)
+        case_doc_ref = db.collection("cases").document(case_id)
         record_doc_ref = case_doc_ref.collection("records").document(record_id)
 
         case_doc_data = {
             "case_id": case_id,
             "patient_id": patient_id,
+            "created_by_nurse": payload.created_by_nurse,
+            "assigned_doctor": payload.assigned_doctor,
             "status": status,
-            "record_seq": 1,
-            "created_at": created_at,
-            "updated_at": created_at,
+            "urgency": urgency,
+            "case_created_at": created_at,
+            "case_updated_at": created_at,
+            "current_record_id": record_id,
+            "current_analysis_id": None,
+            "current_plan_id": None,
         }
 
         record_doc_data = _model_to_dict(case_record)
@@ -156,7 +179,7 @@ async def create_case(payload: CreateCaseRequest):
 
 
 @router.post("/send-to-doctor")
-async def send_to_doctor(payload: WoundCaseRecord):
+async def send_to_doctor(payload: WoundCaseRecordUpdate):
     try:
         payload_dict = _model_to_dict(payload)
         print("send-to-doctor received payload:", json.dumps(payload_dict, ensure_ascii=False))
@@ -164,7 +187,7 @@ async def send_to_doctor(payload: WoundCaseRecord):
         case_id = payload.case_id
         record_id = payload.record_id
 
-        case_ref = db.collection("wound_cases").document(case_id)
+        case_ref = db.collection("cases").document(case_id)
         record_ref = case_ref.collection("records").document(record_id)
 
         analysis_id = f"AN-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
@@ -174,11 +197,22 @@ async def send_to_doctor(payload: WoundCaseRecord):
         plan_ref = record_ref.collection("plan_versions").document(plan_id)
 
         record_data = payload_dict
-        record_data["updated_at"] = firestore.SERVER_TIMESTAMP
-        record_data["latest_analysis_id"] = analysis_id
-        record_data["latest_plan_id"] = plan_id
-        record_data["latest_analysis_ref"] = analysis_ref.path
-        record_data["latest_plan_ref"] = plan_ref.path
+        if record_data.get("timestamps") is None:
+            record_data["timestamps"] = {
+                "created_at": payload.record_created_at or firestore.SERVER_TIMESTAMP,
+                "updated_at": firestore.SERVER_TIMESTAMP,
+                "analyze_at": firestore.SERVER_TIMESTAMP,
+                "doctor_review_at": None,
+                "plan_issued_at": None,
+                "treatment_active_at": None,
+                "appointment_at": None,
+                "completed_at": None,
+            }
+        if record_data.get("image") is None:
+            record_data["image"] = {"image_folder_url": None}
+        record_data["record_updated_at"] = firestore.SERVER_TIMESTAMP
+        record_data["timestamps"]["updated_at"] = firestore.SERVER_TIMESTAMP
+        record_data["timestamps"]["analyze_at"] = firestore.SERVER_TIMESTAMP
 
         analysis_payload = payload_dict.get("analysis")
         analysis_data = {
@@ -208,13 +242,10 @@ async def send_to_doctor(payload: WoundCaseRecord):
         batch.set(case_ref, {
             "status": Status.DOCTOR_REVIEW,
             "urgency": payload.urgency,
-            "updated_at": firestore.SERVER_TIMESTAMP,
-            "doctor_review_at": firestore.SERVER_TIMESTAMP,
-            "latest_record_id": record_id,
-            "latest_analysis_id": analysis_id,
-            "latest_plan_id": plan_id,
-            "latest_analysis_ref": analysis_ref.path,
-            "latest_plan_ref": plan_ref.path,
+            "case_updated_at": firestore.SERVER_TIMESTAMP,
+            "current_record_id": record_id,
+            "current_analysis_id": analysis_id,
+            "current_plan_id": plan_id,
         }, merge=True)
         batch.set(record_ref, record_data, merge=True)
         batch.set(analysis_ref, analysis_data, merge=True)

@@ -52,9 +52,8 @@ async def create_patient_profile(
             )
 
         doc_data = {
-            "id": new_id,
-            "full_name": patient_obj.patient_name,
-            "phone": patient_obj.phone_no,
+            "patient_name": patient_obj.patient_name,
+            "phone_no": patient_obj.phone_no,
             "dob": patient_obj.dob,
             "gender": patient_obj.gender,
             "height_cm": float(patient_obj.height_cm),

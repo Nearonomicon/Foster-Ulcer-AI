@@ -19,9 +19,42 @@ extension _DoctorSummaryPage on _MainNavigationScreenState {
         ? "No diagnosis provided."
         : diagnosisRaw.toString();
     final classifications = (ai['classifications'] is Map) ? Map<String, dynamic>.from(ai['classifications']) : <String, dynamic>{};
-    final idsaStage = classifications['IDSA_infection_stage'];
+    final idsaStage = classifications['IDSA_infection_stage'] ?? ai['IDSA_infection_stage'] ?? ai['IDSA_infaction_stage'];
+
     final wIfi = (classifications['WIfI'] is Map) ? Map<String, dynamic>.from(classifications['WIfI']) : <String, dynamic>{};
+    final wIfiWound = wIfi['wound_grade'] ?? ai['WIfI_wound_stage'] ?? ai['WIfI_wound_grade'] ?? ai['wIfI_wound_stage'];
+    final wIfiIschemia = wIfi['ischemia_grade'] ?? ai['WIfI_ischemia_stage'] ?? ai['WIfI_ischemia_grade'] ?? ai['wIfI_ischemia_stage'];
+    final wIfiFootInf = wIfi['foot_infection_grade'] ?? ai['WIfI_foot_infection_stage'] ?? ai['WIfI_foot_infection_grade'] ?? ai['wIfI_foot_infection_stage'];
+    final wIfiStage = wIfi['clinical_stage'] ?? ai['WIfI_clinical_stage'] ?? ai['WIfI_stage'] ?? ai['wIfI_stage'];
+
     final sinbad = (classifications['SINBAD'] is Map) ? Map<String, dynamic>.from(classifications['SINBAD']) : <String, dynamic>{};
+    final sinbadTotal = sinbad['total'] ?? _calcSinbadScore();
+    final sinbadSite = sinbad['site'] ?? _reviewed['sinbad_site'];
+    final sinbadIschemia = sinbad['ischemia'] ?? _reviewed['sinbad_ischemia'];
+    final sinbadNeuropathy = sinbad['neuropathy'] ?? _reviewed['sinbad_neuropathy'];
+    final sinbadInfection = sinbad['bacterial_infection'] ?? _reviewed['sinbad_infection'];
+    final sinbadArea = sinbad['area'] ?? _reviewed['sinbad_area'];
+    final sinbadDepth = sinbad['depth'] ?? _reviewed['sinbad_depth'];
+
+    int sinbadScoreValue(String group, dynamic value) {
+      final v = value?.toString();
+      switch (group) {
+        case 'site':
+          return v == "Midfoot/Hindfoot" ? 1 : 0;
+        case 'ischemia':
+          return v == "Yes" ? 1 : 0;
+        case 'neuropathy':
+          return v == "Yes" ? 1 : 0;
+        case 'infection':
+          return v == "Yes" ? 1 : 0;
+        case 'area':
+          return v == kSinbadAreaLarge ? 1 : 0;
+        case 'depth':
+          return v == "Deep/Bone" ? 1 : 0;
+        default:
+          return 0;
+      }
+    }
     final treatmentSummary = ai['treatment_plan_summary']?.toString();
 
     String fmtDue(String? iso) {
@@ -150,7 +183,7 @@ extension _DoctorSummaryPage on _MainNavigationScreenState {
                             border: Border.all(color: const Color(0xFF5EEAD4)),
                           ),
                           child: Text(
-                            "WIfI W:${(wIfi['wound_grade'] ?? '-').toString()} I:${(wIfi['ischemia_grade'] ?? '-').toString()} FI:${(wIfi['foot_infection_grade'] ?? '-').toString()}",
+                            "WIfI W:${(wIfiWound ?? '-').toString()} I:${(wIfiIschemia ?? '-').toString()} FI:${(wIfiFootInf ?? '-').toString()}",
                             style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF134E4A)),
                           ),
                         ),
@@ -162,7 +195,7 @@ extension _DoctorSummaryPage on _MainNavigationScreenState {
                             border: Border.all(color: const Color(0xFF5EEAD4)),
                           ),
                           child: Text(
-                            "WIfI Stage: ${(wIfi['clinical_stage'] ?? '-').toString()}",
+                            "WIfI Stage: ${(wIfiStage ?? '-').toString()}",
                             style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF134E4A)),
                           ),
                         ),
@@ -174,7 +207,7 @@ extension _DoctorSummaryPage on _MainNavigationScreenState {
                             border: Border.all(color: const Color(0xFF5EEAD4)),
                           ),
                           child: Text(
-                            "SINBAD: ${(sinbad['total'] ?? '-').toString()}",
+                            "SINBAD: ${(sinbadTotal ?? '-').toString()}",
                             style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF134E4A)),
                           ),
                         ),
@@ -431,19 +464,19 @@ extension _DoctorSummaryPage on _MainNavigationScreenState {
                             ]),
                             card("AI Classifications", [
                               _kv("IDSA Stage", (idsaStage ?? '-').toString()),
-                              _kv("WIfI Wound", (wIfi['wound_grade'] ?? '-').toString()),
-                              _kv("WIfI Ischemia", (wIfi['ischemia_grade'] ?? '-').toString()),
-                              _kv("WIfI Foot Infection", (wIfi['foot_infection_grade'] ?? '-').toString()),
-                              _kv("WIfI Clinical Stage", (wIfi['clinical_stage'] ?? '-').toString()),
-                              _kv("SINBAD Total", (sinbad['total'] ?? '-').toString()),
+                              _kv("WIfI Wound", (wIfiWound ?? '-').toString()),
+                              _kv("WIfI Ischemia", (wIfiIschemia ?? '-').toString()),
+                              _kv("WIfI Foot Infection", (wIfiFootInf ?? '-').toString()),
+                              _kv("WIfI Clinical Stage", (wIfiStage ?? '-').toString()),
+                              _kv("SINBAD Total", (sinbadTotal ?? '-').toString()),
                             ]),
                             card("SINBAD Breakdown", [
-                              _kv("Site", (sinbad['site'] ?? '-').toString()),
-                              _kv("Ischemia", (sinbad['ischemia'] ?? '-').toString()),
-                              _kv("Neuropathy", (sinbad['neuropathy'] ?? '-').toString()),
-                              _kv("Infection", (sinbad['bacterial_infection'] ?? '-').toString()),
-                              _kv("Area", (sinbad['area'] ?? '-').toString()),
-                              _kv("Depth", (sinbad['depth'] ?? '-').toString()),
+                              _kv("Site", (sinbadSite ?? '-').toString()),
+                              _kv("Ischemia", (sinbadIschemia ?? '-').toString()),
+                              _kv("Neuropathy", (sinbadNeuropathy ?? '-').toString()),
+                              _kv("Infection", (sinbadInfection ?? '-').toString()),
+                              _kv("Area", (sinbadArea ?? '-').toString()),
+                              _kv("Depth", (sinbadDepth ?? '-').toString()),
                             ]),
                           ],
                         );

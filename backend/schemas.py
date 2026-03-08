@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import List, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 # -----------------------------
@@ -66,8 +66,8 @@ class SINBAD(BaseModel):
 class DiabetesInfo(BaseModel):
     has_diabetes: str
     years: Optional[str] = None
-    risk_history: List[str] = []
-    complications: List[str] = []
+    risk_history: List[str] = Field(default_factory=list)
+    complications: List[str] = Field(default_factory=list)
 
     @property
     def is_diabetic_bool(self) -> bool:
@@ -88,90 +88,90 @@ class PatientSchema(BaseModel):
 
 
 class Size(BaseModel):
-    width_cm: Optional[float]
-    length_cm: Optional[float]
+    width_cm: Optional[float] = None
+    length_cm: Optional[float] = None
 
 
 class Bed(BaseModel):
-    slough_pct: Optional[int]
-    necrotic_pct: Optional[int]
+    slough_pct: Optional[int] = None
+    necrotic_pct: Optional[int] = None
 
 
 class Discharge(BaseModel):
-    volume: Optional[str]
-    type: Optional[str]
+    volume: Optional[str] = None
+    type: Optional[str] = None
 
 
 class VitalSigns(BaseModel):
-    temperature: Optional[str]
-    blood_pressure: Optional[str]
-    blood_glucose: Optional[str]
-    heart_rate: Optional[str]
-    respiratory_rate: Optional[str]
+    temperature: Optional[str] = None
+    blood_pressure: Optional[str] = None
+    blood_glucose: Optional[str] = None
+    heart_rate: Optional[str] = None
+    respiratory_rate: Optional[str] = None
 
 
 class WoundDetail(BaseModel):
-    location_primary: Optional[str]
-    location_detail: Optional[str]
-    wound_type: Optional[str]
+    location_primary: Optional[str] = None
+    location_detail: Optional[str] = None
+    wound_type: Optional[str] = None
 
-    shape: Optional[Shape]
+    shape: Optional[Shape] = None
 
-    size: Size
-    depth_category: Optional[DepthCategory]
+    size: Size = Field(default_factory=Size)
+    depth_category: Optional[DepthCategory] = None
 
-    bed: Bed
+    bed: Bed = Field(default_factory=Bed)
 
-    edge_description: Optional[str]
-    periwound_status: Optional[str]
+    edge_description: Optional[str] = None
+    periwound_status: Optional[str] = None
 
-    discharge: Discharge
-    odor_presence: Optional[str]
+    discharge: Discharge = Field(default_factory=Discharge)
+    odor_presence: Optional[str] = None
 
-    pain_score: Optional[int]
-    has_infection: Optional[bool]
+    pain_score: Optional[int] = None
+    has_infection: Optional[bool] = None
 
-    skin_condition: Optional[str]
+    skin_condition: Optional[str] = None
 
 
 class Ischemia(BaseModel):
-    points: List[int] = []
-    pulse: Optional[str]
-    checklist: List[str] = []
+    points: List[int] = Field(default_factory=list)
+    pulse: Optional[str] = None
+    checklist: List[str] = Field(default_factory=list)
 
 
 class Infection(BaseModel):
-    checklist: List[str] = []
-    erythema_extent: Optional[str]
-    probe_to_bone_test: Optional[str]
-    has_deep_abscess_or_fasciitis: Optional[str]
+    checklist: List[str] = Field(default_factory=list)
+    erythema_extent: Optional[str] = None
+    probe_to_bone_test: Optional[str] = None
+    has_deep_abscess_or_fasciitis: Optional[str] = None
 
 
 class Neuropathy(BaseModel):
-    points: List[int] = []
+    points: List[int] = Field(default_factory=list)
 
 
 class Sinbad(BaseModel):
-    site: Optional[str]
-    ischemia: Optional[str]
-    neuropathy: Optional[str]
-    infection: Optional[str]
-    area: Optional[str]
-    depth: Optional[str]
+    site: Optional[str] = None
+    ischemia: Optional[str] = None
+    neuropathy: Optional[str] = None
+    infection: Optional[str] = None
+    area: Optional[str] = None
+    depth: Optional[str] = None
 
 
 class LabResults(BaseModel):
-    wbc_count: Optional[str]
-    crp: Optional[str]
-    esr: Optional[str]
-    procalcitonin: Optional[str]
+    wbc_count: Optional[str] = None
+    crp: Optional[str] = None
+    esr: Optional[str] = None
+    procalcitonin: Optional[str] = None
 
 
 class Vascular(BaseModel):
-    abi_value: Optional[str]
-    ankle_pressure_mmHg: Optional[str]
-    toe_pressure_mmHg: Optional[str]
-    tcpo2_mmHg: Optional[str]
+    abi_value: Optional[str] = None
+    ankle_pressure_mmHg: Optional[str] = None
+    toe_pressure_mmHg: Optional[str] = None
+    tcpo2_mmHg: Optional[str] = None
 
 
 class TaskItem(BaseModel):
@@ -184,23 +184,23 @@ class TreatmentPlan(BaseModel):
     plan_text: Optional[str] = None
     followup_days: Optional[int] = None
     status: Optional[str] = "DRAFT"
-    plan_tasks: List[TaskItem] = []
+    plan_tasks: List[TaskItem] = Field(default_factory=list)
 
 
 class Timestamps(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    analyze_at: Optional[datetime]
-    doctor_review_at: Optional[datetime]
-    plan_issued_at: Optional[datetime]
-    treatment_active_at: Optional[datetime]
-    appointment_at: Optional[datetime]
-    completed_at: Optional[datetime]
+    analyze_at: Optional[datetime] = None
+    doctor_review_at: Optional[datetime] = None
+    plan_issued_at: Optional[datetime] = None
+    treatment_active_at: Optional[datetime] = None
+    appointment_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
 
 
 class CaseImage(BaseModel):
-    image_folder_url: Optional[str]
+    image_folder_url: Optional[str] = None
 
 
 class CreateCaseVitals(BaseModel):
@@ -219,6 +219,9 @@ class CreateCaseMeta(BaseModel):
 class CreateCaseRequest(BaseModel):
     patient_id: str
     status: Optional[str] = "Creation"
+    urgency: Optional[str] = None
+    created_by_nurse: Optional[str] = None
+    assigned_doctor: Optional[str] = None
     vitals: Optional[CreateCaseVitals] = None
     meta: Optional[CreateCaseMeta] = None
 
@@ -227,8 +230,16 @@ class WoundCaseRecord(BaseModel):
     record_id: str
     case_id: str
     patient_id: str
+    record_created_by: Optional[str] = None
+    record_created_at: Optional[datetime] = None
+    record_updated_at: Optional[datetime] = None
+    created_by_nurse: Optional[str] = None
+    assigned_doctor: Optional[str] = None
     status: Optional[Status] = Status.DOCTOR_REVIEW
-    urgency: Optional[Urgency] = Urgency.MEDIUM
+    urgency: Optional[Urgency] = None
+
+    timestamps: Optional[Timestamps] = None
+    image: Optional[CaseImage] = None
 
     vital_signs: Optional[VitalSigns] = None
     wound_detail: Optional[WoundDetail] = None
@@ -242,7 +253,32 @@ class WoundCaseRecord(BaseModel):
 
     analysis: Optional[dict] = None
     treatment_plan: Optional[TreatmentPlan] = None
-    task_list: List[TaskItem] = []
+    task_list: List[TaskItem] = Field(default_factory=list)
+
+
+class WoundCaseRecordUpdate(WoundCaseRecord):
+    @model_validator(mode="after")
+    def require_non_null_sections(self):
+        missing = []
+        if self.vital_signs is None:
+            missing.append("vital_signs")
+        if self.wound_detail is None:
+            missing.append("wound_detail")
+        if self.ischemia is None:
+            missing.append("ischemia")
+        if self.infection is None:
+            missing.append("infection")
+        if self.neuropathy is None:
+            missing.append("neuropathy")
+        if self.sinbad is None:
+            missing.append("sinbad")
+        if self.lab_results is None:
+            missing.append("lab_results")
+        if self.vascular is None:
+            missing.append("vascular")
+        if missing:
+            raise ValueError(f"Missing required fields: {', '.join(missing)}")
+        return self
 
 
 class AIAnalysisRecord(BaseModel):

@@ -617,6 +617,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         _responseMode = 'analysis';
         _rawResponse = resp.body;
       });
+      _navigateTo('dashboard');
     } catch (e) {
       debugPrint("Send-to-doctor error: $e");
       if (mounted) {
