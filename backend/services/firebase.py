@@ -1,11 +1,19 @@
 import firebase_admin
+import os
 from firebase_admin import credentials, firestore, storage
 
 
-cred = credentials.Certificate("C:/Users/Pawarit/Desktop/foster-ulcer-ai-firebase-adminsdk-fbsvc-6eda7ee8ab.json")
-firebase_admin.initialize_app(cred, {
-    "storageBucket": "foster-ulcer-ai.firebasestorage.app"
-})
+
+if os.getenv("K_SERVICE"): # This variable only exists on Cloud Run
+    firebase_admin.initialize_app(options={
+        'storageBucket': 'foster-ulcer-ai.firebasestorage.app'
+    })
+else:
+    cred = credentials.Certificate("C:/Users/Pawarit/Desktop/foster-ulcer-ai-firebase-adminsdk-fbsvc-6eda7ee8ab.json")
+    firebase_admin.initialize_app(cred, {
+        "storageBucket": "foster-ulcer-ai.firebasestorage.app"
+    })
+
 
 db = firestore.client()
 bucket = storage.bucket()
