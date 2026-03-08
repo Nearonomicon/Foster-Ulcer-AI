@@ -258,7 +258,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   }
 
 
-  static const String _baseUrl = "https://foster-ulcer-backend-583037019860.asia-southeast3.run.app";
+  static const String _baseUrl = "https://foster-ulcer-ai-backend-429230748709.asia-southeast3.run.app";
   final Uri _fillinUri = Uri.parse("$_baseUrl/analyze-fillin");
   final Uri _analyzeWoundUri = Uri.parse("$_baseUrl/analyze-wound");
   final Uri _createPatientUri = Uri.parse("$_baseUrl/create-patient-profile");

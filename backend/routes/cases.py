@@ -36,6 +36,8 @@ def get_next_case_id(transaction):
     prefix_label = "CS"
     counter_ref = db.collection("metadata").document(f"counters_case_{current_prefix}")
     snapshot = transaction.get(counter_ref)
+    if not hasattr(snapshot, "exists"):
+        snapshot = next(iter(snapshot))
     if snapshot.exists:
         last_num = snapshot.get("last_running_num") or 0
         new_num = last_num + 1
