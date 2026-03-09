@@ -6,7 +6,12 @@ from fastapi import APIRouter, UploadFile, File, Form, HTTPException
 from google.genai import types
 from PIL import Image as PILImage, UnidentifiedImageError
 
-from prompts import FILLIN_PROMPT_TEMPLATE, ANALYZE_PROMPT_TEMPLATE
+from prompts import (
+    FILLIN_PROMPT_TEMPLATE,
+    LAYER_1_VISION_EXTRACTION_PROMPT,
+    LAYER_2_EVIDENCE_FUSION_PROMPT,
+    LAYER_3_SCORING_AND_PLAN_PROMPT,
+)
 from services.genai_client import client, genai_model, safety_config
 from services.firebase import upload_case_image_to_firebase
 
@@ -86,30 +91,86 @@ async def analyze_wound(
     image: UploadFile = File(...)
 ):
     try:
-        print(f"Sending this payload for wound analyzing: {patient_data}")
+        structured_data = json.loads(patient_data)
+
         image_content = await image.read()
         img = PILImage.open(io.BytesIO(image_content))
 
-        full_prompt = f"Today is {date.today()}\n\n{ANALYZE_PROMPT_TEMPLATE}\n\n===DATA INPUT===\n{patient_data}"
+        def parse_model_json(text: str) -> dict:
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError as e:
+                raise ValueError(f"Model did not return valid JSON: {e}\nRaw output: {text}")
 
-        response = client.models.generate_content(
-            model=genai_model,
-            contents=[full_prompt, img],
-            config=types.GenerateContentConfig(
-                safety_settings=safety_config,
-                temperature=0.2,
-                response_mime_type="application/json"
+        def call_gemini_json(contents):
+            response = client.models.generate_content(
+                model=genai_model,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    safety_settings=safety_config,
+                    temperature=0.2,
+                    response_mime_type="application/json"
+                )
             )
-        )
 
-        if response.candidates:
-            print(response.text)
-            return {"status": "success", "analysis": response.text}
-        else:
-            return {
-                "status": "blocked",
-                "reason": str(response.prompt_feedback.block_reason)
-            }
+            if not response.candidates:
+                return {
+                    "blocked": True,
+                    "reason": str(getattr(response.prompt_feedback, "block_reason", "unknown"))
+                }
 
+            if not response.text:
+                raise ValueError("Model returned empty response.")
+
+            return parse_model_json(response.text)
+
+        layer1_input = f"""
+Today is {date.today()}.
+
+{LAYER_1_VISION_EXTRACTION_PROMPT}
+        """.strip()
+
+        layer1_result = call_gemini_json([layer1_input, img])
+        if isinstance(layer1_result, dict) and layer1_result.get("blocked"):
+            return {"status": "blocked", "reason": layer1_result.get("reason")}
+
+        layer2_payload = {
+            "structured_clinical_data": structured_data,
+            "layer1_image_assessment": layer1_result
+        }
+
+        layer2_input = f"""
+Today is {date.today()}.
+
+{LAYER_2_EVIDENCE_FUSION_PROMPT}
+
+=== INPUT JSON ===
+{json.dumps(layer2_payload, ensure_ascii=False, indent=2)}
+        """.strip()
+
+        layer2_result = call_gemini_json([layer2_input])
+        if isinstance(layer2_result, dict) and layer2_result.get("blocked"):
+            return {"status": "blocked", "reason": layer2_result.get("reason")}
+
+        layer3_input = f"""
+Today is {date.today()}.
+
+{LAYER_3_SCORING_AND_PLAN_PROMPT}
+
+=== INPUT JSON ===
+{json.dumps(layer2_result, ensure_ascii=False, indent=2)}
+        """.strip()
+
+        layer3_result = call_gemini_json([layer3_input])
+        if isinstance(layer3_result, dict) and layer3_result.get("blocked"):
+            return {"status": "blocked", "reason": layer3_result.get("reason")}
+
+        return {
+            "status": "success",
+            "analysis": json.dumps(layer3_result, ensure_ascii=False)
+        }
+
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid patient_data JSON: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
