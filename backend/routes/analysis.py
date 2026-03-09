@@ -96,6 +96,8 @@ async def analyze_wound(
 
         image_content = await image.read()
         img = PILImage.open(io.BytesIO(image_content))
+        img = img.convert("RGB")
+        img.thumbnail((1024, 1024), PILImage.LANCZOS)
 
         def parse_model_json(text: str) -> dict:
             try:

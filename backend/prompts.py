@@ -1041,7 +1041,10 @@ treatment_plan.plan_tasks[].status:
 - must be "DRAFT"
 
 task_due:
-- must be null unless explicitly supplied by external logic
+- for Urgent tasks, use null
+- for the task that should be completed within that day set to today
+- for non-urgent tasks, use an datetime representing days until due and should be related to followup_days
+- if really unknown you can use null
 
 DESCRIPTION RULES
 

@@ -177,7 +177,7 @@ class Vascular(BaseModel):
 class TaskItem(BaseModel):
     task_text: str
     status: str = "PENDING"
-    task_due: str
+    task_due: Optional[str] = None
 
 
 class TreatmentPlan(BaseModel):
