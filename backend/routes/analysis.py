@@ -3,6 +3,7 @@ import json
 from datetime import date, datetime
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+import asyncio
 from google.genai import types
 from PIL import Image as PILImage, UnidentifiedImageError
 
@@ -102,27 +103,45 @@ async def analyze_wound(
             except json.JSONDecodeError as e:
                 raise ValueError(f"Model did not return valid JSON: {e}\nRaw output: {text}")
 
-        def call_gemini_json(contents):
-            response = client.models.generate_content(
-                model=genai_model,
-                contents=contents,
-                config=types.GenerateContentConfig(
-                    safety_settings=safety_config,
-                    temperature=0.2,
-                    response_mime_type="application/json"
-                )
-            )
+        async def call_gemini_json(contents):
+            max_wait_seconds = 60
+            delays = [10, 15, 30, 60]
+            waited = 0
 
-            if not response.candidates:
-                return {
-                    "blocked": True,
-                    "reason": str(getattr(response.prompt_feedback, "block_reason", "unknown"))
-                }
+            for attempt in range(len(delays) + 1):
+                try:
+                    response = client.models.generate_content(
+                        model=genai_model,
+                        contents=contents,
+                        config=types.GenerateContentConfig(
+                            safety_settings=safety_config,
+                            temperature=0.2,
+                            response_mime_type="application/json"
+                        )
+                    )
 
-            if not response.text:
-                raise ValueError("Model returned empty response.")
+                    if not response.candidates:
+                        return {
+                            "blocked": True,
+                            "reason": str(getattr(response.prompt_feedback, "block_reason", "unknown"))
+                        }
 
-            return parse_model_json(response.text)
+                    if not response.text:
+                        raise ValueError("Model returned empty response.")
+
+                    return parse_model_json(response.text)
+                except Exception as e:
+                    msg = str(e)
+                    if "RESOURCE_EXHAUSTED" not in msg and "429" not in msg:
+                        raise
+                    if attempt >= len(delays) or waited >= max_wait_seconds:
+                        raise
+                    delay = delays[attempt]
+                    if waited + delay > max_wait_seconds:
+                        delay = max_wait_seconds - waited
+                    waited += delay
+                    await asyncio.sleep(delay)
+            raise HTTPException(status_code=500, detail="Gemini retry exhausted")
 
         layer1_input = f"""
 Today is {date.today()}.
@@ -130,7 +149,7 @@ Today is {date.today()}.
 {LAYER_1_VISION_EXTRACTION_PROMPT}
         """.strip()
 
-        layer1_result = call_gemini_json([layer1_input, img])
+        layer1_result = await call_gemini_json([layer1_input, img])
         if isinstance(layer1_result, dict) and layer1_result.get("blocked"):
             return {"status": "blocked", "reason": layer1_result.get("reason")}
 
@@ -148,7 +167,7 @@ Today is {date.today()}.
 {json.dumps(layer2_payload, ensure_ascii=False, indent=2)}
         """.strip()
 
-        layer2_result = call_gemini_json([layer2_input])
+        layer2_result = await call_gemini_json([layer2_input])
         if isinstance(layer2_result, dict) and layer2_result.get("blocked"):
             return {"status": "blocked", "reason": layer2_result.get("reason")}
 
@@ -161,7 +180,7 @@ Today is {date.today()}.
 {json.dumps(layer2_result, ensure_ascii=False, indent=2)}
         """.strip()
 
-        layer3_result = call_gemini_json([layer3_input])
+        layer3_result = await call_gemini_json([layer3_input])
         if isinstance(layer3_result, dict) and layer3_result.get("blocked"):
             return {"status": "blocked", "reason": layer3_result.get("reason")}
 
