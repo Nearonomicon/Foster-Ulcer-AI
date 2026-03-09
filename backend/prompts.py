@@ -143,9 +143,52 @@ Determine:
 
 Combine image and nurse input.
 
+STEP 3 — SINBAD SCORING
+
+Use the SINBAD system with 6 components.
+Each component scores 0 or 1.
+Total SINBAD score = sum of all 6 components (0–6).
+
+1) Site
+Score 0 = Forefoot
+Score 1 = Midfoot or Hindfoot
+
+2) Ischemia
+Score 0 = No clinical evidence of ischemia
+Score 1 = Clinical evidence of ischemia present
+Use only structured ischemia data:
+- absent pulses
+- black tissue / gangrene
+- ABI reduced
+- ankle pressure reduced
+If ischemia data is missing, use "unknown" and reduce confidence.
+Do not assume ischemia.
+
+3) Neuropathy
+Score 0 = Protective sensation intact / no neuropathy
+Score 1 = Loss of protective sensation / neuropathy present
+Use only structured neuropathy data.
+If missing, use "unknown" and reduce confidence.
+
+4) Bacterial Infection
+Score 0 = No infection
+Score 1 = Infection present
+Base on structured infection signs and final IDSA assessment.
+If infection signs are insufficient, do not overcall infection.
+
+5) Area
+Score 0 = Ulcer area < 1 cm²
+Score 1 = Ulcer area ≥ 1 cm²
+If width and length are available:
+area_cm2 = width × length
+If dimensions missing, use "unknown" and reduce confidence.
+
+6) Depth
+Score 0 = Superficial ulcer limited to skin/subcutaneous tissue
+Score 1 = Deep ulcer reaching tendon, muscle, joint, or bone
 
 
-STEP 3 — INFECTION CLASSIFICATION (IDSA/IWGDF)
+STEP 4 — INFECTION CLASSIFICATION (IDSA/IWGDF)
 
 GRADE 1 — UNINFECTED  
 No:
@@ -192,7 +235,7 @@ Do NOT assume SIRS.
 
 
 
-STEP 4 — WIfI WOUND STAGING
+STEP 5 — WIfI WOUND STAGING
 
 GRADE 0  
 No ulcer / no gangrene
@@ -209,7 +252,7 @@ Extensive ulcer OR gangrene
 
 
 
-STEP 5 — ISCHEMIA ASSESSMENT
+STEP 6 — ISCHEMIA ASSESSMENT
 
 Use ONLY structured data.
 
@@ -221,7 +264,7 @@ Absent pulses WITH black tissue
 
 
 
-STEP 6 — CHARCOT ASSESSMENT
+STEP 7 — CHARCOT ASSESSMENT
 
 Suspect acute Charcot if:
 
@@ -232,7 +275,7 @@ AND no ulcer
 
 
 
-STEP 7 — RED FLAG DETECTION
+STEP 8 — RED FLAG DETECTION
 
 Set red_flag = true if ANY:
 
@@ -246,7 +289,7 @@ Otherwise red_flag = false.
 
 
 
-STEP 8 — DIAGNOSIS FORMULATION
+STEP 9 — DIAGNOSIS FORMULATION
 
 Use standardized structure:
 
@@ -254,7 +297,7 @@ Use standardized structure:
 
 
 
-STEP 9 — TREATMENT DECISION RULES
+STEP 10 — TREATMENT DECISION RULES
 
 IDSA 1
 No antibiotics
@@ -270,7 +313,7 @@ IV antibiotics
 
 
 
-STEP 10 — FOLLOWUP INTERVAL
+STEP 11 — FOLLOWUP INTERVAL
 
 IDSA 1 → 14–30 days  
 IDSA 2 → 7–14 days  
@@ -279,7 +322,7 @@ IDSA 4 → 1 day
 
 
 
-STEP 11 — CONFIDENCE SCORE
+STEP 12 — CONFIDENCE SCORE
 
 1.00–0.90  
 Complete data + clear image
