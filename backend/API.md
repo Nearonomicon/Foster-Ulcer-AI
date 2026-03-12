@@ -144,6 +144,34 @@ Errors
 
 ---
 
+`POST /case_detail`
+
+Request body
+```json
+{
+  "case_id": "CS-260306-00001"
+}
+```
+
+Response 200
+```json
+{
+  "status": "success",
+  "case": { "case_id": "CS-260306-00001", "patient_id": "PT-2603-00001" },
+  "patient_profile": { "patient_id": "PT-2603-00001", "patient_name": "John Doe" },
+  "records": [
+    { "record_id": "REC-00001", "status": "CREATION" }
+  ]
+}
+```
+
+Errors
+- 400 missing `case_id`
+- 404 case not found
+- 500 server errors
+
+---
+
 `POST /create-case`
 
 Content-Type: `application/json`

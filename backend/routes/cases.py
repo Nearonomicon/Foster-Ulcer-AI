@@ -1,6 +1,7 @@
 import json
 from datetime import date, datetime
 from fastapi import APIRouter, HTTPException
+from fastapi.encoders import jsonable_encoder
 from firebase_admin import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
@@ -48,6 +49,22 @@ def _current_record_snapshot(record_data: dict) -> dict:
         "current_treatment_plan": record_data.get("treatment_plan"),
         "current_task_list": record_data.get("task_list"),
     }
+
+
+def _merge_non_null(existing: dict | None, incoming: dict | None) -> dict | None:
+    if incoming is None:
+        return existing
+    if existing is None:
+        return incoming
+    if not isinstance(existing, dict) or not isinstance(incoming, dict):
+        return incoming if incoming is not None else existing
+    result = dict(existing)
+    for key, value in incoming.items():
+        if isinstance(value, dict):
+            result[key] = _merge_non_null(existing.get(key, {}), value)
+        elif value is not None:
+            result[key] = value
+    return result
 
 
 @firestore.transactional
@@ -383,6 +400,48 @@ async def list_cases(payload: dict):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/case_detail")
+async def case_detail(payload: dict):
+    try:
+        case_id = payload.get("case_id")
+        if not case_id:
+            raise HTTPException(status_code=400, detail="case_id is required")
+
+        case_ref = db.collection("cases").document(case_id)
+        case_snapshot = case_ref.get()
+        if not case_snapshot.exists:
+            raise HTTPException(status_code=404, detail="Case not found")
+
+        case_data = case_snapshot.to_dict() or {}
+        case_data["case_id"] = case_data.get("case_id") or case_snapshot.id
+
+        records_query = case_ref.collection("records").order_by(
+            "record_created_at", direction=firestore.Query.ASCENDING
+        )
+        records_docs = records_query.stream()
+        records = [doc.to_dict() for doc in records_docs]
+
+        patient_profile = None
+        patient_id = case_data.get("patient_id")
+        if patient_id:
+            patient_ref = db.collection("patients").document(patient_id)
+            patient_snapshot = patient_ref.get()
+            if patient_snapshot.exists:
+                patient_profile = patient_snapshot.to_dict() or {}
+                patient_profile["patient_id"] = patient_profile.get("patient_id") or patient_snapshot.id
+
+        return {
+            "status": "success",
+            "case": jsonable_encoder(case_data),
+            "records": jsonable_encoder(records),
+            "patient_profile": jsonable_encoder(patient_profile),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/send-to-doctor")
 async def send_to_doctor(payload: WoundCaseRecordUpdate):
     try:
@@ -394,6 +453,8 @@ async def send_to_doctor(payload: WoundCaseRecordUpdate):
 
         case_ref = db.collection("cases").document(case_id)
         record_ref = case_ref.collection("records").document(record_id)
+        existing_record = record_ref.get()
+        existing_record_data = existing_record.to_dict() if existing_record.exists else {}
 
         analysis_id = f"AN-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
         plan_id = f"PL-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
@@ -402,6 +463,10 @@ async def send_to_doctor(payload: WoundCaseRecordUpdate):
         plan_ref = record_ref.collection("plan_versions").document(plan_id)
 
         record_data = payload_dict
+        record_data["vital_signs"] = _merge_non_null(
+            existing_record_data.get("vital_signs"),
+            record_data.get("vital_signs"),
+        )
         if record_data.get("timestamps") is None:
             record_data["timestamps"] = {
                 "created_at": payload.record_created_at or firestore.SERVER_TIMESTAMP,

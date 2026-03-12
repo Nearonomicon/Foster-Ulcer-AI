@@ -5,6 +5,15 @@ extension _CasesPage on _MainNavigationScreenState {
     if (_caseItems.isEmpty && !_casesLoading && _casesError == null) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _fetchCasesList());
     }
+    final q = _patientSearchQuery.trim().toLowerCase();
+    final filtered = q.isEmpty
+        ? _caseItems
+        : _caseItems.where((c) {
+            final id = (c['case_id'] ?? c['id'] ?? '').toString().toLowerCase();
+            final pid = (c['patient_id'] ?? '').toString().toLowerCase();
+            final status = (c['status'] ?? '').toString().toLowerCase();
+            return id.contains(q) || pid.contains(q) || status.contains(q);
+          }).toList();
     return Column(
       children: [
         Padding(
@@ -15,6 +24,28 @@ extension _CasesPage on _MainNavigationScreenState {
               style: GoogleFonts.plusJakartaSans(fontSize: 24, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
             ),
             const Text("Raipur Unit 4 progress", style: TextStyle(fontSize: 14, color: Colors.grey)),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFFF1F5F9)),
+              ),
+              child: Row(
+                children: [
+                  Icon(LucideIcons.search, color: TWColors.slate.shade400, size: 18),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _patientSearchCtrl,
+                      decoration: const InputDecoration(hintText: "Search by Case ID, Patient ID, Status", border: InputBorder.none),
+                      onChanged: (v) => setState(() => _patientSearchQuery = v),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ]),
         ),
         Expanded(
@@ -31,8 +62,17 @@ extension _CasesPage on _MainNavigationScreenState {
               }
               return ListView.builder(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
-                itemCount: _caseItems.length,
-                itemBuilder: (context, index) => _buildPatientListTile(_caseItems[index]),
+                itemCount: filtered.length,
+                itemBuilder: (context, index) => _buildPatientListTile(
+                  filtered[index],
+                  onTap: () async {
+                    final caseId = filtered[index]['case_id'] ?? filtered[index]['id'];
+                    if (caseId == null) return;
+                    final ok = await _fetchCaseDetail(caseId.toString());
+                    if (!ok || !mounted) return;
+                    _navigateTo('case_detail', patient: filtered[index]);
+                  },
+                ),
               );
             },
           ),

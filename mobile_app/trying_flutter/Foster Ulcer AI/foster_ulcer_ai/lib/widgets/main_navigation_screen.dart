@@ -19,6 +19,7 @@ part '../pages/doctor_summary_page.dart';
 part '../pages/task_detail_page.dart';
 part '../pages/tasks_page.dart';
 part '../pages/cases_page.dart';
+part '../pages/case_detail_page.dart';
 part '../pages/profile_page.dart';
 part '../pages/camera_page.dart';
 part '../pages/vital_check_page.dart';
@@ -201,6 +202,15 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   bool _casesLoading = false;
   String? _casesError;
   String? _casesFilterPatientId;
+  Map<String, dynamic>? _caseDetail;
+  Map<String, dynamic>? _caseDetailPatientProfile;
+  List<Map<String, dynamic>> _caseDetailRecords = [];
+  bool _caseDetailLoading = false;
+  String? _caseDetailError;
+  int _caseDetailIndex = 0;
+  String _caseDetailTab = 'specs';
+  bool _caseDetailShowWoundDetails = false;
+  final ScrollController _caseDetailTimelineCtrl = ScrollController();
   List<Map<String, dynamic>> _patientItems = [];
   bool _patientsLoading = false;
   String? _patientsError;
@@ -273,8 +283,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
-  static const String _baseUrl = "http://10.0.2.2:8080";
-  // static const String _baseUrl = "https://foster-ulcer-ai-backend-429230748709.asia-southeast3.run.app";
+  // static const String _baseUrl = "http://10.0.2.2:8080";
+  static const String _baseUrl = "https://foster-ulcer-ai-backend-429230748709.asia-southeast3.run.app";
   final Uri _fillinUri = Uri.parse("$_baseUrl/analyze-fillin");
   final Uri _analyzeWoundUri = Uri.parse("$_baseUrl/analyze-wound");
   final Uri _analyzeHealingUri = Uri.parse("$_baseUrl/analyze-healing");
@@ -284,6 +294,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   final Uri _updateCaseUri = Uri.parse("$_baseUrl/update_cases");
   final Uri _sendToDoctorUri = Uri.parse("$_baseUrl/send-to-doctor");
   final Uri _casesListUri = Uri.parse("$_baseUrl/cases_list");
+  final Uri _caseDetailUri = Uri.parse("$_baseUrl/case_detail");
   final Uri _patientListUri = Uri.parse("$_baseUrl/patients_list");
   final Uri _docsUri = Uri.parse("$_baseUrl/docs");
 
@@ -937,6 +948,50 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     }
   }
 
+  Future<bool> _fetchCaseDetail(String caseId) async {
+    if (_caseDetailLoading) return false;
+    setState(() {
+      _caseDetailLoading = true;
+      _caseDetailError = null;
+    });
+    try {
+      final resp = await http
+          .post(
+            _caseDetailUri,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'case_id': caseId}),
+          )
+          .timeout(const Duration(seconds: 30));
+      if (resp.statusCode != 200) {
+        throw Exception("case_detail failed (${resp.statusCode}): ${resp.body}");
+      }
+      final decoded = jsonDecode(resp.body);
+      if (decoded is Map) {
+        final data = decoded['case'] is Map ? Map<String, dynamic>.from(decoded['case']) : decoded;
+        final profile = decoded['patient_profile'] is Map ? Map<String, dynamic>.from(decoded['patient_profile']) : null;
+        if (profile != null) {
+          data['patient_profile'] = profile;
+        }
+        final recs = decoded['records'] is List ? List<Map<String, dynamic>>.from(decoded['records']) : <Map<String, dynamic>>[];
+        setState(() {
+          _caseDetail = Map<String, dynamic>.from(data);
+          _caseDetailPatientProfile = profile;
+          _caseDetailRecords = recs;
+        });
+        return true;
+      }
+      throw Exception("case_detail: unexpected response");
+    } catch (e) {
+      debugPrint("case_detail error: $e");
+      if (mounted) {
+        setState(() => _caseDetailError = "Failed to load case detail: $e");
+      }
+      return false;
+    } finally {
+      if (mounted) setState(() => _caseDetailLoading = false);
+    }
+  }
+
   Future<void> _fetchPatientList() async {
     if (_patientsLoading) return;
     setState(() {
@@ -1200,6 +1255,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       case 'doctor_summary': return _buildDoctorSummary();
       case 'assessment': return _buildWoundAssessmentForm();
       case 'detail': return _buildDoctorSummary(); 
+      case 'case_detail': return _buildCaseDetailPage();
       case 'patient_cases': return _buildPatientCasesPage();
       case 'healing_progress': return _buildHealingProgressPage();
       case 'task_detail': return _buildTaskDetailPage();
@@ -1350,12 +1406,57 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
     final image = p['image'] ?? p['image_url'] ?? p['patient_photo_url'] ?? '';
     final patientId = p['patient_id'] ?? p['patientId'];
+    final id = p['id'] ?? p['case_id'] ?? p['caseId'] ?? "-";
     final name = p['name'] ??
         p['patient_name'] ??
         p['patient']?['patient_name'] ??
         (patientId != null ? "Patient $patientId" : "Unknown");
-    final id = p['id'] ?? p['case_id'] ?? p['caseId'] ?? "-";
-    final status = p['status'] ?? "unknown";
+    final title = (p['case_id'] ?? p['caseId']) != null ? id.toString() : name.toString();
+    final status = p['status']?.toString() ?? "unknown";
+    Color statusBg(String s) {
+      switch (s.toUpperCase()) {
+        case 'CREATION':
+          return const Color(0xFFE0F2FE);
+        case 'ANALYZING':
+          return const Color(0xFFFFF7ED);
+        case 'DOCTOR_REVIEW':
+          return const Color(0xFFE0E7FF);
+        case 'COMPLETED':
+          return const Color(0xFFDCFCE7);
+        default:
+          return const Color(0xFFF1F5F9);
+      }
+    }
+
+    Color statusFg(String s) {
+      switch (s.toUpperCase()) {
+        case 'CREATION':
+          return const Color(0xFF0369A1);
+        case 'ANALYZING':
+          return const Color(0xFF9A3412);
+        case 'DOCTOR_REVIEW':
+          return const Color(0xFF4338CA);
+        case 'COMPLETED':
+          return const Color(0xFF15803D);
+        default:
+          return const Color(0xFF64748B);
+      }
+    }
+
+    String formatCaseUpdated(dynamic raw) {
+      if (raw == null || raw.toString().isEmpty) return "-";
+      try {
+        final dt = DateTime.parse(raw.toString()).toLocal();
+        final y = dt.year.toString().padLeft(4, '0');
+        final m = dt.month.toString().padLeft(2, '0');
+        final d = dt.day.toString().padLeft(2, '0');
+        final hh = dt.hour.toString().padLeft(2, '0');
+        final mm = dt.minute.toString().padLeft(2, '0');
+        return "$y-$m-$d $hh:$mm";
+      } catch (_) {
+        return raw.toString();
+      }
+    }
 
     return GestureDetector(
       onTap: onTap ?? () => _navigateTo('detail', patient: p),
@@ -1406,12 +1507,17 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        name.toString(),
+                        title,
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                       ),
                       Text(
-                        "ID: $id • Status: $status",
+                        "Patient: ${patientId ?? '-'}",
                         style: const TextStyle(fontSize: 11, color: Colors.grey),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        "Updated: ${formatCaseUpdated(p['case_updated_at'])}",
+                        style: const TextStyle(fontSize: 10, color: Colors.grey),
                       ),
                     ],
                   ),
@@ -1434,6 +1540,25 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                   fontSize: 9,
                   fontWeight: FontWeight.bold,
                   color: urgencyColor,
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            top: 36,
+            right: 12,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: statusBg(status),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                status,
+                style: TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold,
+                  color: statusFg(status),
                 ),
               ),
             ),
