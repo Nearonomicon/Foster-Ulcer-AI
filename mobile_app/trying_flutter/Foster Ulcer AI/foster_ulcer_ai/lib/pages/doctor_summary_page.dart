@@ -346,7 +346,7 @@ extension _DoctorSummaryPage on _MainNavigationScreenState {
                             _kv("Temperature", _tempLevel?.toString() ?? '-'),
                             _kv("Blood Pressure", _bpLevel?.toString() ?? '-'),
                             _kv("Heart Rate", _heartRateLevel?.toString() ?? '-'),
-                            _kv("Respiratory Rate", _respRateLevel?.toString() ?? _reviewed['repiratory_rate']?.toString() ?? '-'),
+                            _kv("Respiratory Rate", _respRateLevel?.toString() ?? _reviewed['respiratory_rate']?.toString() ?? '-'),
                             _kv("Blood Sugar", _sugarLevel?.toString() ?? _reviewed['blood_sugar']?.toString() ?? '-'),
                           ]),
                           card("SINBAD", [

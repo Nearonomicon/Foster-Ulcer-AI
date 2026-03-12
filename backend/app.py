@@ -1,6 +1,6 @@
 import json
 from fastapi import FastAPI, Request, HTTPException
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
@@ -38,15 +38,23 @@ async def log_requests(request: Request, call_next):
     except Exception as e:
         print(f"[REQUEST] {request.method} {request.url.path} error reading body: {e}")
 
+    response = await call_next(request)
     try:
-        response = await call_next(request)
-        print(f"[RESPONSE] {request.method} {request.url.path} status={response.status_code}")
-        return response
+        body_bytes = b""
+        async for chunk in response.body_iterator:
+            body_bytes += chunk
+        body_text = body_bytes.decode("utf-8", errors="replace")
     except Exception as e:
-        import traceback
-        print(f"[ERROR] {request.method} {request.url.path} {e}")
-        print(traceback.format_exc())
-        raise
+        body_text = f"<unable to read body: {e}>"
+
+    print(f"[RESPONSE] {request.method} {request.url.path} status={response.status_code} payload={body_text}")
+
+    return Response(
+        content=body_bytes,
+        status_code=response.status_code,
+        headers=dict(response.headers),
+        media_type=response.media_type,
+    )
 
 
 @app.exception_handler(HTTPException)
@@ -54,6 +62,7 @@ async def http_exception_handler(request: Request, exc: HTTPException):
     import traceback
     print(f"[ERROR] {request.method} {request.url.path} HTTPException status={exc.status_code} detail={exc.detail}")
     print("".join(traceback.format_exception(type(exc), exc, exc.__traceback__)))
+    print(f"[RESPONSE] {request.method} {request.url.path} status={exc.status_code}")
     return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
 
@@ -66,6 +75,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     for err in errors:
         if isinstance(err.get("ctx"), dict):
             err["ctx"] = {k: str(v) for k, v in err["ctx"].items()}
+    print(f"[RESPONSE] {request.method} {request.url.path} status=422")
     return JSONResponse(status_code=422, content=jsonable_encoder({"detail": errors}))
 
 
@@ -74,6 +84,7 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     import traceback
     print(f"[ERROR] {request.method} {request.url.path} {exc}")
     print("".join(traceback.format_exception(type(exc), exc, exc.__traceback__)))
+    print(f"[RESPONSE] {request.method} {request.url.path} status=500")
     return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
 

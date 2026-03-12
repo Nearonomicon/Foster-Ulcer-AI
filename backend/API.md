@@ -19,6 +19,46 @@ Response 200
 
 **Patients**
 
+`GET /patients`
+
+Query params
+- `limit` (optional, default 50, max 200)
+
+Response 200
+```json
+{
+  "status": "success",
+  "patients": [
+    {
+      "patient_id": "PT-2603-00001",
+      "patient_name": "John Doe",
+      "nrc_id": "8757446557345",
+      "phone_no": "0812345678",
+      "dob": "1990-01-01",
+      "gender": "Male",
+      "height_cm": 170,
+      "weight_kg": 65,
+      "medical_history": "DM",
+      "diabetes": {
+        "has_diabetes": "yes",
+        "years": "5",
+        "risk_history": [],
+        "complications": []
+      },
+      "status": "Active",
+      "created_at": "2026-03-06",
+      "synced_at": "2026-03-06T01:22:17Z",
+      "photo_url": "https://..."
+    }
+  ]
+}
+```
+
+Errors
+- 500 server errors
+
+---
+
 `POST /create-patient-profile`
 
 Content-Type: `multipart/form-data`
@@ -31,6 +71,7 @@ Form fields
 ```json
 {
   "patient_name": "John Doe",
+  "nrc_id": "8757446557345",
   "phone_no": "0812345678",
   "dob": "1990-01-01",
   "gender": "Male",
@@ -65,6 +106,44 @@ Errors
 
 **Cases**
 
+`POST /cases_list`
+
+Request body
+```json
+{
+  "patient_id": "PT-2603-00005",
+  "limit": 50
+}
+```
+
+Notes
+- If `patient_id` is provided, results are not ordered (to avoid needing a composite Firestore index).
+
+Response 200
+```json
+{
+  "status": "success",
+  "cases": [
+    {
+      "case_id": "CS-260306-00001",
+      "patient_id": "PT-2603-00001",
+      "status": "CREATION",
+      "urgency": null,
+      "case_created_at": "2026-03-06T01:22:17Z",
+      "case_updated_at": "2026-03-06T01:22:17Z",
+      "current_record_id": "REC-00001",
+      "current_analysis_id": null,
+      "current_plan_id": null
+    }
+  ]
+}
+```
+
+Errors
+- 500 server errors
+
+---
+
 `POST /create-case`
 
 Content-Type: `application/json`
@@ -81,7 +160,6 @@ Request body
     "temperature": "Warm",
     "blood_pressure": "Normal",
     "heart_rate": "Normal",
-    "repiratory_rate": "Normal",
     "respiratory_rate": "Normal",
     "blood_sugar": "Normal"
   },
@@ -106,6 +184,51 @@ Errors
 
 Notes
 - If `urgency` is omitted, it is stored as `null`.
+
+---
+
+`POST /update_cases`
+
+Content-Type: `application/json`
+
+Request body (same as `/create-case`)
+```json
+{
+  "patient_id": "PT-2603-00001",
+  "case_id": "CS-260306-00001",
+  "status": "CREATION",
+  "vitals": {
+    "temperature": "Warm",
+    "blood_pressure": "Normal",
+    "heart_rate": "Normal",
+    "respiratory_rate": "Normal",
+    "blood_sugar": "Normal"
+  },
+  "meta": {
+    "sent_at": "2026-03-06 01:22:17"
+  }
+}
+```
+
+Response 200
+```json
+{
+  "status": "Case update success",
+  "patient_id": "PT-2603-00001",
+  "case_id": "CS-260306-00001",
+  "record_id": "REC-00002"
+}
+```
+
+Behavior
+- Updates `case_updated_at`
+- Creates a **new record** under `cases/{case_id}/records/{record_id}`
+- Sets `current_record_id` to the new record
+
+Errors
+- 404 if case not found
+- 400 if `patient_id` does not match the case
+- 500 server errors
 
 ---
 
@@ -229,13 +352,81 @@ Errors
 
 ---
 
+`POST /analyze-healing`
+
+Content-Type: `application/json`
+
+Request body
+```json
+{
+  "case_id": "CS-260306-00001"
+}
+```
+
+Response 200
+```json
+{
+  "status": "success",
+  "analysis": "Descriptive healing progress text..."
+}
+```
+
+Errors
+- 400 missing `case_id`
+- 404 no records for case
+- 500 server errors
+
+---
+
 `POST /analyze-wound`
 
 Content-Type: `multipart/form-data`
 
 Form fields
-- `patient_data` (string, required): JSON string used by the prompt.
+- `payload_data` (string, required): JSON string used by the prompt.
 - `image` (file, required)
+
+`payload_data` schema (example)
+```json
+{
+  "patient_profile": {},
+  "nurse_reviewed": {
+    "nurse_reviewed_flag": true,
+    "vital_signs": {
+      "temperature": "...",
+      "blood_pressure": "...",
+      "blood_glucose": "...",
+      "heart_rate": "...",
+      "respiratory_rate": "..."
+    },
+    "wound_detail": {
+      "location_primary": "...",
+      "location_detail": "...",
+      "wound_type": "...",
+      "shape": "...",
+      "size": { "width_cm": 0.0, "length_cm": 0.0 },
+      "depth_category": "...",
+      "bed": { "slough_pct": 0, "necrotic_pct": 0 },
+      "edge_description": "...",
+      "periwound_status": "...",
+      "discharge": { "volume": "...", "type": "..." },
+      "odor_presence": "...",
+      "pain_score": 0,
+      "has_infection": true,
+      "skin_condition": "..."
+    },
+    "ischemia": { "points": [], "pulse": "...", "checklist": [] },
+    "infection": { "checklist": [], "erythema_extent": "...", "probe_to_bone_test": "...", "has_deep_abscess_or_fasciitis": "..." },
+    "neuropathy": { "points": [] },
+    "sinbad": { "site": "...", "ischemia": "...", "neuropathy": "...", "infection": "...", "area": "...", "depth": "..." },
+    "lab_results": { "wbc_count": "...", "crp": "...", "esr": "...", "procalcitonin": "..." },
+    "vascular": { "abi_value": "...", "ankle_pressure_mmHg": "...", "toe_pressure_mmHg": "...", "tcpo2_mmHg": "..." },
+    "gangrene_extent": "..."
+  },
+  "ai_prefill": {},
+  "case_ref": { "patient_id": "...", "case_id": "...", "record_id": "..." }
+}
+```
 
 Response 200
 ```json

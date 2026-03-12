@@ -1,9 +1,12 @@
 import io
 import json
 from datetime import date, datetime
+from urllib.request import urlopen
 
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException
+from fastapi.encoders import jsonable_encoder
 import asyncio
+from firebase_admin import firestore
 from google.genai import types
 from PIL import Image as PILImage, UnidentifiedImageError
 
@@ -12,9 +15,10 @@ from prompts import (
     LAYER_1_VISION_EXTRACTION_PROMPT,
     LAYER_2_EVIDENCE_FUSION_PROMPT,
     LAYER_3_SCORING_AND_PLAN_PROMPT,
+    HEALING_PROGRESS_PROMPT,
 )
 from services.genai_client import client, genai_model, safety_config
-from services.firebase import upload_case_image_to_firebase
+from services.firebase import upload_case_image_to_firebase, db
 
 
 router = APIRouter()
@@ -46,19 +50,49 @@ async def fill_in(
             content_type=content_type,
         )
         print(f"analyze-fillin upload done: image_url={image_url}")
+        try:
+            record_ref = db.collection("cases").document(case_id).collection("records").document(record_id)
+            record_ref.set({
+                "image": {"image_folder_url": image_url},
+                "record_updated_at": firestore.SERVER_TIMESTAMP,
+            }, merge=True)
+        except Exception as e:
+            print(f"analyze-fillin warning: failed to update record image url: {e}")
 
         full_prompt = f"{FILLIN_PROMPT_TEMPLATE}"
         print("analyze-fillin sending to gemini")
 
-        response = client.models.generate_content(
-            model=genai_model,
-            contents=[full_prompt, img],
-            config=types.GenerateContentConfig(
-                safety_settings=safety_config,
-                temperature=0.2,
-                response_mime_type="application/json"
-            )
-        )
+        async def call_gemini_json(contents):
+            max_wait_seconds = 60
+            delays = [10, 15, 30, 60]
+            waited = 0
+
+            for attempt in range(len(delays) + 1):
+                try:
+                    response = client.models.generate_content(
+                        model=genai_model,
+                        contents=contents,
+                        config=types.GenerateContentConfig(
+                            safety_settings=safety_config,
+                            temperature=0.2,
+                            response_mime_type="application/json"
+                        )
+                    )
+                    return response
+                except Exception as e:
+                    msg = str(e)
+                    if "RESOURCE_EXHAUSTED" not in msg and "429" not in msg:
+                        raise
+                    if attempt >= len(delays) or waited >= max_wait_seconds:
+                        raise
+                    delay = delays[attempt]
+                    if waited + delay > max_wait_seconds:
+                        delay = max_wait_seconds - waited
+                    waited += delay
+                    await asyncio.sleep(delay)
+            raise HTTPException(status_code=500, detail="Gemini retry exhausted")
+
+        response = await call_gemini_json([full_prompt, img])
 
         if response.candidates:
             data_dict = json.loads(response.text)
@@ -88,11 +122,55 @@ async def fill_in(
 
 @router.post("/analyze-wound")
 async def analyze_wound(
-    patient_data: str = Form(...),
+    payload_data: str = Form(...),
     image: UploadFile = File(...)
 ):
     try:
-        structured_data = json.loads(patient_data)
+        structured_data = json.loads(payload_data)
+        case_ref = structured_data.get("case_ref") or {}
+        case_id = case_ref.get("case_id")
+        record_id = case_ref.get("record_id")
+        patient_id = case_ref.get("patient_id")
+
+        if case_id and record_id:
+            try:
+                nurse_reviewed = structured_data.get("nurse_reviewed") or {}
+                record_update = {
+                    "patient_id": patient_id,
+                    "status": "ANALYZING",
+                    "vital_signs": nurse_reviewed.get("vital_signs"),
+                    "wound_detail": nurse_reviewed.get("wound_detail"),
+                    "ischemia": nurse_reviewed.get("ischemia"),
+                    "infection": nurse_reviewed.get("infection"),
+                    "neuropathy": nurse_reviewed.get("neuropathy"),
+                    "sinbad": nurse_reviewed.get("sinbad"),
+                    "lab_results": nurse_reviewed.get("lab_results"),
+                    "vascular": nurse_reviewed.get("vascular"),
+                    "gangrene_extent": nurse_reviewed.get("gangrene_extent"),
+                    "record_updated_at": firestore.SERVER_TIMESTAMP,
+                }
+
+                record_ref = db.collection("cases").document(case_id).collection("records").document(record_id)
+                record_ref.set(record_update, merge=True)
+
+                case_update = {
+                    "patient_id": patient_id,
+                    "status": "ANALYZING",
+                    "case_updated_at": firestore.SERVER_TIMESTAMP,
+                    "current_record_id": record_id,
+                    "current_vital_signs": record_update.get("vital_signs"),
+                    "current_wound_detail": record_update.get("wound_detail"),
+                    "current_ischemia": record_update.get("ischemia"),
+                    "current_infection": record_update.get("infection"),
+                    "current_neuropathy": record_update.get("neuropathy"),
+                    "current_sinbad": record_update.get("sinbad"),
+                    "current_lab_results": record_update.get("lab_results"),
+                    "current_vascular": record_update.get("vascular"),
+                    "current_gangrene_extent": record_update.get("gangrene_extent"),
+                }
+                db.collection("cases").document(case_id).set(case_update, merge=True)
+            except Exception as e:
+                print(f"analyze-wound warning: failed to store nurse_reviewed data: {e}")
 
         image_content = await image.read()
         img = PILImage.open(io.BytesIO(image_content))
@@ -192,6 +270,112 @@ Today is {date.today()}.
         }
 
     except json.JSONDecodeError as e:
-        raise HTTPException(status_code=400, detail=f"Invalid patient_data JSON: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"Invalid payload_data JSON: {str(e)}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/analyze-healing")
+async def analyze_healing(payload: dict):
+    try:
+        case_id = payload.get("case_id")
+        if not case_id:
+            raise HTTPException(status_code=400, detail="case_id is required")
+
+        records_query = db.collection("cases").document(case_id).collection("records").order_by(
+            "record_created_at", direction=firestore.Query.ASCENDING
+        )
+        records_docs = records_query.stream()
+        records = [doc.to_dict() for doc in records_docs]
+        records_json = jsonable_encoder(records)
+        # print(records)
+
+        if not records:
+            raise HTTPException(status_code=404, detail="No records found for this case")
+
+        def load_image_from_url(image_url: str):
+            try:
+                with urlopen(image_url, timeout=10) as resp:
+                    data = resp.read()
+                img = PILImage.open(io.BytesIO(data))
+                img = img.convert("RGB")
+                img.thumbnail((1024, 1024), PILImage.LANCZOS)
+                return img
+            except Exception as e:
+                print(f"analyze-healing warning: failed to load image {image_url}: {e}")
+                return None
+
+        prompt_header = f"""
+Today is {date.today()}.
+
+{HEALING_PROGRESS_PROMPT}
+        """.strip()
+
+        contents = [prompt_header]
+        for idx, rec in enumerate(records_json, start=1):
+            record_text = json.dumps(rec, ensure_ascii=False, indent=2)
+            contents.append(f"Record {idx} (record_id={rec.get('record_id')}):\n{record_text}")
+            image_url = (rec.get("image") or {}).get("image_folder_url")
+            if image_url:
+                img = load_image_from_url(image_url)
+                if img is not None:
+                    contents.append(img)
+
+        async def call_gemini_text(contents):
+            max_wait_seconds = 60
+            delays = [10, 15, 30, 60]
+            waited = 0
+
+            for attempt in range(len(delays) + 1):
+                try:
+                    response = client.models.generate_content(
+                        model=genai_model,
+                        contents=contents,
+                        config=types.GenerateContentConfig(
+                            safety_settings=safety_config,
+                            temperature=0.2
+                        )
+                    )
+                    if not response.candidates:
+                        return {
+                            "blocked": True,
+                            "reason": str(getattr(response.prompt_feedback, "block_reason", "unknown"))
+                        }
+                    if not response.text:
+                        raise ValueError("Model returned empty response.")
+                    return response.text
+                except Exception as e:
+                    msg = str(e)
+                    if "RESOURCE_EXHAUSTED" not in msg and "429" not in msg:
+                        raise
+                    if attempt >= len(delays) or waited >= max_wait_seconds:
+                        raise
+                    delay = delays[attempt]
+                    if waited + delay > max_wait_seconds:
+                        delay = max_wait_seconds - waited
+                    waited += delay
+                    await asyncio.sleep(delay)
+            raise HTTPException(status_code=500, detail="Gemini retry exhausted")
+
+        result = await call_gemini_text(contents)
+        if isinstance(result, dict) and result.get("blocked"):
+            return {"status": "blocked", "reason": result.get("reason"), "records": records_json}
+
+        try:
+            latest_record = records_json[-1]
+            latest_record_id = latest_record.get("record_id")
+            if latest_record_id:
+                record_ref = db.collection("cases").document(case_id).collection("records").document(latest_record_id)
+                record_ref.set({"healing_progress": result}, merge=True)
+
+            case_ref = db.collection("cases").document(case_id)
+            case_ref.set({"current_healing_progress": result}, merge=True)
+        except Exception as e:
+            print(f"analyze-healing warning: failed to store healing_progress: {e}")
+
+        return {"status": "success", "analysis": result, "records": records_json}
+
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

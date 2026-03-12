@@ -35,7 +35,10 @@ extension _DashboardPage on _MainNavigationScreenState {
         _buildActionCard(),
         const SizedBox(height: 24),
         ElevatedButton.icon(
-          onPressed: () => _navigateTo('patient_search'),
+          onPressed: () {
+            _followUpFlow = false;
+            _navigateTo('patient_search');
+          },
           icon: const Icon(LucideIcons.circlePlus, size: 25),
           label: const Text("Create Case", style: TextStyle(fontWeight: FontWeight.bold)),
           style: ElevatedButton.styleFrom(
@@ -71,6 +74,21 @@ extension _DashboardPage on _MainNavigationScreenState {
           style: OutlinedButton.styleFrom(
             foregroundColor: Colors.redAccent,
             side: const BorderSide(color: Colors.redAccent),
+            minimumSize: const Size(double.infinity, 60),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          ),
+        ),
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: () {
+            _followUpFlow = true;
+            _navigateTo('patient_search');
+          },
+          icon: const Icon(LucideIcons.search),
+          label: const Text("Follow-up Case", style: TextStyle(fontWeight: FontWeight.bold)),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: const Color(0xFF0D9488),
+            side: const BorderSide(color: Color(0xFF0D9488)),
             minimumSize: const Size(double.infinity, 60),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           ),

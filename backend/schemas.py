@@ -75,6 +75,7 @@ class DiabetesInfo(BaseModel):
 
 
 class PatientSchema(BaseModel):
+    nrc_id: Optional[str] = None
     patient_name: str
     phone_no: str
     dob: str
@@ -203,11 +204,36 @@ class CaseImage(BaseModel):
     image_folder_url: Optional[str] = None
 
 
+class CaseRef(BaseModel):
+    patient_id: str
+    case_id: str
+    record_id: str
+
+
+class NurseReviewed(BaseModel):
+    nurse_reviewed_flag: Optional[bool] = None
+    vital_signs: Optional[VitalSigns] = None
+    wound_detail: Optional[WoundDetail] = None
+    ischemia: Optional[Ischemia] = None
+    infection: Optional[Infection] = None
+    neuropathy: Optional[Neuropathy] = None
+    sinbad: Optional[Sinbad] = None
+    lab_results: Optional[LabResults] = None
+    vascular: Optional[Vascular] = None
+    gangrene_extent: Optional[str] = None
+
+
+class AnalyzeWoundPayload(BaseModel):
+    patient_profile: Optional[dict] = None
+    nurse_reviewed: Optional[NurseReviewed] = None
+    ai_prefill: Optional[dict] = None
+    case_ref: CaseRef
+
+
 class CreateCaseVitals(BaseModel):
     temperature: Optional[str] = None
     blood_pressure: Optional[str] = None
     heart_rate: Optional[str] = None
-    repiratory_rate: Optional[str] = None
     respiratory_rate: Optional[str] = None
     blood_sugar: Optional[str] = None
 
@@ -220,6 +246,17 @@ class CreateCaseRequest(BaseModel):
     patient_id: str
     status: Optional[str] = "Creation"
     urgency: Optional[str] = None
+    created_by_nurse: Optional[str] = None
+    assigned_doctor: Optional[str] = None
+    vitals: Optional[CreateCaseVitals] = None
+    meta: Optional[CreateCaseMeta] = None
+
+
+class UpdateCaseRequest(BaseModel):
+    patient_id: str
+    status: Optional[str] = "Creation"
+    urgency: Optional[str] = None
+    case_id: Optional[str] = None
     created_by_nurse: Optional[str] = None
     assigned_doctor: Optional[str] = None
     vitals: Optional[CreateCaseVitals] = None

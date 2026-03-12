@@ -1,5 +1,6 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -22,9 +23,10 @@ part '../pages/profile_page.dart';
 part '../pages/camera_page.dart';
 part '../pages/vital_check_page.dart';
 part '../pages/assessment_page.dart';
+part '../pages/healing_progress_page.dart';
 
 const String kSinbadAreaSmall = "< 1 cm²";
-const String kSinbadAreaLarge = "≥ 1 cm²";
+const String kSinbadAreaLarge = ">= 1 cm²";
 
 
 class MainNavigationScreen extends StatefulWidget {
@@ -51,6 +53,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     _patientWeightCtrl.dispose();
     _patientHistoryCtrl.dispose();
     _otherCompCtrl.dispose();
+    _healingPageCtrl.dispose();
 
     super.dispose();
   }
@@ -138,6 +141,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   final Map<String, dynamic> _patientProfile = {};
   bool _patientProfileSaved = false;
   bool _emergencyBypassProfile = false;
+  bool _followUpFlow = false;
 
   final TextEditingController _patientNameCtrl = TextEditingController();
   final TextEditingController _nrcIdCtrl = TextEditingController();
@@ -182,12 +186,24 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   String _analysisTitle = "GEMINI CLOUD";
   String _analysisMessage = "Analyzing...";
   XFile? _capturedImage;
+  Uint8List? _capturedImageBytes;
+  final PageController _healingPageCtrl = PageController(viewportFraction: 0.88);
+  int _healingIndex = 0;
   XFile? _patientPhoto; 
   String? _rawResponse;
   Map<String, dynamic>? _aiExtraction;
   Map<String, dynamic>? _aiWoundJson;
+  String? _healingResponseText;
+  String? _healingRawResponse;
   final Map<String, dynamic> _reviewed = {};
   final Map<String, dynamic> _caseRefs = {};
+  List<Map<String, dynamic>> _caseItems = [];
+  bool _casesLoading = false;
+  String? _casesError;
+  String? _casesFilterPatientId;
+  List<Map<String, dynamic>> _patientItems = [];
+  bool _patientsLoading = false;
+  String? _patientsError;
     // =========================
   // Task Detail (NEW)
   // =========================
@@ -257,13 +273,18 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
-
-  static const String _baseUrl = "https://foster-ulcer-ai-backend-429230748709.asia-southeast3.run.app";
+  static const String _baseUrl = "http://10.0.2.2:8080";
+  // static const String _baseUrl = "https://foster-ulcer-ai-backend-429230748709.asia-southeast3.run.app";
   final Uri _fillinUri = Uri.parse("$_baseUrl/analyze-fillin");
   final Uri _analyzeWoundUri = Uri.parse("$_baseUrl/analyze-wound");
+  final Uri _analyzeHealingUri = Uri.parse("$_baseUrl/analyze-healing");
   final Uri _createPatientUri = Uri.parse("$_baseUrl/create-patient-profile");
+  Uri _updatePatientUri(String id) => Uri.parse("$_baseUrl/patients/$id");
   final Uri _createCaseUri = Uri.parse("$_baseUrl/create-case");
+  final Uri _updateCaseUri = Uri.parse("$_baseUrl/update_cases");
   final Uri _sendToDoctorUri = Uri.parse("$_baseUrl/send-to-doctor");
+  final Uri _casesListUri = Uri.parse("$_baseUrl/cases_list");
+  final Uri _patientListUri = Uri.parse("$_baseUrl/patients_list");
   final Uri _docsUri = Uri.parse("$_baseUrl/docs");
 
   // Mock Clinical Data with Wound Images
@@ -326,7 +347,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     try {
       final XFile? image = await picker.pickImage(source: source, imageQuality: 85);
       if (image != null) {
-        setState(() => _capturedImage = image);
+        final bytes = await image.readAsBytes();
+        setState(() {
+          _capturedImage = image;
+          _capturedImageBytes = bytes;
+        });
         await _uploadAndAnalyzeFillin(image);
       }
     } catch (e) {
@@ -363,7 +388,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         return;
       }
       final request = http.MultipartRequest('POST', _fillinUri);
-      final bytes = await imageFile.readAsBytes();
+      final bytes = _capturedImageBytes ?? await imageFile.readAsBytes();
       request.fields['record_id'] = _caseRefs['record_id'].toString();
       request.fields['case_id'] = _caseRefs['case_id'].toString();
       request.files.add(http.MultipartFile.fromBytes('image', bytes, filename: imageFile.name));
@@ -396,6 +421,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   Future<void> _submitToAnalyzeWound() async {
     if (_capturedImage == null) return;
+    final imageFile = File(_capturedImage!.path);
     if (!_patientProfileSaved || _patientProfile.isEmpty) {
       _navigateTo('patient_search');
       return;
@@ -437,10 +463,76 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     });
     try {
       final request = http.MultipartRequest('POST', _analyzeWoundUri);
-      final reviewed = Map<String, dynamic>.from(_reviewed);
-      reviewed.putIfAbsent('odor_presence', () => '');
-      reviewed.putIfAbsent('pain_score', () => '');
-      reviewed.putIfAbsent('has_infection', () => null);
+      final reviewed = {
+        'nurse_reviewed_flag': _fillinReviewed,
+        'vital_signs': {
+          'temperature': _reviewed['temperature'],
+          'blood_pressure': _reviewed['blood_pressure'],
+          'blood_glucose': _reviewed['blood_sugar'],
+          'heart_rate': _reviewed['heart_rate'],
+          'respiratory_rate': _reviewed['repiratory_rate'],
+        },
+        'wound_detail': {
+          'location_primary': _reviewed['location_primary'],
+          'location_detail': _reviewed['location_detail'],
+          'wound_type': _reviewed['wound_type'],
+          'shape': _reviewed['shape'],
+          'size': {
+            'width_cm': _toDouble(_reviewed['size_width_cm']),
+            'length_cm': _toDouble(_reviewed['size_length_cm']),
+          },
+          'depth_category': _reviewed['depth_category'],
+          'bed': {
+            'slough_pct': _toInt(_reviewed['bed_slough_pct']),
+            'necrotic_pct': _toInt(_reviewed['bed_necrotic_pct']),
+          },
+          'edge_description': _reviewed['edge_description'],
+          'periwound_status': _reviewed['periwound_status'],
+          'discharge': {
+            'volume': _reviewed['discharge_volume'],
+            'type': _reviewed['discharge_type'],
+          },
+          'odor_presence': _reviewed['odor_presence'],
+          'pain_score': _toInt(_reviewed['pain_score']),
+          'has_infection': _reviewed['has_infection']?.toString().toLowerCase() == 'true',
+          'skin_condition': _reviewed['skin_condition'],
+        },
+        'ischemia': {
+          'points': _reviewed['ischemia_points'] ?? [],
+          'pulse': _reviewed['ischemia_pulse'],
+          'checklist': _reviewed['ischemia_checklist'] ?? [],
+        },
+        'infection': {
+          'checklist': _reviewed['infection_checklist'] ?? [],
+          'erythema_extent': _reviewed['erythema_extent'],
+          'probe_to_bone_test': _reviewed['probe_to_bone_test'],
+          'has_deep_abscess_or_fasciitis': _reviewed['has_deep_abscess_or_fasciitis'],
+        },
+        'neuropathy': {
+          'points': _reviewed['neuropathy_points'] ?? [],
+        },
+        'sinbad': {
+          'site': _reviewed['sinbad_site'],
+          'ischemia': _reviewed['sinbad_ischemia'],
+          'neuropathy': _reviewed['sinbad_neuropathy'],
+          'infection': _reviewed['sinbad_infection'],
+          'area': _reviewed['sinbad_area'],
+          'depth': _reviewed['sinbad_depth'],
+        },
+        'lab_results': {
+          'wbc_count': _reviewed['lab_wbc_count'],
+          'crp': _reviewed['lab_crp'],
+          'esr': _reviewed['lab_esr'],
+          'procalcitonin': _reviewed['lab_procalcitonin'],
+        },
+        'vascular': {
+          'abi_value': _reviewed['vascular_abi_value'],
+          'ankle_pressure_mmHg': _reviewed['vascular_ankle_pressure_mmHg'],
+          'toe_pressure_mmHg': _reviewed['vascular_toe_pressure_mmHg'],
+          'tcpo2_mmHg': _reviewed['vascular_tcpo2_mmHg'],
+        },
+        'gangrene_extent': _reviewed['gangrene_extent'],
+      };
       final filteredProfile = Map<String, dynamic>.from(_patientProfile)
         ..remove('patient_name')
         ..remove('phone_no')
@@ -448,14 +540,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         ..remove('patient_photo');
       final payload = {
         'patient_profile': filteredProfile,
-        'selected_patient': _selectedPatient,
         'nurse_reviewed': reviewed,
         'ai_prefill': _aiExtraction,
         'case_ref': _caseRefs.isEmpty ? null : Map<String, dynamic>.from(_caseRefs),
       };
       debugPrint("Analyze-wound payload: ${jsonEncode(payload)}");
-      request.fields['patient_data'] = jsonEncode(payload);
-      final bytes = await _capturedImage!.readAsBytes();
+      request.fields['payload_data'] = jsonEncode(payload);
+      final bytes = _capturedImageBytes ?? await imageFile.readAsBytes();
       request.files.add(http.MultipartFile.fromBytes('image', bytes, filename: _capturedImage!.name));
       final streamed = await request.send().timeout(const Duration(seconds: 90));
       final response = await http.Response.fromStream(streamed);
@@ -475,7 +566,46 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             _aiWoundJson = parsed;
             _selectedUrgency = null; 
           });
-          _navigateTo('doctor_summary');
+          if (_followUpFlow) {
+            try {
+              final caseId = _caseRefs['case_id']?.toString();
+              if (caseId != null && caseId.isNotEmpty) {
+                final resp = await http
+                    .post(
+                      _analyzeHealingUri,
+                      headers: {'Content-Type': 'application/json'},
+                      body: jsonEncode({'case_id': caseId}),
+                    )
+                    .timeout(const Duration(seconds: 30));
+                if (resp.statusCode != 200) {
+                  debugPrint("Analyze-healing failed (${resp.statusCode}): ${resp.body}");
+                } else {
+                  debugPrint("Analyze-healing success: ${resp.body}");
+                  String? summary;
+                  try {
+                    final decoded = jsonDecode(resp.body);
+                    if (decoded is Map<String, dynamic>) {
+                      summary = decoded['analysis']?.toString() ??
+                          decoded['summary']?.toString() ??
+                          decoded['message']?.toString() ??
+                          decoded['result']?.toString();
+                    }
+                  } catch (_) {
+                    summary = null;
+                  }
+                  setState(() {
+                    _healingRawResponse = resp.body;
+                    _healingResponseText = (summary != null && summary.isNotEmpty) ? summary : resp.body;
+                  });
+                  _navigateTo('healing_progress');
+                }
+              }
+            } catch (e) {
+              debugPrint("Analyze-healing error: $e");
+            }
+          } else {
+            _navigateTo('doctor_summary');
+          }
           return;
         }
         setState(() {
@@ -487,6 +617,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         _navigateTo('response_view');
       }
     } catch (e) {
+      debugPrint("Analyze-wound error: $e");
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Submit failed: $e"), backgroundColor: Colors.redAccent));
     } finally {
       if (mounted) setState(() => _isAnalyzing = false);
@@ -547,7 +678,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         'blood_pressure': _reviewed['blood_pressure'],
         'blood_glucose': _reviewed['blood_sugar'],
         'heart_rate': _reviewed['heart_rate'],
-        'respiratory_rate': _reviewed['repiratory_rate'],
+        'respiratory_rate': _reviewed['respiratory_rate'],
       },
       'wound_detail': woundDetail,
       'ischemia': {
@@ -670,34 +801,47 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         'created_at': _getFormattedTimestamp(),
       };
       debugPrint("Create patient payload: ${jsonEncode(payload)}");
-      
-      final req = http.MultipartRequest('POST', _createPatientUri);
-      req.fields['patient_data'] = jsonEncode(payload);
 
-      if (_patientPhoto != null) {
-        final bytes = await _patientPhoto!.readAsBytes();
-        req.files.add(http.MultipartFile.fromBytes('image', bytes, filename: 'patient_profile.png'));
-      }
-
-      final streamed = await req.send().timeout(const Duration(seconds: 30));
-      final resp = await http.Response.fromStream(streamed);
-      debugPrint("Create patient response: ${resp.statusCode} ${resp.body}");
-      final decoded = jsonDecode(resp.body);
-      if (decoded['status'] == 'success') {
-        _patientProfile..clear()..addAll(payload);
-        final backendId = decoded['patient_id'] ?? decoded['id'];
-        if (backendId != null && backendId.toString().isNotEmpty) {
-          _patientProfile['patient_id'] = backendId;
+      final existingId = _patientProfile['patient_id']?.toString();
+      if (existingId != null && existingId.isNotEmpty) {
+        final ok = await _updatePatientProfile(existingId, payload);
+        if (ok) {
+          if (_followUpFlow) {
+            _navigateTo('patient_cases');
+            _fetchCasesList(patientId: existingId);
+          } else {
+            _navigateTo('vital_check_page');
+          }
         }
-        setState(() => _patientProfileSaved = true);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Patient profile and photo saved."), backgroundColor: Color(0xFF0D9488)),
-          );
-        }
-        _navigateTo('vital_check_page');
       } else {
-        throw Exception(decoded['detail'] ?? resp.body ?? "Registration failed.");
+        final req = http.MultipartRequest('POST', _createPatientUri);
+        req.fields['patient_data'] = jsonEncode(payload);
+
+        if (_patientPhoto != null) {
+          final bytes = await _patientPhoto!.readAsBytes();
+          req.files.add(http.MultipartFile.fromBytes('image', bytes, filename: 'patient_profile.png'));
+        }
+
+        final streamed = await req.send().timeout(const Duration(seconds: 30));
+        final resp = await http.Response.fromStream(streamed);
+        debugPrint("Create patient response: ${resp.statusCode} ${resp.body}");
+        final decoded = jsonDecode(resp.body);
+        if (decoded['status'] == 'success') {
+          _patientProfile..clear()..addAll(payload);
+          final backendId = decoded['patient_id'] ?? decoded['id'];
+          if (backendId != null && backendId.toString().isNotEmpty) {
+            _patientProfile['patient_id'] = backendId;
+          }
+          setState(() => _patientProfileSaved = true);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text("Patient profile and photo saved."), backgroundColor: Color(0xFF0D9488)),
+            );
+          }
+          _navigateTo('vital_check_page');
+        } else {
+          throw Exception(decoded['detail'] ?? resp.body ?? "Registration failed.");
+        }
       }
     } catch (e) {
       debugPrint("Create patient error: $e");
@@ -711,6 +855,178 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         });
       }
     }
+  }
+
+  Future<bool> _updatePatientProfile(String id, Map<String, dynamic> payload) async {
+    try {
+      debugPrint("Update patient payload: ${jsonEncode(payload)}");
+      final resp = await http
+          .patch(
+            _updatePatientUri(id),
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 30));
+      debugPrint("Update patient response: ${resp.statusCode} ${resp.body}");
+      if (resp.statusCode != 200) {
+        throw Exception("Update failed (${resp.statusCode}): ${resp.body}");
+      }
+      final decoded = jsonDecode(resp.body);
+      if (decoded is Map && decoded['status'] == 'success') {
+        _patientProfile..clear()..addAll(payload);
+        _patientProfile['patient_id'] = id;
+        setState(() => _patientProfileSaved = true);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Patient profile updated."), backgroundColor: Color(0xFF0D9488)),
+          );
+        }
+        return true;
+      } else {
+        throw Exception(decoded is Map ? (decoded['detail'] ?? "Update failed.") : "Update failed.");
+      }
+    } catch (e) {
+      debugPrint("Update patient error: $e");
+      return false;
+    }
+  }
+
+  Future<void> _fetchCasesList({String? patientId, int limit = 50}) async {
+    if (_casesLoading) return;
+    setState(() {
+      _casesLoading = true;
+      _casesError = null;
+      _casesFilterPatientId = patientId;
+      _caseItems = [];
+    });
+    try {
+      final payload = {
+        'limit': limit,
+        if (patientId != null && patientId.isNotEmpty) 'patient_id': patientId,
+      };
+      final resp = await http
+          .post(
+            _casesListUri,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 30));
+      if (resp.statusCode != 200) {
+        throw Exception("cases_list failed (${resp.statusCode}): ${resp.body}");
+      }
+      final decoded = jsonDecode(resp.body);
+      List<dynamic> raw;
+      if (decoded is List) {
+        raw = decoded;
+      } else if (decoded is Map && decoded['cases'] is List) {
+        raw = decoded['cases'] as List;
+      } else {
+        throw Exception("cases_list: unexpected response");
+      }
+      final items = raw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+      if (mounted) {
+        setState(() => _caseItems = items);
+      }
+    } catch (e) {
+      debugPrint("cases_list error: $e");
+      if (mounted) {
+        setState(() => _casesError = "Failed to load cases: $e");
+      }
+    } finally {
+      if (mounted) setState(() => _casesLoading = false);
+    }
+  }
+
+  Future<void> _fetchPatientList() async {
+    if (_patientsLoading) return;
+    setState(() {
+      _patientsLoading = true;
+      _patientsError = null;
+    });
+    try {
+      final resp = await http.get(_patientListUri).timeout(const Duration(seconds: 30));
+      if (resp.statusCode != 200) {
+        throw Exception("patients_list failed (${resp.statusCode}): ${resp.body}");
+      }
+      final decoded = jsonDecode(resp.body);
+      List<dynamic> raw;
+      if (decoded is List) {
+        raw = decoded;
+      } else if (decoded is Map && decoded['patients'] is List) {
+        raw = decoded['patients'] as List;
+      } else {
+        throw Exception("patients_list: unexpected response");
+      }
+      final items = raw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+      final active = items.where((p) {
+        final status = p['status']?.toString().toLowerCase();
+        return status == null || status == "active";
+      }).toList();
+      if (mounted) {
+        setState(() => _patientItems = active);
+      }
+    } catch (e) {
+      debugPrint("patients_list error: $e");
+      if (mounted) {
+        setState(() => _patientsError = "Failed to load patients: $e");
+      }
+    } finally {
+      if (mounted) setState(() => _patientsLoading = false);
+    }
+  }
+
+  void _prefillIntakeFromSelectedPatient(Map<String, dynamic> p) {
+    String? formatDob(dynamic v) {
+      if (v == null) return null;
+      final s = v.toString().trim();
+      if (s.isEmpty) return null;
+      try {
+        final dt = DateTime.parse(s);
+        return "${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}";
+      } catch (_) {
+        return s;
+      }
+    }
+
+    String? mapDiabetesYears(dynamic v) {
+      if (v == null) return null;
+      final raw = v.toString().trim();
+      if (raw.isEmpty) return null;
+      if (["<1y", "1-5y", "5-10y", ">10y"].contains(raw)) return raw;
+      final n = double.tryParse(raw);
+      if (n == null) return null;
+      if (n < 1) return "<1y";
+      if (n <= 5) return "1-5y";
+      if (n <= 10) return "5-10y";
+      return ">10y";
+    }
+
+    final diabetes = (p['diabetes'] is Map) ? Map<String, dynamic>.from(p['diabetes']) : <String, dynamic>{};
+    final hasDiabetesRaw = diabetes['has_diabetes']?.toString().toLowerCase();
+    final hasDiabetes = hasDiabetesRaw == 'yes' || hasDiabetesRaw == 'true' ? "Yes" : (hasDiabetesRaw == 'no' || hasDiabetesRaw == 'false' ? "No" : null);
+
+    _patientProfile
+      ..clear()
+      ..addAll(p);
+
+    _patientNameCtrl.text = (p['patient_name'] ?? '').toString();
+    _nrcIdCtrl.text = (p['nrc_id'] ?? '').toString();
+    _dobCtrl.text = formatDob(p['dob']) ?? '';
+    _selectedGender = p['gender']?.toString().toLowerCase();
+    _patientPhoneCtrl.text = (p['phone_no'] ?? '').toString();
+    _patientHeightCtrl.text = (p['height_cm'] ?? '').toString();
+    _patientWeightCtrl.text = (p['weight_kg'] ?? '').toString();
+    _otherCompCtrl.text = (p['medical_history'] ?? '').toString();
+
+    _hasDiabetes = hasDiabetes;
+    _diabetesYears = mapDiabetesYears(diabetes['years']);
+    _riskHistory
+      ..clear()
+      ..addAll((diabetes['risk_history'] is List) ? List<String>.from(diabetes['risk_history']) : const <String>[]);
+    _complications
+      ..clear()
+      ..addAll((diabetes['complications'] is List) ? List<String>.from(diabetes['complications']) : const <String>[]);
+    _patientPhoto = null;
   }
 
   Future<bool> _createCaseFromVitals() async {
@@ -728,13 +1044,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       'temperature': _reviewed['temperature'],
       'blood_pressure': _reviewed['blood_pressure'],
       'heart_rate': _reviewed['heart_rate'],
-      'repiratory_rate': _reviewed['repiratory_rate'],
+      'respiratory_rate': _reviewed['respiratory_rate'],
       'blood_sugar': _reviewed['blood_sugar'],
     };
 
     final payload = {
       'patient_id': patientId,
       'status': 'CREATION',
+      if (_followUpFlow && _caseRefs['case_id'] != null) 'case_id': _caseRefs['case_id'],
       'vitals': vitals,
       'meta': {
         'sent_at': _getFormattedTimestamp(),
@@ -743,15 +1060,18 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     debugPrint("Create case payload: ${jsonEncode(payload)}");
 
     try {
+      final caseId = _caseRefs['case_id']?.toString();
+      final useUpdate = _followUpFlow && caseId != null && caseId.isNotEmpty;
+      final uri = useUpdate ? _updateCaseUri : _createCaseUri;
       final resp = await http
           .post(
-            _createCaseUri,
+            uri,
             headers: {'Content-Type': 'application/json'},
             body: jsonEncode(payload),
           )
           .timeout(const Duration(seconds: 20));
       if (resp.statusCode != 200) {
-        throw Exception("Create-case failed (${resp.statusCode}): ${resp.body}");
+        throw Exception("${useUpdate ? 'Update-case' : 'Create-case'} failed (${resp.statusCode}): ${resp.body}");
       }
       final decoded = jsonDecode(resp.body);
       if (decoded is Map) {
@@ -792,9 +1112,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         _sinbadArea = _reviewed['sinbad_area'];
         _sinbadDepth = _reviewed['sinbad_depth'];
       }
+      if (step == 'patient_search') {
+        _fetchPatientList();
+      }
       if (patient != null) {
         _selectedPatient = patient;
         _capturedImage = null; // BUG FIX: Clear session image when viewing a record
+        _capturedImageBytes = null;
         // Bind clinical data to state for mock patients/existing cases
         if (patient.containsKey('ai_wound_json')) {
           _aiWoundJson = Map<String, dynamic>.from(patient['ai_wound_json']);
@@ -813,6 +1137,25 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         }
       }
     });
+  }
+
+  void _enterFollowUpVitals(Map<String, dynamic> caseData) {
+    final patientId = caseData['patient_id']?.toString();
+    final caseId = caseData['case_id']?.toString();
+    final recordId = caseData['current_record_id']?.toString();
+    _capturedImage = null;
+    _capturedImageBytes = null;
+    if (patientId != null && patientId.isNotEmpty) {
+      _patientProfile['patient_id'] = patientId;
+    }
+    _caseRefs
+      ..clear()
+      ..addAll({
+        if (patientId != null) 'patient_id': patientId,
+        if (caseId != null) 'case_id': caseId,
+        if (recordId != null) 'record_id': recordId,
+      });
+    _navigateTo('vital_check_page');
   }
 
   bool _shouldShowNav() => ['dashboard', 'tasks', 'cases'].contains(_currentStep);
@@ -857,6 +1200,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       case 'doctor_summary': return _buildDoctorSummary();
       case 'assessment': return _buildWoundAssessmentForm();
       case 'detail': return _buildDoctorSummary(); 
+      case 'patient_cases': return _buildPatientCasesPage();
+      case 'healing_progress': return _buildHealingProgressPage();
       case 'task_detail': return _buildTaskDetailPage();
       case 'vital_check_page': return _buildVitalCheckPage();
       default: return _buildDashboard();
@@ -983,7 +1328,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   Widget _buildSectionTitle(IconData icon, String title) => Row(children: [Icon(icon, size: 20, color: const Color(0xFF0D9488)), const SizedBox(width: 10), Expanded(child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF0D9488))))]);
   Widget _buildFixedBottomButton(String label, IconData icon, VoidCallback onPressed) => Container(padding: const EdgeInsets.all(24), decoration: const BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: Color(0xFFF1F5F9)))), child: ElevatedButton.icon(onPressed: onPressed, icon: Icon(icon), label: Text(label, style: const TextStyle(fontWeight: FontWeight.bold)), style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0D9488), foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 60), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)))));
 
-  Widget _buildPatientListTile(Map<String, dynamic> p) {
+  Widget _buildPatientListTile(Map<String, dynamic> p, {VoidCallback? onTap}) {
     Color urgencyColor;
     String urgencyText;
     
@@ -1003,8 +1348,17 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         break;
     }
 
+    final image = p['image'] ?? p['image_url'] ?? p['patient_photo_url'] ?? '';
+    final patientId = p['patient_id'] ?? p['patientId'];
+    final name = p['name'] ??
+        p['patient_name'] ??
+        p['patient']?['patient_name'] ??
+        (patientId != null ? "Patient $patientId" : "Unknown");
+    final id = p['id'] ?? p['case_id'] ?? p['caseId'] ?? "-";
+    final status = p['status'] ?? "unknown";
+
     return GestureDetector(
-      onTap: () => _navigateTo('detail', patient: p),
+      onTap: onTap ?? () => _navigateTo('detail', patient: p),
       child: Stack(
         children: [
           Container(
@@ -1026,18 +1380,25 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               children: [
                 ClipRRect(
                   borderRadius: BorderRadius.circular(12),
-                  child: Image.network(
-                    p['image'],
-                    width: 50,
-                    height: 50,
-                    fit: BoxFit.cover,
-                    errorBuilder: (c, e, s) => Container(
-                      width: 50,
-                      height: 50,
-                      color: const Color(0xFFE2E8F0),
-                      child: const Icon(Icons.broken_image, size: 18),
-                    ),
-                  ),
+                  child: (image is String && image.isNotEmpty)
+                      ? Image.network(
+                          image,
+                          width: 50,
+                          height: 50,
+                          fit: BoxFit.cover,
+                          errorBuilder: (c, e, s) => Container(
+                            width: 50,
+                            height: 50,
+                            color: const Color(0xFFE2E8F0),
+                            child: const Icon(Icons.broken_image, size: 18),
+                          ),
+                        )
+                      : Container(
+                          width: 50,
+                          height: 50,
+                          color: const Color(0xFFE2E8F0),
+                          child: const Icon(Icons.person, size: 18),
+                        ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
@@ -1045,11 +1406,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        p['name'],
+                        name.toString(),
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                       ),
                       Text(
-                        "ID: ${p['id']} • Status: ${p['status']}",
+                        "ID: $id • Status: $status",
                         style: const TextStyle(fontSize: 11, color: Colors.grey),
                       ),
                     ],
@@ -1082,6 +1443,26 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
-  Widget _buildBottomNav() => BottomNavigationBar(currentIndex: _activeTab, onTap: (index) => setState(() { _activeTab = index; _currentStep = 'dashboard'; }), selectedItemColor: const Color(0xFF0D9488), unselectedItemColor: TWColors.slate.shade400, type: BottomNavigationBarType.fixed, items: const [BottomNavigationBarItem(icon: Icon(LucideIcons.house), label: "Home"), BottomNavigationBarItem(icon: Icon(LucideIcons.listTodo), label: "Tasks"), BottomNavigationBarItem(icon: Icon(LucideIcons.clipboardList), label: "Cases"), BottomNavigationBarItem(icon: Icon(LucideIcons.user), label: "Profile")]);
+  Widget _buildBottomNav() => BottomNavigationBar(
+        currentIndex: _activeTab,
+        onTap: (index) {
+          setState(() {
+            _activeTab = index;
+            _currentStep = 'dashboard';
+          });
+          if (index == 2) {
+            _fetchCasesList();
+          }
+        },
+        selectedItemColor: const Color(0xFF0D9488),
+        unselectedItemColor: TWColors.slate.shade400,
+        type: BottomNavigationBarType.fixed,
+        items: const [
+          BottomNavigationBarItem(icon: Icon(LucideIcons.house), label: "Home"),
+          BottomNavigationBarItem(icon: Icon(LucideIcons.listTodo), label: "Tasks"),
+          BottomNavigationBarItem(icon: Icon(LucideIcons.clipboardList), label: "Cases"),
+          BottomNavigationBarItem(icon: Icon(LucideIcons.user), label: "Profile"),
+        ],
+      );
   Widget _buildProfileTile(IconData icon, String label, {Color? color}) => ListTile(leading: Icon(icon, color: color ?? const Color(0xFF0D9488)), title: Text(label, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: color)), trailing: const Icon(LucideIcons.chevronRight, size: 16));
 }

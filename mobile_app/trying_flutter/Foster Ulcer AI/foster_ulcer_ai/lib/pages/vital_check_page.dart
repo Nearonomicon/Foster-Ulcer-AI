@@ -210,7 +210,7 @@ extension _VitalCheckPage on _MainNavigationScreenState {
                     selected: selected,
                     onSelected: (_) => setState(() {
                       _respRateLevel = label;
-                      _reviewed['repiratory_rate'] = label;
+                      _reviewed['respiratory_rate'] = label;
                     }),
                     selectedColor: const Color(0xFF0D9488).withOpacity(0.15),
                     checkmarkColor: const Color(0xFF0D9488),

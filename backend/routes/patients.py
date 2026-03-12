@@ -61,6 +61,7 @@ async def create_patient_profile(
             print("[create-patient-profile] image uploaded")
 
         doc_data = {
+            "nrc_id": patient_obj.nrc_id,
             "patient_name": patient_obj.patient_name,
             "phone_no": patient_obj.phone_no,
             "dob": patient_obj.dob,
@@ -92,3 +93,50 @@ async def create_patient_profile(
         print(f"[create-patient-profile ERROR] {e}")
         print(traceback.format_exc())
         raise HTTPException(status_code=400, detail=f"Data format error: {str(e)}")
+
+
+@router.get("/patients_list")
+async def list_patients(limit: int = 50):
+    try:
+        if limit < 1:
+            limit = 1
+        if limit > 200:
+            limit = 200
+
+        query = db.collection("patients").order_by("created_at", direction=firestore.Query.DESCENDING).limit(limit)
+        docs = query.stream()
+
+        patients = []
+        for doc in docs:
+            data = doc.to_dict() or {}
+            data["patient_id"] = data.get("patient_id") or doc.id
+            patients.append(data)
+
+        return {"status": "success", "patients": patients}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.patch("/patients/{patient_id}")
+async def update_patient_profile(patient_id: str, payload: dict):
+    try:
+        update_data = {k: v for k, v in payload.items() if v is not None}
+
+        if "height_cm" in update_data:
+            update_data["height_cm"] = float(update_data["height_cm"])
+        if "weight_kg" in update_data:
+            update_data["weight_kg"] = float(update_data["weight_kg"])
+
+        if not update_data:
+            raise HTTPException(status_code=400, detail="No fields to update")
+
+        update_data["synced_at"] = firestore.SERVER_TIMESTAMP
+
+        patient_ref = db.collection("patients").document(patient_id)
+        patient_ref.set(update_data, merge=True)
+
+        return {"status": "success", "patient_id": patient_id, "updated_fields": list(update_data.keys())}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

@@ -1058,3 +1058,28 @@ FINAL INSTRUCTION
 
 Return only the completed JSON object using the exact schema above.
 '''
+
+
+HEALING_PROGRESS_PROMPT = '''
+SYSTEM ROLE
+
+You are a clinical wound-care assistant. Your task is to summarize healing progress across a case with multiple chronological records.
+
+INPUT
+
+You will receive:
+- A chronological list of wound case records (oldest to newest)
+
+OUTPUT
+
+Return a concise bullet list (plain text, no JSON). Use 3-6 bullets:
+- Overall trend: improving / worsening / stable
+- Key changes that support the trend (size, depth, infection signs, exudate, tissue quality)
+- Notable concerns or red flags
+- If key data is missing, mention it briefly
+
+RULES
+
+- Use only information present in the records.
+- Keep bullets short and clinical.
+'''
