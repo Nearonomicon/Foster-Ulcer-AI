@@ -74,6 +74,16 @@ def _merge_sections(existing: dict, incoming: dict, keys: list[str]) -> dict:
     return merged
 
 
+def _is_all_null(value: object) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, dict):
+        return all(_is_all_null(v) for v in value.values())
+    if isinstance(value, list):
+        return all(_is_all_null(v) for v in value)
+    return False
+
+
 @firestore.transactional
 def get_next_case_id(transaction):
     current_prefix = date.today().strftime("%y%m%d")
@@ -515,6 +525,8 @@ async def send_to_doctor(payload: WoundCaseRecordUpdate):
                 "image",
             ],
         )
+        if _is_all_null(record_data.get("vital_signs")) and existing_record_data.get("vital_signs"):
+            record_data["vital_signs"] = existing_record_data.get("vital_signs")
         if record_data.get("timestamps") is None:
             record_data["timestamps"] = {
                 "created_at": payload.record_created_at or firestore.SERVER_TIMESTAMP,

@@ -21,9 +21,11 @@ extension _IntakePage on _MainNavigationScreenState {
                       shape: BoxShape.circle,
                       border: Border.all(color: const Color(0xFF0D9488).withOpacity(0.2), width: 3),
                     ),
-                    child: _patientPhoto == null
-                        ? Icon(LucideIcons.user, size: 48, color: TWColors.slate.shade300)
-                        : ClipOval(child: Image.file(File(_patientPhoto!.path), fit: BoxFit.cover)),
+                    child: _patientPhoto != null
+                        ? ClipOval(child: Image.file(File(_patientPhoto!.path), fit: BoxFit.cover))
+                        : (_patientPhotoUrl != null && _patientPhotoUrl!.isNotEmpty)
+                            ? ClipOval(child: Image.network(_patientPhotoUrl!, fit: BoxFit.cover))
+                            : Icon(LucideIcons.user, size: 48, color: TWColors.slate.shade300),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -31,7 +33,7 @@ extension _IntakePage on _MainNavigationScreenState {
                   onPressed: () => _pickPatientPhoto(ImageSource.camera),
                   icon: const Icon(LucideIcons.camera, size: 16),
                   label: Text(
-                    _patientPhoto == null ? "Capture Patient Image" : "Change Image",
+                    (_patientPhoto == null && (_patientPhotoUrl == null || _patientPhotoUrl!.isEmpty)) ? "Capture Patient Image" : "Change Image",
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                   ),
                 ),

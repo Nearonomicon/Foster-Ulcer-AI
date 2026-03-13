@@ -37,6 +37,7 @@ extension _DashboardPage on _MainNavigationScreenState {
         ElevatedButton.icon(
           onPressed: () {
             _followUpFlow = false;
+            _resetCaseInputs();
             _navigateTo('patient_search');
           },
           icon: const Icon(LucideIcons.circlePlus, size: 25),

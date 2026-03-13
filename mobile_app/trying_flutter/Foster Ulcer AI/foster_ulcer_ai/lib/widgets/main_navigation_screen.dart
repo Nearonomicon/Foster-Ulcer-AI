@@ -190,7 +190,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   Uint8List? _capturedImageBytes;
   final PageController _healingPageCtrl = PageController(viewportFraction: 0.88);
   int _healingIndex = 0;
-  XFile? _patientPhoto; 
+  XFile? _patientPhoto;
+  String? _patientPhotoUrl;
   String? _rawResponse;
   Map<String, dynamic>? _aiExtraction;
   Map<String, dynamic>? _aiWoundJson;
@@ -198,6 +199,29 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   String? _healingRawResponse;
   final Map<String, dynamic> _reviewed = {};
   final Map<String, dynamic> _caseRefs = {};
+  void _clearVitalsInfo() {
+    _reviewed.remove('temperature');
+    _reviewed.remove('blood_pressure');
+    _reviewed.remove('heart_rate');
+    _reviewed.remove('respiratory_rate');
+    _reviewed.remove('blood_sugar');
+    _reviewed.remove('repiratory_rate');
+    _bpLevel = null;
+    _sugarLevel = null;
+    _tempLevel = null;
+    _heartRateLevel = null;
+    _respRateLevel = null;
+  }
+
+  void _resetCaseInputs() {
+    _reviewed.clear();
+    _caseRefs.clear();
+    _aiExtraction = null;
+    _aiWoundJson = null;
+    _healingResponseText = null;
+    _capturedImage = null;
+    _capturedImageBytes = null;
+  }
   List<Map<String, dynamic>> _caseItems = [];
   bool _casesLoading = false;
   String? _casesError;
@@ -376,7 +400,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     try {
       final XFile? image = await picker.pickImage(source: source, imageQuality: 60);
       if (image != null) {
-        setState(() => _patientPhoto = image);
+        setState(() {
+          _patientPhoto = image;
+          _patientPhotoUrl = null;
+        });
       }
     } catch (e) {
       debugPrint("Error picking patient photo: $e");
@@ -1082,6 +1109,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       ..clear()
       ..addAll((diabetes['complications'] is List) ? List<String>.from(diabetes['complications']) : const <String>[]);
     _patientPhoto = null;
+    _patientPhotoUrl = (p['photo_url'] ?? p['patient_photo_url'] ?? p['patient_photo'] ?? '').toString();
+    if (_patientPhotoUrl != null && _patientPhotoUrl!.isEmpty) {
+      _patientPhotoUrl = null;
+    }
   }
 
   Future<bool> _createCaseFromVitals() async {
@@ -1166,6 +1197,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         _sinbadInfection = _reviewed['sinbad_infection'];
         _sinbadArea = _reviewed['sinbad_area'];
         _sinbadDepth = _reviewed['sinbad_depth'];
+      }
+      if (step == 'vital_check_page') {
+        _clearVitalsInfo();
       }
       if (step == 'patient_search') {
         _fetchPatientList();

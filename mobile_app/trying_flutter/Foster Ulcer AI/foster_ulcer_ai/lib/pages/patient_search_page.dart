@@ -136,6 +136,7 @@ extension _PatientSearchPage on _MainNavigationScreenState {
                   _patientWeightCtrl.clear();
                   _patientHistoryCtrl.clear();
                   _patientPhoto = null;
+                  _patientPhotoUrl = null;
                   _navigateTo('intake');
                 },
                 icon: Icon(_selectedPatient != null ? LucideIcons.arrowRight : LucideIcons.userPlus),
