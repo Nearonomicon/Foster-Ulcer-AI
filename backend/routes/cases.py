@@ -67,6 +67,13 @@ def _merge_non_null(existing: dict | None, incoming: dict | None) -> dict | None
     return result
 
 
+def _merge_sections(existing: dict, incoming: dict, keys: list[str]) -> dict:
+    merged = dict(incoming)
+    for key in keys:
+        merged[key] = _merge_non_null(existing.get(key), incoming.get(key))
+    return merged
+
+
 @firestore.transactional
 def get_next_case_id(transaction):
     current_prefix = date.today().strftime("%y%m%d")
@@ -338,6 +345,30 @@ async def update_case(payload: UpdateCaseRequest):
         record_doc_ref = case_ref.collection("records").document(record_id)
         record_doc_data = _model_to_dict(case_record)
 
+        latest_query = case_ref.collection("records").order_by(
+            "record_created_at", direction=firestore.Query.DESCENDING
+        ).limit(1)
+        latest_docs = list(latest_query.stream())
+        latest_record_data = latest_docs[0].to_dict() if latest_docs else {}
+        record_doc_data = _merge_sections(
+            latest_record_data,
+            record_doc_data,
+            [
+                "vital_signs",
+                "wound_detail",
+                "ischemia",
+                "infection",
+                "neuropathy",
+                "sinbad",
+                "lab_results",
+                "vascular",
+                "gangrene_extent",
+                "treatment_plan",
+                "task_list",
+                "analysis",
+            ],
+        )
+
         batch = db.batch()
         case_update = {
             "status": status,
@@ -367,6 +398,7 @@ async def update_case(payload: UpdateCaseRequest):
 @router.post("/cases_list")
 async def list_cases(payload: dict):
     try:
+        print(f"[cases_list] payload={payload}")
         limit = payload.get("limit", 50)
         patient_id = payload.get("patient_id")
 
@@ -395,6 +427,7 @@ async def list_cases(payload: dict):
             data["case_id"] = data.get("case_id") or doc.id
             cases.append(data)
 
+        print(f"[cases_list] returned_cases={len(cases)}")
         return {"status": "success", "cases": cases}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -463,9 +496,24 @@ async def send_to_doctor(payload: WoundCaseRecordUpdate):
         plan_ref = record_ref.collection("plan_versions").document(plan_id)
 
         record_data = payload_dict
-        record_data["vital_signs"] = _merge_non_null(
-            existing_record_data.get("vital_signs"),
-            record_data.get("vital_signs"),
+        record_data = _merge_sections(
+            existing_record_data,
+            record_data,
+            [
+                "vital_signs",
+                "wound_detail",
+                "ischemia",
+                "infection",
+                "neuropathy",
+                "sinbad",
+                "lab_results",
+                "vascular",
+                "gangrene_extent",
+                "treatment_plan",
+                "task_list",
+                "analysis",
+                "image",
+            ],
         )
         if record_data.get("timestamps") is None:
             record_data["timestamps"] = {
