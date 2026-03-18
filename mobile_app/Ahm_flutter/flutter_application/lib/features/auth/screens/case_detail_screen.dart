@@ -1,91 +1,121 @@
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:flutter_application/features/auth/screens/ai_analysis_screen.dart';
-import 'package:flutter_application/features/auth/screens/treatment_plan_dispatch_screen.dart';
-
-/// ✅ MOCK CASE (hard-coded)
-final Map<String, dynamic> mockCase = {
-  "patient_profile": {
-    "patient_name": "PAWMAN",
-    "phone_no": "0861948565",
-    "dob": "03/02/2001",
-    "gender": "male",
-    "height_cm": "170",
-    "weight_kg": "60",
-    "occupation": "Data Analysis",
-    "medical_history": "Diabetes",
-    "created_at": "2026-01-28 11:33:20"
-  },
-  "nurse_reviewed": {
-    "location_primary": "toe",
-    "location_detail": "plantar aspect of the great toe",
-    "wound_type": "ulcer",
-    "shape": "round",
-    "size_width_cm": 1.5,
-    "size_length_cm": 1.5,
-    "depth_category": "full_thickness",
-    "bed_slough_pct": 10,
-    "bed_necrotic_pct": 5,
-    "edge_description": "calloused",
-    "periwound_status": "erythematous",
-    "discharge_volume": "minimal",
-    "discharge_type": "minimal",
-    "odor_presence": "faint",
-    "pain_score": 4,
-    "has_infection": false,
-    "skin_condition": "dry",
-    "temperature": "37",
-    "blood_pressure": "120/80",
-    "heart_rate": "80"
-  },
-  "ai_analysis": {
-    "AI_analysis": {
-      "creator": "Gemini AI",
-      "wound_stage": "STAGE 3",
-      "diagnosis":
-          "Diabetic foot ulcer on the plantar aspect of the great toe, full-thickness, with surrounding erythema.",
-      "confidence": 0.75,
-      "description":
-          "Patient is a 24-year-old male with diabetes. Vitals stable. Wound: plantar aspect of great toe, round ulcer 1.5 x 1.5 cm, full-thickness, 10% slough, 5% necrotic, calloused edges, erythematous periwound, minimal discharge, faint odor, pain score 4. AI suggests Wagner 2 (deep to tendon/capsule, no abscess/osteomyelitis) and recommends review.",
-      "treatment_plan":
-          "Focus on offloading, debridement, moist wound environment, assess infection, vascular supply, glucose control, pain control, patient education."
-    }
-  },
-  "urgency": "high_urgent"
-};
-
-int _calcAgeFromDob(String dob) {
-  // dob: "03/02/2001" (dd/MM/yyyy)
-  final parts = dob.split("/");
-  if (parts.length != 3) return 0;
-  final d = int.tryParse(parts[0]) ?? 1;
-  final m = int.tryParse(parts[1]) ?? 1;
-  final y = int.tryParse(parts[2]) ?? 2000;
-  final birth = DateTime(y, m, d);
-  final now = DateTime.now();
-  int age = now.year - birth.year;
-  final hadBirthday = (now.month > birth.month) || (now.month == birth.month && now.day >= birth.day);
-  if (!hadBirthday) age -= 1;
-  return age;
-}
-
-String _capitalize(String s) => s.isEmpty ? s : s[0].toUpperCase() + s.substring(1);
+import 'package:flutter_application/features/auth/services/case_service.dart';
+import 'package:flutter_application/shared/app_localizations.dart';
 
 class CaseDetailScreen extends StatefulWidget {
-  const CaseDetailScreen({super.key});
+  final String caseId;
+
+  const CaseDetailScreen({
+    super.key,
+    required this.caseId,
+  });
 
   @override
   State<CaseDetailScreen> createState() => _CaseDetailScreenState();
 }
 
 class _CaseDetailScreenState extends State<CaseDetailScreen> {
-  String diagnosis = "Accept AI: Wagner Grade 2";
-  final notesCtrl = TextEditingController();
+  int selectedTimelineIndex = 0;
+
+  final CaseService _caseService = CaseService();
+
+  bool _isLoading = true;
+  String? _error;
+  Map<String, dynamic>? _caseResponse;
 
   @override
-  void dispose() {
-    notesCtrl.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+    _loadCaseDetail();
+  }
+
+  Future<void> _loadCaseDetail() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final res = await _caseService.getCaseDetail(widget.caseId);
+
+      if (!mounted) return;
+
+      setState(() {
+        _caseResponse = res;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  Map<String, dynamic> _asMap(dynamic value) {
+    if (value is Map) {
+      return Map<String, dynamic>.from(value);
+    }
+    return <String, dynamic>{};
+  }
+
+  List<Map<String, dynamic>> _asMapList(dynamic value) {
+    if (value is List) {
+      return value
+          .where((e) => e is Map)
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+    }
+    return <Map<String, dynamic>>[];
+  }
+
+  String _safeImageUrl(dynamic value) {
+    final s = (value ?? "").toString().trim();
+    if (s.isEmpty || s.toLowerCase() == "null") return "";
+    return s;
+  }
+
+  int _calcAgeFromDob(String dob) {
+    final birth = DateTime.tryParse(dob);
+    if (birth != null) {
+      final now = DateTime.now();
+      int age = now.year - birth.year;
+      final hadBirthday =
+          (now.month > birth.month) ||
+          (now.month == birth.month && now.day >= birth.day);
+      if (!hadBirthday) age -= 1;
+      return age;
+    }
+
+    final parts = dob.split("/");
+    if (parts.length == 3) {
+      final d = int.tryParse(parts[0]) ?? 1;
+      final m = int.tryParse(parts[1]) ?? 1;
+      final y = int.tryParse(parts[2]) ?? 2000;
+      final birth2 = DateTime(y, m, d);
+      final now = DateTime.now();
+      int age = now.year - birth2.year;
+      final hadBirthday =
+          (now.month > birth2.month) ||
+          (now.month == birth2.month && now.day >= birth2.day);
+      if (!hadBirthday) age -= 1;
+      return age;
+    }
+
+    return 0;
+  }
+
+  String _formatStage(String raw) {
+    final up = raw.toUpperCase().trim();
+    if (up.startsWith("STAGE")) {
+      final num = raw.replaceAll(RegExp(r'[^0-9]'), '');
+      if (num.isNotEmpty) return "Stage $num";
+    }
+    return raw;
   }
 
   @override
@@ -97,43 +127,211 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
     final card = isDark ? const Color(0xFF1E293B) : Colors.white;
     final border = isDark ? const Color(0xFF273449) : const Color(0xFFE6EBF2);
 
-    // ✅ bind mock data
-    final p = mockCase["patient_profile"] as Map<String, dynamic>;
-    final n = mockCase["nurse_reviewed"] as Map<String, dynamic>;
-    final a = (mockCase["ai_analysis"] as Map<String, dynamic>)["AI_analysis"] as Map<String, dynamic>;
+    if (_isLoading) {
+      return Scaffold(
+        backgroundColor: bg,
+        body: const SafeArea(
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      );
+    }
 
-    final patientName = (p["patient_name"] ?? "Unknown").toString();
-    final gender = _capitalize((p["gender"] ?? "").toString());
-    final age = _calcAgeFromDob((p["dob"] ?? "").toString());
+    if (_error != null) {
+      return Scaffold(
+        backgroundColor: bg,
+        appBar: AppBar(title: const Text("Case Detail")),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.error_outline, size: 42),
+                const Gap(12),
+                Text(
+                  _error!,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: isDark ? Colors.white : Colors.black87,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const Gap(16),
+                ElevatedButton(
+                  onPressed: _loadCaseDetail,
+                  child: const Text("Retry"),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
-    final medicalHistory = (p["medical_history"] ?? "").toString();
-    final comorbidities = medicalHistory.isEmpty
-        ? const <String>[]
-        : medicalHistory.split(RegExp(r"[,;/]")).map((e) => e.trim()).where((e) => e.isNotEmpty).toList();
+    final response = _caseResponse ?? <String, dynamic>{};
+    final data = _asMap(response["data"]);
+    final caseBundle = _asMap(data["case_bundle"]);
 
-    final locationPrimary = _capitalize((n["location_primary"] ?? "").toString());
-    final locationDetail = (n["location_detail"] ?? "").toString();
-    final width = n["size_width_cm"];
-    final length = n["size_length_cm"];
-    final area = (width is num && length is num) ? (width * length) : null;
+    final summary = _asMap(caseBundle["case_summary"]);
+    final rootPatient = _asMap(caseBundle["patient_profile"]);
+    final rootNurse = _asMap(caseBundle["nurse_reviewed"]);
+    final rootAi = _asMap(caseBundle["ai_analysis"]);
 
-    final slough = n["bed_slough_pct"];
-    final necrotic = n["bed_necrotic_pct"];
-    final pain = n["pain_score"];
-    final odor = (n["odor_presence"] ?? "").toString();
+    final images = _asMapList(caseBundle["wound_images"]);
+    final permissions = _asMap(caseBundle["permissions"]);
 
-    final aiStageRaw = (a["wound_stage"] ?? "").toString();
-    final aiConfidence = (a["confidence"] is num) ? (a["confidence"] as num).toDouble() : 0.0;
+    final sortedImages = [...images];
+    if (sortedImages.isEmpty) {
+      sortedImages.add(<String, dynamic>{});
+    }
+
+    final safeSelectedIndex =
+        selectedTimelineIndex >= sortedImages.length ? 0 : selectedTimelineIndex;
+
+    final selectedImage = sortedImages[safeSelectedIndex];
+
+    final patient = selectedImage["patient_snapshot"] != null
+        ? _asMap(selectedImage["patient_snapshot"])
+        : rootPatient;
+
+    final nurse = selectedImage["wound_snapshot"] != null
+        ? _asMap(selectedImage["wound_snapshot"])
+        : rootNurse;
+
+    final ai = selectedImage["ai_snapshot"] != null
+        ? _asMap(selectedImage["ai_snapshot"])
+        : rootAi;
+
+    final patientName = (patient["patient_name"] ?? "Unknown").toString();
+    final genderRaw = (patient["gender"] ?? "").toString().toLowerCase();
+    final genderText = genderRaw == "male"
+        ? context.tr('common.gender.male')
+        : genderRaw == "female"
+            ? context.tr('common.gender.female')
+            : context.tr('common.na');
+
+    final dob = (patient["dob"] ?? "").toString();
+    final age = (patient["age"] is int)
+        ? patient["age"] as int
+        : _calcAgeFromDob(dob);
+
+    final diabetesFlag = patient["diabetes_flag"] == true;
+
+    final medicalHistory =
+        (patient["medical_history"] as List?)?.map((e) => e.toString()).toList() ??
+            <String>[];
+
+    final comorbidities =
+        (patient["comorbidities"] as List?)?.map((e) => e.toString()).toList() ??
+            medicalHistory;
+
+    final urgencyRaw = (summary["urgency"] ?? "").toString().toUpperCase();
+    final isHighUrgency = urgencyRaw == "HIGH" || urgencyRaw == "HIGH_URGENT";
+
+    final aiConfidence = (ai["confidence"] is num)
+        ? (ai["confidence"] as num).toDouble()
+        : 0.0;
     final aiConfidencePct = (aiConfidence * 100).round();
-    final aiDesc = (a["description"] ?? "").toString();
-    final aiDx = (a["diagnosis"] ?? "").toString();
+    final aiDiagnosis = (ai["diagnosis"] ?? "").toString();
+    final aiDescription = (ai["description"] ?? "").toString();
+    final aiDraftStatus = (ai["draft_status"] ?? "READY").toString();
 
-    final urgency = (mockCase["urgency"] ?? "").toString();
-    final urgencyBadge = urgency == "high_urgent" ? "HIGH URGENCY" : "ROUTINE";
+    final selectedImageUrl = _safeImageUrl(selectedImage["image_url"]);
 
-    final nurseNote =
-        "Site: $locationPrimary (${locationDetail.isEmpty ? "-" : locationDetail}). "
-        "Slough: ${slough ?? "-"}%, Necrotic: ${necrotic ?? "-"}%, Pain: ${pain ?? "-"}, Odor: ${odor.isEmpty ? "-" : odor}.";
+    final canEditAiReview = permissions["can_edit_ai_review"] == true;
+
+    final vitalsTemp = _displayValue(nurse["temperature_c"] ?? nurse["temperature"]);
+    final vitalsBp = _displayValue(nurse["blood_pressure"]);
+    final vitalsHr = _displayValue(nurse["heart_rate"]);
+    final vitalsRr = _displayValue(nurse["respiratory_rate"]);
+    final vitalsSugar = _displayValue(nurse["blood_glucose_mg_dl"]);
+
+    final sinbadSite =
+        _displayValue(nurse["sinbad_site"] ?? nurse["location_primary"]);
+    final sinbadIschemia =
+        _yesNo(nurse["sinbad_ischemia"] ?? nurse["wifi_pulse_check"]);
+    final sinbadNeuropathy = _yesNo(nurse["sinbad_neuropathy"]);
+    final sinbadInfection =
+        _yesNo(nurse["sinbad_infection"] ?? nurse["has_infection"]);
+    final sinbadArea = _displayValue(nurse["sinbad_area"] ?? nurse["area_cm2"]);
+    final sinbadDepth =
+        _displayValue(nurse["sinbad_depth"] ?? nurse["depth_category"]);
+    final sinbadTotal = _displayValue(nurse["sinbad_total_score"]);
+
+    final woundLocationPrimary = _displayValue(nurse["location_primary"]);
+    final woundLocationDetail = _displayValue(nurse["location_detail"]);
+    final woundTypeText = _displayValue(nurse["wound_type"]);
+    final woundShapeText = _displayValue(nurse["shape"]);
+
+    final woundSizePair =
+        _sizePair(nurse["size_width_cm"], nurse["size_length_cm"]);
+    final woundDepthCategory = _displayValue(nurse["depth_category"]);
+
+    final woundSlough = _percentText(nurse["bed_slough_pct"]);
+    final woundNecrotic = _percentText(nurse["bed_necrotic_pct"]);
+    final woundEdge = _displayValue(nurse["edge_description"]);
+    final woundPeriwound = _displayValue(nurse["periwound_status"]);
+
+    final woundDischargeVolume = _displayValue(nurse["discharge_volume"]);
+    final woundDischargeType = _displayValue(nurse["discharge_type"]);
+    final woundOdor = _displayValue(nurse["odor_presence"]);
+    final woundPain = _painText(nurse["pain_score"]);
+    final woundHasInfection = _yesNo(nurse["has_infection"]);
+    final woundSkinCondition = _displayValue(nurse["skin_condition"]);
+
+    final wifiPulseCheck = _yesNo(nurse["wifi_pulse_check"]);
+    final wifiIschemiaChecklist = _joinList(nurse["wifi_ischemia_checklist"]);
+    final wifiIschemiaPoints = _joinList(nurse["wifi_ischemia_points"]);
+    final wifiAbi = _displayValue(nurse["wifi_abi"]);
+    final wifiAnklePressure = _displayValue(nurse["wifi_ankle_pressure"]);
+    final wifiToePressure = _displayValue(nurse["wifi_toe_pressure"]);
+    final wifiTcpo2 = _displayValue(nurse["wifi_tcpo2"]);
+
+    final wifiGangreneExtent = _displayValue(nurse["wifi_gangrene_extent"]);
+    final wifiWoundDepth =
+        _displayValue(nurse["wifi_wound_depth"] ?? nurse["depth_category"]);
+    final wifiWoundLocation =
+        _displayValue(nurse["wifi_wound_location"] ?? nurse["location_primary"]);
+
+    final idsaChecklist = _joinList(nurse["idsa_infection_checklist"]);
+    final idsaErythemaExtent = _displayValue(nurse["idsa_erythema_extent"]);
+    final idsaProbeToBone = _displayValue(nurse["idsa_probe_to_bone"]);
+    final idsaDeepAbscess = _yesNo(nurse["idsa_deep_abscess_fasciitis"]);
+
+    final neuropathyPoints = _joinList(nurse["neuropathy_points"]);
+
+    final labWbc = _displayValue(nurse["lab_wbc"]);
+    final labCrp = _displayValue(nurse["lab_crp"]);
+    final labEsr = _displayValue(nurse["lab_esr"]);
+    final labProcalcitonin = _displayValue(nurse["lab_procalcitonin"]);
+
+    final advancedErythemaExtent = _displayValue(
+      nurse["advanced_erythema_extent"] ?? nurse["idsa_erythema_extent"],
+    );
+    final advancedProbeToBone = _displayValue(
+      nurse["advanced_probe_to_bone"] ?? nurse["idsa_probe_to_bone"],
+    );
+    final advancedDeepAbscess = _yesNo(
+      nurse["advanced_deep_abscess_fasciitis"] ??
+          nurse["idsa_deep_abscess_fasciitis"],
+    );
+    final advancedGangreneExtent = _displayValue(
+      nurse["advanced_gangrene_extent"] ?? nurse["wifi_gangrene_extent"],
+    );
+
+    final aiNarrative = _displayValue(ai["description"] ?? ai["narrative"]);
+    final aiIdsaStage = _displayValue(ai["idsa_stage"]);
+    final aiWifiWound = _displayValue(ai["wifi_wound"]);
+    final aiWifiIschemia = _displayValue(ai["wifi_ischemia"]);
+    final aiWifiFootInfection = _displayValue(ai["wifi_foot_infection"]);
+    final aiWifiClinicalStage = _displayValue(ai["wifi_stage"]);
+    final aiSinbadTotal = _displayValue(ai["sinbad_total"]);
+    final aiSinbadSite = _displayValue(ai["sinbad_site"]);
+    final aiSinbadIschemia = _yesNo(ai["sinbad_ischemia"]);
+    final aiSinbadNeuropathy = _yesNo(ai["sinbad_neuropathy"]);
+    final aiSinbadInfection = _yesNo(ai["sinbad_infection"]);
+    final aiSinbadArea = _displayValue(ai["sinbad_area"]);
+    final aiSinbadDepth = _displayValue(ai["sinbad_depth"]);
 
     return Scaffold(
       backgroundColor: bg,
@@ -150,9 +348,15 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                 onBack: () => Navigator.pop(context),
                 onMore: () {},
                 patientName: patientName,
-                caseIdText: "ID: #ULC-9283",
-                tag1: "Medical: ${medicalHistory.isEmpty ? "N/A" : medicalHistory}",
-                tag2: urgencyBadge,
+                title: context.tr('case_detail.header.title'),
+                caseIdText: "${context.tr('common.id')}: #${widget.caseId}",
+                tag1: diabetesFlag
+                    ? "${context.tr('case_detail.header.medical')}: Diabetes"
+                    : "${context.tr('case_detail.header.medical')}: ${context.tr('common.na')}",
+                tag2: isHighUrgency
+                    ? context.tr('common.urgency.high')
+                    : context.tr('common.urgency.routine'),
+                tag2IsHigh: isHighUrgency,
               ),
             ),
             SliverPadding(
@@ -160,10 +364,9 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
               sliver: SliverList(
                 delegate: SliverChildListDelegate(
                   [
-                    // Patient Profile
                     _SectionCard(
                       titleIcon: Icons.person_search,
-                      title: "Patient Profile",
+                      title: context.tr('case_detail.section.patient_profile'),
                       cs: cs,
                       isDark: isDark,
                       card: card,
@@ -174,15 +377,42 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                             children: [
                               Expanded(
                                 child: _KeyVal(
-                                  title: "Age / Gender",
-                                  value: "${age == 0 ? "-" : age}, $gender",
+                                  title: context.tr('case_detail.field.age_gender'),
+                                  value: "${age == 0 ? "-" : age}, $genderText",
                                   isDark: isDark,
                                 ),
                               ),
                               Expanded(
                                 child: _KeyVal(
-                                  title: "Vitals",
-                                  value: "${n["blood_pressure"] ?? "-"} • HR ${n["heart_rate"] ?? "-"}",
+                                  title: context.tr('case_detail.field.vitals'),
+                                  value:
+                                      "$vitalsBp • ${context.tr('case_detail.field.hr')} $vitalsHr",
+                                  isDark: isDark,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const Gap(14),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: _KeyVal(
+                                  title: "Temperature",
+                                  value: vitalsTemp == "-" ? "-" : "$vitalsTemp °C",
+                                  isDark: isDark,
+                                ),
+                              ),
+                              Expanded(
+                                child: _KeyVal(
+                                  title: "Blood Glucose",
+                                  value: vitalsSugar == "-" ? "-" : "$vitalsSugar mg/dL",
+                                  isDark: isDark,
+                                ),
+                              ),
+                              Expanded(
+                                child: _KeyVal(
+                                  title: "RR",
+                                  value: vitalsRr,
                                   isDark: isDark,
                                 ),
                               ),
@@ -192,7 +422,7 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                           Align(
                             alignment: Alignment.centerLeft,
                             child: Text(
-                              "COMORBIDITIES",
+                              context.tr('case_detail.field.comorbidities').toUpperCase(),
                               style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.w900,
@@ -205,131 +435,382 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                           Wrap(
                             spacing: 8,
                             runSpacing: 8,
-                            children: comorbidities.isEmpty ? const [_Pill(text: "None")] : comorbidities.map((e) => _Pill(text: e)).toList(),
+                            children: comorbidities.isEmpty
+                                ? [_Pill(text: context.tr('common.none'))]
+                                : comorbidities.map((e) => _Pill(text: e)).toList(),
                           ),
                         ],
                       ),
                     ),
-
                     const Gap(18),
 
-                    // Wound timeline (ยังเป็น placeholder รูป)
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        _SectionTitle(icon: Icons.history, text: "Wound Timeline", isDark: isDark),
+                        _SectionTitle(
+                          icon: Icons.history,
+                          text: context.tr('case_detail.section.wound_timeline'),
+                          isDark: isDark,
+                        ),
                         TextButton(
                           onPressed: () {},
-                          child: Text("View All", style: TextStyle(color: cs.primary, fontWeight: FontWeight.w800)),
+                          child: Text(
+                            context.tr('common.view_all'),
+                            style: TextStyle(
+                              color: cs.primary,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
                         ),
                       ],
                     ),
                     const Gap(10),
+
                     SizedBox(
-                      height: 360,
-                      child: ListView(
+                      height: 380,
+                      child: ListView.separated(
                         scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.only(left: 4, right: 4),
-                        children: [
-                          _TimelineCard(
+                        itemCount: sortedImages.length,
+                        separatorBuilder: (_, __) => const Gap(12),
+                        itemBuilder: (context, index) {
+                          final img = sortedImages[index];
+                          final imgSnapshot = img["wound_snapshot"] != null
+                              ? _asMap(img["wound_snapshot"])
+                              : rootNurse;
+                          final imgAi = img["ai_snapshot"] != null
+                              ? _asMap(img["ai_snapshot"])
+                              : rootAi;
+
+                          final imgUrl = _safeImageUrl(img["image_url"]).isNotEmpty
+                              ? _safeImageUrl(img["image_url"])
+                              : _safeImageUrl(selectedImageUrl);
+
+                          final visitLabel =
+                              (img["visit_day_label"] ?? "Visit").toString();
+                          final isLatest = img["is_latest"] == true;
+                          final isSelected = index == safeSelectedIndex;
+
+                          final imgWidth = imgSnapshot["size_width_cm"];
+                          final imgLength = imgSnapshot["size_length_cm"];
+                          final imgArea = imgSnapshot["area_cm2"] ??
+                              ((imgWidth is num && imgLength is num)
+                                  ? (imgWidth * imgLength)
+                                  : null);
+
+                          final imgNote =
+                              (imgSnapshot["nurse_note"] ??
+                                      img["nurse_note"] ??
+                                      "")
+                                  .toString();
+
+                          final imgAiStage =
+                              _formatStage((imgAi["wound_stage"] ?? "").toString());
+                          final imgAiConfidence = (imgAi["confidence"] is num)
+                              ? ((imgAi["confidence"] as num).toDouble() * 100)
+                                  .round()
+                              : 0;
+
+                          return _TimelineCard(
                             isDark: isDark,
                             card: card,
                             border: border,
                             primary: cs.primary,
-                            latest: true,
-                            date: "Today",
-                            subtitle: "AI: $aiStageRaw • $aiConfidencePct%",
-                            area: area == null ? "-" : "${area.toStringAsFixed(2)} cm²",
-                            note: nurseNote,
-                            areaIsBad: urgency == "high_urgent",
-                          ),
-                        ],
+                            latest: isLatest,
+                            selected: isSelected,
+                            date: visitLabel,
+                            subtitle: "AI: $imgAiStage • $imgAiConfidence%",
+                            imageUrl: imgUrl,
+                            area: imgArea == null ? "-" : "${imgArea.toString()} cm²",
+                            note: imgNote.isEmpty ? "-" : imgNote,
+                            areaIsBad: isSelected ? isHighUrgency : false,
+                            latestLabel: context.tr('common.latest'),
+                            areaLabel: context.tr('case_detail.field.area_est'),
+                            onTap: () {
+                              setState(() {
+                                selectedTimelineIndex = index;
+                              });
+                            },
+                          );
+                        },
                       ),
                     ),
-
                     const Gap(18),
 
-                    // AI Analysis
                     _AiAnalysisCard(
                       isDark: isDark,
                       primary: cs.primary,
-                      aiText: aiDesc.isEmpty ? aiDx : aiDesc,
+                      aiText: aiDescription.isEmpty ? aiDiagnosis : aiDescription,
                       confidenceText: "$aiConfidencePct%",
-                      onReviewAi: () {
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => const AiAnalysisScreen()));
-                      },
+                      onReviewAi: canEditAiReview
+                          ? () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => AiAnalysisScreen(
+                                    caseId: widget.caseId,
+                                    selectedTimelineIndex: safeSelectedIndex,
+                                  ),
+                                ),
+                              );
+                            }
+                          : () {},
+                      title: context.tr('case_detail.section.ai_analysis'),
+                      metricConfidence: context.tr('case_detail.metric.confidence'),
+                      metricAiDraft: context.tr('case_detail.metric.ai_draft'),
+                      aiDraftValue: aiDraftStatus,
+                      cta: context.tr('case_detail.cta.review_ai'),
                     ),
-
                     const Gap(18),
 
-                    _SectionTitle(icon: Icons.edit_note, text: "Clinical Evaluation", isDark: isDark),
-                    const Gap(10),
-
                     _SectionCard(
-                      title: null,
-                      titleIcon: null,
+                      titleIcon: Icons.description,
+                      title: "Wound Details",
                       cs: cs,
                       isDark: isDark,
                       card: card,
                       border: border,
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            "DIAGNOSIS OVERRIDE (OPTIONAL)",
-                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: isDark ? Colors.white54 : Colors.black45),
-                          ),
-                          const Gap(10),
-                          DropdownButtonFormField<String>(
-                            initialValue: diagnosis,
-                            items: const [
-                              DropdownMenuItem(value: "Accept AI: Wagner Grade 2", child: Text("Accept AI: Wagner Grade 2")),
-                              DropdownMenuItem(value: "Override: Wagner Grade 3", child: Text("Override: Wagner Grade 3")),
-                              DropdownMenuItem(value: "Override: Wagner Grade 1", child: Text("Override: Wagner Grade 1")),
+                          _DataGroupCard(
+                            title: "Assessment Inputs",
+                            isDark: isDark,
+                            children: [
+                              _SubGroupTitle(text: "Vitals", isDark: isDark),
+                              _DetailPairTable(
+                                isDark: isDark,
+                                rows: [
+                                  _DetailRowData("Temperature", vitalsTemp),
+                                  _DetailRowData("Blood Pressure", vitalsBp),
+                                  _DetailRowData("Heart Rate", vitalsHr),
+                                  _DetailRowData("Respiratory Rate", vitalsRr),
+                                  _DetailRowData("Blood Sugar", vitalsSugar),
+                                ],
+                              ),
+                              const Gap(16),
+                              _SubGroupTitle(text: "SINBAD", isDark: isDark),
+                              _DetailPairTable(
+                                isDark: isDark,
+                                rows: [
+                                  _DetailRowData("Site", sinbadSite),
+                                  _DetailRowData("Ischemia", sinbadIschemia),
+                                  _DetailRowData("Neuropathy", sinbadNeuropathy),
+                                  _DetailRowData("Infection", sinbadInfection),
+                                  _DetailRowData("Area", sinbadArea),
+                                  _DetailRowData("Depth", sinbadDepth),
+                                  _DetailRowData("Total Score", sinbadTotal),
+                                ],
+                              ),
                             ],
-                            onChanged: (v) => setState(() => diagnosis = v ?? diagnosis),
-                            decoration: InputDecoration(
-                              filled: true,
-                              fillColor: isDark ? const Color(0xFF0B1220) : const Color(0xFFF1F5F9),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
-                            ),
-                            icon: const Icon(Icons.expand_more),
+                          ),
+                          const Gap(14),
+
+                          _DataGroupCard(
+                            title: "Wound Basics",
+                            isDark: isDark,
+                            children: [
+                              _DetailPairTable(
+                                isDark: isDark,
+                                rows: [
+                                  _DetailRowData("Location Primary", woundLocationPrimary),
+                                  _DetailRowData("Location Detail", woundLocationDetail),
+                                  _DetailRowData("Wound Type", woundTypeText),
+                                  _DetailRowData("Shape", woundShapeText),
+                                ],
+                              ),
+                            ],
+                          ),
+                          const Gap(14),
+
+                          _DataGroupCard(
+                            title: "Size & Depth",
+                            isDark: isDark,
+                            children: [
+                              _DetailPairTable(
+                                isDark: isDark,
+                                rows: [
+                                  _DetailRowData("Width / Length", woundSizePair),
+                                  _DetailRowData("Depth Category", woundDepthCategory),
+                                ],
+                              ),
+                            ],
+                          ),
+                          const Gap(14),
+
+                          _DataGroupCard(
+                            title: "Tissue & Edge",
+                            isDark: isDark,
+                            children: [
+                              _DetailPairTable(
+                                isDark: isDark,
+                                rows: [
+                                  _DetailRowData("Bed Slough %", woundSlough),
+                                  _DetailRowData("Bed Necrotic %", woundNecrotic),
+                                  _DetailRowData("Edge Description", woundEdge),
+                                  _DetailRowData("Periwound Status", woundPeriwound),
+                                ],
+                              ),
+                            ],
+                          ),
+                          const Gap(14),
+
+                          _DataGroupCard(
+                            title: "Discharge & Symptoms",
+                            isDark: isDark,
+                            children: [
+                              _DetailPairTable(
+                                isDark: isDark,
+                                rows: [
+                                  _DetailRowData("Discharge Volume", woundDischargeVolume),
+                                  _DetailRowData("Discharge Type", woundDischargeType),
+                                  _DetailRowData("Odor Presence", woundOdor),
+                                  _DetailRowData("Pain Score", woundPain),
+                                  _DetailRowData("Has Infection", woundHasInfection),
+                                  _DetailRowData("Skin Condition", woundSkinCondition),
+                                ],
+                              ),
+                            ],
+                          ),
+                          const Gap(14),
+
+                          _DataGroupCard(
+                            title: "Advanced Inputs (WIfI / IDSA)",
+                            isDark: isDark,
+                            children: [
+                              _SubGroupTitle(text: "WIfI: Ischemia", isDark: isDark),
+                              _DetailPairTable(
+                                isDark: isDark,
+                                rows: [
+                                  _DetailRowData("Pulse Check", wifiPulseCheck),
+                                  _DetailRowData("Ischemia Checklist", wifiIschemiaChecklist),
+                                  _DetailRowData("Ischemia Points", wifiIschemiaPoints),
+                                  _DetailRowData("ABI", wifiAbi),
+                                  _DetailRowData("Ankle Pressure", wifiAnklePressure),
+                                  _DetailRowData("Toe Pressure", wifiToePressure),
+                                  _DetailRowData("TcPO2", wifiTcpo2),
+                                ],
+                              ),
+                              const Gap(16),
+                              _SubGroupTitle(text: "WIfI: Wound", isDark: isDark),
+                              _DetailPairTable(
+                                isDark: isDark,
+                                rows: [
+                                  _DetailRowData("Gangrene Extent", wifiGangreneExtent),
+                                  _DetailRowData("Depth Category", wifiWoundDepth),
+                                  _DetailRowData("Location Primary", wifiWoundLocation),
+                                ],
+                              ),
+                              const Gap(16),
+                              _SubGroupTitle(text: "IDSA: Infection", isDark: isDark),
+                              _DetailPairTable(
+                                isDark: isDark,
+                                rows: [
+                                  _DetailRowData("Infection Checklist", idsaChecklist),
+                                  _DetailRowData("Erythema Extent", idsaErythemaExtent),
+                                  _DetailRowData("Probe-to-Bone", idsaProbeToBone),
+                                  _DetailRowData(
+                                    "Deep Abscess/Fasciitis",
+                                    idsaDeepAbscess,
+                                  ),
+                                ],
+                              ),
+                              const Gap(16),
+                              _SubGroupTitle(text: "Neuropathy", isDark: isDark),
+                              _DetailPairTable(
+                                isDark: isDark,
+                                rows: [
+                                  _DetailRowData("Neuropathy Points", neuropathyPoints),
+                                ],
+                              ),
+                              const Gap(16),
+                              _SubGroupTitle(text: "Labs", isDark: isDark),
+                              _DetailPairTable(
+                                isDark: isDark,
+                                rows: [
+                                  _DetailRowData("WBC Count", labWbc),
+                                  _DetailRowData("CRP", labCrp),
+                                  _DetailRowData("ESR", labEsr),
+                                  _DetailRowData("Procalcitonin", labProcalcitonin),
+                                ],
+                              ),
+                              const Gap(16),
+                              _SubGroupTitle(text: "Advanced Inputs", isDark: isDark),
+                              _DetailPairTable(
+                                isDark: isDark,
+                                rows: [
+                                  _DetailRowData("Erythema Extent", advancedErythemaExtent),
+                                  _DetailRowData("Probe-to-Bone", advancedProbeToBone),
+                                  _DetailRowData(
+                                    "Deep Abscess/Fasciitis",
+                                    advancedDeepAbscess,
+                                  ),
+                                  _DetailRowData("Gangrene Extent", advancedGangreneExtent),
+                                ],
+                              ),
+                            ],
+                          ),
+                          const Gap(14),
+
+                          _DataGroupCard(
+                            title: "AI Results",
+                            isDark: isDark,
+                            children: [
+                              _SubGroupTitle(text: "AI Narrative", isDark: isDark),
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(14),
+                                decoration: BoxDecoration(
+                                  color: isDark
+                                      ? const Color(0xFF0B1220)
+                                      : const Color(0xFFF8FAFC),
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                child: Text(
+                                  aiNarrative,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    height: 1.45,
+                                    color: isDark ? Colors.white70 : Colors.black87,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              const Gap(16),
+                              _SubGroupTitle(text: "AI Classifications", isDark: isDark),
+                              _DetailPairTable(
+                                isDark: isDark,
+                                rows: [
+                                  _DetailRowData("IDSA Stage", aiIdsaStage),
+                                  _DetailRowData("WIfI Wound", aiWifiWound),
+                                  _DetailRowData("WIfI Ischemia", aiWifiIschemia),
+                                  _DetailRowData(
+                                    "WIfI Foot Infection",
+                                    aiWifiFootInfection,
+                                  ),
+                                  _DetailRowData(
+                                    "WIfI Clinical Stage",
+                                    aiWifiClinicalStage,
+                                  ),
+                                  _DetailRowData("SINBAD Total", aiSinbadTotal),
+                                ],
+                              ),
+                              const Gap(16),
+                              _SubGroupTitle(text: "SINBAD Breakdown", isDark: isDark),
+                              _DetailPairTable(
+                                isDark: isDark,
+                                rows: [
+                                  _DetailRowData("Site", aiSinbadSite),
+                                  _DetailRowData("Ischemia", aiSinbadIschemia),
+                                  _DetailRowData("Neuropathy", aiSinbadNeuropathy),
+                                  _DetailRowData("Infection", aiSinbadInfection),
+                                  _DetailRowData("Area", aiSinbadArea),
+                                  _DetailRowData("Depth", aiSinbadDepth),
+                                ],
+                              ),
+                            ],
                           ),
                         ],
                       ),
                     ),
-
-                    const Gap(12),
-
-                    _SectionCard(
-                      title: null,
-                      titleIcon: null,
-                      cs: cs,
-                      isDark: isDark,
-                      card: card,
-                      border: border,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            "CLINICAL NOTES",
-                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w900, color: isDark ? Colors.white54 : Colors.black45),
-                          ),
-                          const Gap(10),
-                          TextField(
-                            controller: notesCtrl,
-                            maxLines: 5,
-                            decoration: InputDecoration(
-                              hintText: "Add specific observation for the nurse...",
-                              filled: true,
-                              fillColor: isDark ? const Color(0xFF0B1220) : const Color(0xFFF1F5F9),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
                     const Gap(16),
                   ],
                 ),
@@ -338,58 +819,53 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
           ],
         ),
       ),
-
-      bottomNavigationBar: Container(
-        padding: const EdgeInsets.fromLTRB(16, 14, 16, 18),
-        decoration: BoxDecoration(
-          color: bg.withOpacity(0.95),
-          border: Border(top: BorderSide(color: border)),
-        ),
-        child: SafeArea(
-          top: false,
-          child: Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () {},
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    side: BorderSide(color: isDark ? Colors.white12 : Colors.black12),
-                  ),
-                  child: const Text("Save Draft", style: TextStyle(fontWeight: FontWeight.w900)),
-                ),
-              ),
-              const Gap(12),
-              Expanded(
-                flex: 2,
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => const TreatmentPlanDispatchScreen()));
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: cs.primary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                    elevation: 0,
-                  ),
-                  child: const Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text("Create Treatment Plan", style: TextStyle(fontWeight: FontWeight.w900)),
-                      SizedBox(width: 8),
-                      Icon(Icons.arrow_forward, size: 18),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
+}
+
+/* ---------------- helpers ---------------- */
+
+String _displayValue(dynamic v) {
+  if (v == null) return "-";
+  final s = v.toString().trim();
+  if (s.isEmpty) return "-";
+  return s;
+}
+
+String _yesNo(dynamic v) {
+  if (v == true) return "Yes";
+  if (v == false) return "No";
+
+  final s = v?.toString().toLowerCase().trim() ?? "";
+  if (s == "true" || s == "yes" || s == "y" || s == "1") return "Yes";
+  if (s == "false" || s == "no" || s == "n" || s == "0") return "No";
+  return s.isEmpty ? "-" : s;
+}
+
+String _joinList(dynamic v) {
+  if (v is List) {
+    final list =
+        v.map((e) => e.toString()).where((e) => e.trim().isNotEmpty).toList();
+    return list.isEmpty ? "-" : list.join(", ");
+  }
+  return _displayValue(v);
+}
+
+String _sizePair(dynamic width, dynamic length) {
+  final w = _displayValue(width);
+  final l = _displayValue(length);
+  if (w == "-" && l == "-") return "-";
+  return "$w cm / $l cm";
+}
+
+String _percentText(dynamic v) {
+  if (v == null) return "-";
+  return "${v.toString()}%";
+}
+
+String _painText(dynamic v) {
+  if (v == null) return "-";
+  return "${v.toString()}/10";
 }
 
 /* ---------------- UI building blocks ---------------- */
@@ -400,12 +876,15 @@ class _StatusBarMimic extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.fromLTRB(18, 10, 18, 0),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(18, 10, 18, 0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text("9:41", style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13)),
+        children: const [
+          Text(
+            "9:41",
+            style: TextStyle(fontWeight: FontWeight.w800, fontSize: 13),
+          ),
           Row(
             children: [
               Icon(Icons.signal_cellular_alt, size: 18),
@@ -414,7 +893,7 @@ class _StatusBarMimic extends StatelessWidget {
               SizedBox(width: 6),
               Icon(Icons.battery_full, size: 18),
             ],
-          )
+          ),
         ],
       ),
     );
@@ -430,9 +909,11 @@ class _Header extends StatelessWidget {
     required this.onBack,
     required this.onMore,
     required this.patientName,
+    required this.title,
     required this.caseIdText,
     required this.tag1,
     required this.tag2,
+    required this.tag2IsHigh,
   });
 
   final ColorScheme cs;
@@ -441,11 +922,12 @@ class _Header extends StatelessWidget {
   final Color border;
   final VoidCallback onBack;
   final VoidCallback onMore;
-
   final String patientName;
+  final String title;
   final String caseIdText;
   final String tag1;
   final String tag2;
+  final bool tag2IsHigh;
 
   @override
   Widget build(BuildContext context) {
@@ -455,11 +937,25 @@ class _Header extends StatelessWidget {
         children: [
           Row(
             children: [
-              _CircleIconButton(icon: Icons.chevron_left, onTap: onBack, card: card, border: border),
+              _CircleIconButton(
+                icon: Icons.chevron_left,
+                onTap: onBack,
+                card: card,
+                border: border,
+              ),
               const Spacer(),
-              const Text("Case Review", style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900)),
+              Text(
+                title,
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+              ),
               const Spacer(),
-              _CircleIconButton(icon: Icons.more_horiz, onTap: onMore, card: card, border: border, iconColor: cs.primary),
+              _CircleIconButton(
+                icon: Icons.more_horiz,
+                onTap: onMore,
+                card: card,
+                border: border,
+                iconColor: cs.primary,
+              ),
             ],
           ),
           const Gap(16),
@@ -472,7 +968,10 @@ class _Header extends StatelessWidget {
                   color: isDark ? Colors.white10 : Colors.black.withOpacity(0.06),
                   borderRadius: BorderRadius.circular(18),
                 ),
-                child: Icon(Icons.person, color: isDark ? Colors.white38 : Colors.black38),
+                child: Icon(
+                  Icons.person,
+                  color: isDark ? Colors.white38 : Colors.black38,
+                ),
               ),
               const Gap(12),
               Expanded(
@@ -494,12 +993,15 @@ class _Header extends StatelessWidget {
                       children: [
                         _Tag(text: caseIdText, tone: TagTone.blue),
                         _Tag(text: tag1, tone: TagTone.orange),
-                        _Tag(text: tag2, tone: tag2.toUpperCase().contains("HIGH") ? TagTone.red : TagTone.orange),
+                        _Tag(
+                          text: tag2,
+                          tone: tag2IsHigh ? TagTone.red : TagTone.orange,
+                        ),
                       ],
-                    )
+                    ),
                   ],
                 ),
-              )
+              ),
             ],
           ),
         ],
@@ -543,7 +1045,12 @@ class _CircleIconButton extends StatelessWidget {
 }
 
 class _SectionTitle extends StatelessWidget {
-  const _SectionTitle({required this.icon, required this.text, required this.isDark});
+  const _SectionTitle({
+    required this.icon,
+    required this.text,
+    required this.isDark,
+  });
+
   final IconData icon;
   final String text;
   final bool isDark;
@@ -602,7 +1109,11 @@ class _SectionCard extends StatelessWidget {
           if (title != null && titleIcon != null) ...[
             Row(
               children: [
-                Icon(titleIcon, size: 18, color: isDark ? Colors.white54 : Colors.black45),
+                Icon(
+                  titleIcon,
+                  size: 18,
+                  color: isDark ? Colors.white54 : Colors.black45,
+                ),
                 const Gap(8),
                 Text(
                   title!.toUpperCase(),
@@ -625,7 +1136,12 @@ class _SectionCard extends StatelessWidget {
 }
 
 class _KeyVal extends StatelessWidget {
-  const _KeyVal({required this.title, required this.value, required this.isDark});
+  const _KeyVal({
+    required this.title,
+    required this.value,
+    required this.isDark,
+  });
+
   final String title;
   final String value;
   final bool isDark;
@@ -637,10 +1153,17 @@ class _KeyVal extends StatelessWidget {
       children: [
         Text(
           title.toUpperCase(),
-          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: isDark ? Colors.white54 : Colors.black45),
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w900,
+            color: isDark ? Colors.white54 : Colors.black45,
+          ),
         ),
         const Gap(4),
-        Text(value, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+        Text(
+          value,
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+        ),
       ],
     );
   }
@@ -659,7 +1182,10 @@ class _Pill extends StatelessWidget {
         color: isDark ? Colors.white10 : const Color(0xFFF1F5F9),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: Text(text, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+      child: Text(
+        text,
+        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+      ),
     );
   }
 }
@@ -671,10 +1197,15 @@ class _TimelineCard extends StatelessWidget {
     required this.border,
     required this.primary,
     required this.latest,
+    required this.selected,
     required this.date,
+    required this.imageUrl,
     required this.area,
     required this.note,
     required this.areaIsBad,
+    required this.latestLabel,
+    required this.areaLabel,
+    required this.onTap,
     this.subtitle,
   });
 
@@ -683,146 +1214,271 @@ class _TimelineCard extends StatelessWidget {
   final Color border;
   final Color primary;
   final bool latest;
+  final bool selected;
   final String date;
+  final String imageUrl;
   final String? subtitle;
   final String area;
   final String note;
   final bool areaIsBad;
+  final String latestLabel;
+  final String areaLabel;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: latest ? 280 : 240,
-      decoration: BoxDecoration(
-        color: card,
+    final effectiveBorderColor = selected ? primary : (latest ? primary : border);
+    final effectiveBorderWidth = selected ? 3.0 : (latest ? 2.0 : 1.0);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: latest ? primary : border, width: latest ? 2 : 1),
-      ),
-      child: Column(
-        children: [
-          Expanded(
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: ClipRRect(
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-                    child: Image.network(
-                      'https://blog.wcei.net/wp-content/uploads/2019/03/diabetic_foot_ulcer.jpg',
-                      fit: BoxFit.cover, // Ensures the image fills the space properly
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        color: isDark ? Colors.white10 : Colors.black.withOpacity(0.06),
-                        child: Icon(Icons.broken_image, size: 44, color: isDark ? Colors.white30 : Colors.black26),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          width: latest ? 280 : 240,
+          decoration: BoxDecoration(
+            color: card,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: effectiveBorderColor,
+              width: effectiveBorderWidth,
+            ),
+            boxShadow: selected
+                ? [
+                    BoxShadow(
+                      color: primary.withOpacity(0.18),
+                      blurRadius: 18,
+                      spreadRadius: -4,
+                      offset: const Offset(0, 8),
+                    ),
+                  ]
+                : null,
+          ),
+          child: Column(
+            children: [
+              Expanded(
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: ClipRRect(
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(24),
+                        ),
+                        child: imageUrl.isEmpty
+                            ? Container(
+                                color: isDark
+                                    ? Colors.white10
+                                    : Colors.black.withOpacity(0.06),
+                                child: Icon(
+                                  Icons.image_not_supported_outlined,
+                                  size: 44,
+                                  color: isDark ? Colors.white30 : Colors.black26,
+                                ),
+                              )
+                            : Image.network(
+                                imageUrl,
+                                fit: BoxFit.cover,
+                                errorBuilder: (context, error, stackTrace) =>
+                                    Container(
+                                  color: isDark
+                                      ? Colors.white10
+                                      : Colors.black.withOpacity(0.06),
+                                  child: Icon(
+                                    Icons.broken_image,
+                                    size: 44,
+                                    color: isDark ? Colors.white30 : Colors.black26,
+                                  ),
+                                ),
+                              ),
                       ),
                     ),
-                  ),
-                ),// ✅ placeholder image block
-                Container(
-                  decoration: BoxDecoration(
-                    color: isDark ? Colors.white10 : Colors.black.withOpacity(0.06),
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-                  ),
-                  child: Center(child: Icon(Icons.image, size: 44, color: isDark ? Colors.white30 : Colors.black26)),
-                ),
-                Positioned(
-                  left: 14,
-                  bottom: 14,
-                  right: 14,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(date, style: TextStyle(color: Colors.white, fontSize: latest ? 18 : 14, fontWeight: FontWeight.w900)),
-                      if (subtitle != null) ...[
-                        const Gap(4),
-                        Text(subtitle!, style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.w600)),
-                      ],
-                    ],
-                  ),
-                ),
-                Container(
-                  decoration: BoxDecoration(
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-                    gradient: LinearGradient(
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
-                      colors: [Colors.black.withOpacity(0.10), Colors.black.withOpacity(latest ? 0.60 : 0.40)],
+                    Container(
+                      decoration: BoxDecoration(
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(24),
+                        ),
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.black.withOpacity(0.10),
+                            Colors.black.withOpacity(latest ? 0.60 : 0.40),
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
-                ),
-                if (latest)
-                  Positioned(
-                    top: 12,
-                    right: 12,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      decoration: BoxDecoration(color: primary, borderRadius: BorderRadius.circular(999)),
-                      child: const Text("LATEST", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w900, letterSpacing: 0.7)),
+                    Positioned(
+                      left: 14,
+                      bottom: 14,
+                      right: 14,
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            date,
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: latest ? 18 : 14,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          if (subtitle != null) ...[
+                            const Gap(4),
+                            Text(
+                              subtitle!,
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
-                  ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text("Area (Est.)", style: TextStyle(fontSize: 12, color: isDark ? Colors.white54 : Colors.black45, fontWeight: FontWeight.w700)),
-                    Row(
-                      children: [
-                        Text(
-                          area,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w900,
-                            color: areaIsBad ? const Color(0xFFEF4444) : (isDark ? Colors.white : const Color(0xFF0F172A)),
+                    if (latest)
+                      Positioned(
+                        top: 12,
+                        right: 12,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: primary,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            latestLabel.toUpperCase(),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.7,
+                            ),
                           ),
                         ),
-                        if (areaIsBad) ...[
-                          const Gap(4),
-                          const Icon(Icons.trending_up, size: 16, color: Color(0xFFEF4444)),
-                        ]
+                      ),
+                    if (selected)
+                      Positioned(
+                        top: latest ? 44 : 12,
+                        right: 12,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            "SELECTED",
+                            style: TextStyle(
+                              color: primary,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 0.7,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          areaLabel,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: isDark ? Colors.white54 : Colors.black45,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        Row(
+                          children: [
+                            Text(
+                              area,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w900,
+                                color: areaIsBad
+                                    ? const Color(0xFFEF4444)
+                                    : (isDark
+                                        ? Colors.white
+                                        : const Color(0xFF0F172A)),
+                              ),
+                            ),
+                            if (areaIsBad) ...[
+                              const Gap(4),
+                              const Icon(
+                                Icons.trending_up,
+                                size: 16,
+                                color: Color(0xFFEF4444),
+                              ),
+                            ],
+                          ],
+                        ),
                       ],
+                    ),
+                    const Gap(10),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(999),
+                      child: LinearProgressIndicator(
+                        value: latest ? 0.75 : 0.45,
+                        minHeight: 6,
+                        backgroundColor: isDark ? Colors.white10 : Colors.black12,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          areaIsBad ? const Color(0xFFEF4444) : primary,
+                        ),
+                      ),
+                    ),
+                    const Gap(10),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: isDark
+                            ? primary.withOpacity(0.12)
+                            : primary.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: primary.withOpacity(0.20)),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.auto_awesome, size: 18, color: primary),
+                          const Gap(8),
+                          Expanded(
+                            child: Text(
+                              note,
+                              maxLines: 5,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                height: 1.35,
+                                color: isDark ? Colors.white70 : Colors.black54,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
-                const Gap(10),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(999),
-                  child: LinearProgressIndicator(
-                    value: latest ? 0.75 : 0.45,
-                    minHeight: 6,
-                    backgroundColor: isDark ? Colors.white10 : Colors.black12,
-                    valueColor: AlwaysStoppedAnimation<Color>(areaIsBad ? const Color(0xFFEF4444) : primary),
-                  ),
-                ),
-                const Gap(10),
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: isDark ? primary.withOpacity(0.12) : primary.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: primary.withOpacity(0.20)),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.auto_awesome, size: 18, color: primary),
-                      const Gap(8),
-                      Expanded(
-                        child: Text(
-                          note,
-                          style: TextStyle(fontSize: 12, height: 1.35, color: isDark ? Colors.white70 : Colors.black54, fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -835,6 +1491,11 @@ class _AiAnalysisCard extends StatelessWidget {
     required this.onReviewAi,
     required this.aiText,
     required this.confidenceText,
+    required this.title,
+    required this.metricConfidence,
+    required this.metricAiDraft,
+    required this.aiDraftValue,
+    required this.cta,
   });
 
   final bool isDark;
@@ -842,6 +1503,11 @@ class _AiAnalysisCard extends StatelessWidget {
   final VoidCallback onReviewAi;
   final String aiText;
   final String confidenceText;
+  final String title;
+  final String metricConfidence;
+  final String metricAiDraft;
+  final String aiDraftValue;
+  final String cta;
 
   @override
   Widget build(BuildContext context) {
@@ -859,11 +1525,22 @@ class _AiAnalysisCard extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.insights, color: isDark ? Colors.lightBlueAccent : const Color(0xFF1D4ED8)),
+              Icon(
+                Icons.insights,
+                color: isDark
+                    ? Colors.lightBlueAccent
+                    : const Color(0xFF1D4ED8),
+              ),
               const Gap(8),
               Text(
-                "AI Analysis",
-                style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: isDark ? Colors.lightBlueAccent : const Color(0xFF1D4ED8)),
+                title,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w900,
+                  color: isDark
+                      ? Colors.lightBlueAccent
+                      : const Color(0xFF1D4ED8),
+                ),
               ),
             ],
           ),
@@ -872,14 +1549,31 @@ class _AiAnalysisCard extends StatelessWidget {
             aiText,
             maxLines: 6,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 13, height: 1.5, color: isDark ? Colors.white70 : Colors.black54, fontWeight: FontWeight.w600),
+            style: TextStyle(
+              fontSize: 13,
+              height: 1.5,
+              color: isDark ? Colors.white70 : Colors.black54,
+              fontWeight: FontWeight.w600,
+            ),
           ),
           const Gap(14),
           Row(
             children: [
-              Expanded(child: _MetricBox(title: "Confidence", value: confidenceText, isDark: isDark)),
+              Expanded(
+                child: _MetricBox(
+                  title: metricConfidence,
+                  value: confidenceText,
+                  isDark: isDark,
+                ),
+              ),
               const Gap(12),
-              Expanded(child: _MetricBox(title: "AI Draft", value: "Ready", isDark: isDark)),
+              Expanded(
+                child: _MetricBox(
+                  title: metricAiDraft,
+                  value: aiDraftValue,
+                  isDark: isDark,
+                ),
+              ),
             ],
           ),
           const Gap(12),
@@ -899,9 +1593,18 @@ class _AiAnalysisCard extends StatelessWidget {
                 children: [
                   Icon(Icons.biotech, color: primary),
                   const Gap(8),
-                  Text("Review AI Analysis", style: TextStyle(color: primary, fontWeight: FontWeight.w900)),
+                  Text(
+                    cta,
+                    style: TextStyle(
+                      color: primary,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
                   const Gap(6),
-                  Icon(Icons.chevron_right, color: primary.withOpacity(0.5)),
+                  Icon(
+                    Icons.chevron_right,
+                    color: primary.withOpacity(0.5),
+                  ),
                 ],
               ),
             ),
@@ -913,7 +1616,12 @@ class _AiAnalysisCard extends StatelessWidget {
 }
 
 class _MetricBox extends StatelessWidget {
-  const _MetricBox({required this.title, required this.value, required this.isDark});
+  const _MetricBox({
+    required this.title,
+    required this.value,
+    required this.isDark,
+  });
+
   final String title;
   final String value;
   final bool isDark;
@@ -929,11 +1637,148 @@ class _MetricBox extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(title.toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: isDark ? Colors.white60 : Colors.black45)),
+          Text(
+            title.toUpperCase(),
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w900,
+              color: isDark ? Colors.white60 : Colors.black45,
+            ),
+          ),
           const Gap(6),
-          Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900)),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
+          ),
         ],
       ),
+    );
+  }
+}
+
+class _DetailRowData {
+  final String label;
+  final String value;
+
+  const _DetailRowData(this.label, this.value);
+}
+
+class _DataGroupCard extends StatelessWidget {
+  const _DataGroupCard({
+    required this.title,
+    required this.isDark,
+    required this.children,
+  });
+
+  final String title;
+  final bool isDark;
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF111827) : const Color(0xFFFCFCFD),
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(
+          color: isDark ? const Color(0xFF273449) : const Color(0xFFE5E7EB),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
+              color: Color(0xFF0F9D8A),
+            ),
+          ),
+          const Gap(14),
+          ...children,
+        ],
+      ),
+    );
+  }
+}
+
+class _SubGroupTitle extends StatelessWidget {
+  const _SubGroupTitle({
+    required this.text,
+    required this.isDark,
+  });
+
+  final String text;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w900,
+          color: isDark ? const Color(0xFF2DD4BF) : const Color(0xFF0F9D8A),
+        ),
+      ),
+    );
+  }
+}
+
+class _DetailPairTable extends StatelessWidget {
+  const _DetailPairTable({
+    required this.rows,
+    required this.isDark,
+  });
+
+  final List<_DetailRowData> rows;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: rows
+          .map(
+            (r) => Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    flex: 5,
+                    child: Text(
+                      r.label,
+                      style: TextStyle(
+                        fontSize: 14,
+                        height: 1.35,
+                        color: isDark ? Colors.white54 : Colors.black45,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  const Gap(14),
+                  Expanded(
+                    flex: 7,
+                    child: Text(
+                      r.value,
+                      style: TextStyle(
+                        fontSize: 14,
+                        height: 1.35,
+                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          )
+          .toList(),
     );
   }
 }
@@ -941,7 +1786,11 @@ class _MetricBox extends StatelessWidget {
 enum TagTone { blue, orange, red }
 
 class _Tag extends StatelessWidget {
-  const _Tag({required this.text, required this.tone});
+  const _Tag({
+    required this.text,
+    required this.tone,
+  });
+
   final String text;
   final TagTone tone;
 
@@ -950,15 +1799,34 @@ class _Tag extends StatelessWidget {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     final (bg, fg) = switch (tone) {
-      TagTone.blue => (isDark ? const Color(0x332563EB) : const Color(0xFFDBEAFE), isDark ? const Color(0xFF93C5FD) : const Color(0xFF2563EB)),
-      TagTone.orange => (isDark ? const Color(0x334F2A0B) : const Color(0xFFFFEDD5), isDark ? const Color(0xFFFDBA74) : const Color(0xFFEA580C)),
-      TagTone.red => (isDark ? const Color(0x337F1D1D) : const Color(0xFFFEE2E2), isDark ? const Color(0xFFFCA5A5) : const Color(0xFFDC2626)),
+      TagTone.blue => (
+          isDark ? const Color(0x332563EB) : const Color(0xFFDBEAFE),
+          isDark ? const Color(0xFF93C5FD) : const Color(0xFF2563EB)
+        ),
+      TagTone.orange => (
+          isDark ? const Color(0x334F2A0B) : const Color(0xFFFFEDD5),
+          isDark ? const Color(0xFFFDBA74) : const Color(0xFFEA580C)
+        ),
+      TagTone.red => (
+          isDark ? const Color(0x337F1D1D) : const Color(0xFFFEE2E2),
+          isDark ? const Color(0xFFFCA5A5) : const Color(0xFFDC2626)
+        ),
     };
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(color: bg, borderRadius: BorderRadius.circular(999)),
-      child: Text(text, style: TextStyle(color: fg, fontSize: 12, fontWeight: FontWeight.w800)),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          color: fg,
+          fontSize: 12,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
     );
   }
 }

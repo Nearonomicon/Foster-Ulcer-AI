@@ -2,7 +2,7 @@ part of '../widgets/main_navigation_screen.dart';
 
 extension _CasesPage on _MainNavigationScreenState {
   Widget _buildCasesTab() {
-    if (_caseItems.isEmpty && !_casesLoading && _casesError == null) {
+    if (!_casesFetchedOnce && !_casesLoading) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _fetchCasesList());
     }
     final q = _patientSearchQuery.trim().toLowerCase();
@@ -49,32 +49,44 @@ extension _CasesPage on _MainNavigationScreenState {
           ]),
         ),
         Expanded(
-          child: Builder(
-            builder: (context) {
-              if (_casesLoading) {
-                return const Center(child: CircularProgressIndicator(color: Color(0xFF0D9488)));
-              }
-              if (_casesError != null) {
-                return Center(child: Text(_casesError!, style: const TextStyle(color: Colors.redAccent)));
-              }
-              if (_caseItems.isEmpty) {
-                return const Center(child: Text("No cases found."));
-              }
-              return ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 24),
-                itemCount: filtered.length,
-                itemBuilder: (context, index) => _buildPatientListTile(
-                  filtered[index],
-                  onTap: () async {
-                    final caseId = filtered[index]['case_id'] ?? filtered[index]['id'];
-                    if (caseId == null) return;
-                    final ok = await _fetchCaseDetail(caseId.toString());
-                    if (!ok || !mounted) return;
-                    _navigateTo('case_detail', patient: filtered[index]);
-                  },
-                ),
-              );
+          child: RefreshIndicator(
+            color: const Color(0xFF0D9488),
+            onRefresh: () async {
+              await _fetchCasesList();
             },
+            child: Builder(
+              builder: (context) {
+                if (_casesLoading) {
+                  return const Center(child: CircularProgressIndicator(color: Color(0xFF0D9488)));
+                }
+                if (_casesError != null) {
+                  return Center(child: Text(_casesError!, style: const TextStyle(color: Colors.redAccent)));
+                }
+                if (_caseItems.isEmpty) {
+                  return ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    children: const [Center(child: Padding(padding: EdgeInsets.only(top: 80), child: Text("No cases found.")))],
+                  );
+                }
+                return ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  itemCount: filtered.length,
+                  itemBuilder: (context, index) => _buildPatientListTile(
+                    filtered[index],
+                    onTap: () async {
+                      final caseId = filtered[index]['case_id'] ?? filtered[index]['id'];
+                      if (caseId == null) return;
+                      _previousStep = 'dashboard';
+                      _previousTab = _activeTab;
+                      final ok = await _fetchCaseDetail(caseId.toString());
+                      if (!ok || !mounted) return;
+                      _navigateTo('case_detail', patient: filtered[index]);
+                    },
+                  ),
+                );
+              },
+            ),
           ),
         ),
       ],

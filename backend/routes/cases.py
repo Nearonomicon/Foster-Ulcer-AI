@@ -47,7 +47,6 @@ def _current_record_snapshot(record_data: dict) -> dict:
         "current_vascular": record_data.get("vascular"),
         "current_analysis": record_data.get("analysis"),
         "current_treatment_plan": record_data.get("treatment_plan"),
-        "current_task_list": record_data.get("task_list"),
     }
 
 
@@ -355,11 +354,19 @@ async def update_case(payload: UpdateCaseRequest):
         record_doc_ref = case_ref.collection("records").document(record_id)
         record_doc_data = _model_to_dict(case_record)
 
-        latest_query = case_ref.collection("records").order_by(
-            "record_created_at", direction=firestore.Query.DESCENDING
-        ).limit(1)
-        latest_docs = list(latest_query.stream())
-        latest_record_data = latest_docs[0].to_dict() if latest_docs else {}
+        latest_record_data = {}
+        current_record_id = case_data.get("current_record_id")
+        if current_record_id:
+            current_record_ref = case_ref.collection("records").document(current_record_id)
+            current_record_snapshot = current_record_ref.get()
+            if current_record_snapshot.exists:
+                latest_record_data = current_record_snapshot.to_dict() or {}
+        if not latest_record_data:
+            latest_query = case_ref.collection("records").order_by(
+                "record_created_at", direction=firestore.Query.DESCENDING
+            ).limit(1)
+            latest_docs = list(latest_query.stream())
+            latest_record_data = latest_docs[0].to_dict() if latest_docs else {}
         record_doc_data = _merge_sections(
             latest_record_data,
             record_doc_data,
@@ -378,6 +385,22 @@ async def update_case(payload: UpdateCaseRequest):
                 "analysis",
             ],
         )
+        if _is_all_null(record_doc_data.get("vital_signs")) and latest_record_data.get("vital_signs"):
+            record_doc_data["vital_signs"] = latest_record_data.get("vital_signs")
+        # Duplicate latest treatment plan with a new plan_id for this follow-up record
+        latest_plan = latest_record_data.get("treatment_plan")
+        new_plan_id = None
+        duplicated_plan = None
+        if latest_plan:
+            new_plan_id = f"PL-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+            duplicated_plan = dict(latest_plan)
+            duplicated_plan["plan_id"] = new_plan_id
+            plan_tasks = duplicated_plan.get("plan_tasks")
+            if isinstance(plan_tasks, list):
+                duplicated_plan["plan_tasks"] = [
+                    dict(task) if isinstance(task, dict) else {} for task in plan_tasks
+                ]
+            record_doc_data["treatment_plan"] = duplicated_plan
 
         batch = db.batch()
         case_update = {
@@ -386,11 +409,39 @@ async def update_case(payload: UpdateCaseRequest):
             "case_updated_at": created_at,
             "current_record_id": record_id,
             "current_analysis_id": None,
-            "current_plan_id": None,
+            "current_plan_id": new_plan_id,
         }
         case_update.update(_current_record_snapshot(record_doc_data))
         batch.set(case_ref, case_update, merge=True)
         batch.set(record_doc_ref, record_doc_data, merge=True)
+
+        if duplicated_plan and new_plan_id:
+            plan_ref = record_doc_ref.collection("plan_versions").document(new_plan_id)
+            batch.set(plan_ref, {
+                "plan_id": new_plan_id,
+                "case_id": case_id,
+                "record_id": record_id,
+                "created_at": firestore.SERVER_TIMESTAMP,
+                "status": duplicated_plan.get("status") or "DRAFT",
+                "plan_text": duplicated_plan.get("plan_text"),
+                "followup_days": duplicated_plan.get("followup_days"),
+            }, merge=True)
+            plan_tasks = duplicated_plan.get("plan_tasks") or []
+            for idx, task in enumerate(plan_tasks, start=1):
+                task_id = task.get("task_id") or f"TSK-{idx:04d}"
+                task_ref = plan_ref.collection("tasks").document(task_id)
+                batch.set(task_ref, {
+                    "task_id": task_id,
+                    "case_id": case_id,
+                    "record_id": record_id,
+                    "plan_id": new_plan_id,
+                    "created_at": firestore.SERVER_TIMESTAMP,
+                    "task_text": task.get("task_text"),
+                    "status": task.get("status"),
+                    "task_due": task.get("task_due"),
+                    "completed_at": task.get("completed_at"),
+                    "task_photo_url": task.get("task_photo_url"),
+                }, merge=True)
         batch.commit()
 
         return {
@@ -556,6 +607,7 @@ async def send_to_doctor(payload: WoundCaseRecordUpdate):
         }
 
         treatment_plan = payload_dict.get("treatment_plan") or {}
+        treatment_plan["plan_id"] = plan_id
         plan_data = {
             "plan_id": plan_id,
             "case_id": case_id,
@@ -567,6 +619,18 @@ async def send_to_doctor(payload: WoundCaseRecordUpdate):
         }
 
         tasks = payload_dict.get("task_list") or treatment_plan.get("plan_tasks") or []
+        enriched_tasks = []
+        for idx, task in enumerate(tasks, start=1):
+            task = dict(task) if isinstance(task, dict) else {}
+            if not task.get("task_id"):
+                task["task_id"] = f"TSK-{idx:04d}"
+            if "completed_at" not in task:
+                task["completed_at"] = None
+            enriched_tasks.append(task)
+        treatment_plan["plan_tasks"] = enriched_tasks
+        tasks = enriched_tasks
+
+        record_data["treatment_plan"] = treatment_plan
 
         batch = db.batch()
         case_update = {
@@ -584,7 +648,7 @@ async def send_to_doctor(payload: WoundCaseRecordUpdate):
         batch.set(plan_ref, plan_data, merge=True)
 
         for idx, task in enumerate(tasks, start=1):
-            task_id = f"TSK-{idx:04d}"
+            task_id = task.get("task_id") or f"TSK-{idx:04d}"
             task_ref = plan_ref.collection("tasks").document(task_id)
             batch.set(task_ref, {
                 "task_id": task_id,
@@ -595,6 +659,7 @@ async def send_to_doctor(payload: WoundCaseRecordUpdate):
                 "task_text": task.get("task_text"),
                 "status": task.get("status"),
                 "task_due": task.get("task_due"),
+                "completed_at": task.get("completed_at"),
             }, merge=True)
 
         batch.commit()

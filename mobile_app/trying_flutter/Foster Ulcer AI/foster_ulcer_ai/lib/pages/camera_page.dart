@@ -27,7 +27,7 @@ extension _CameraPage on _MainNavigationScreenState {
             children: [
               CircleAvatar(
                 backgroundColor: Colors.black38,
-                child: IconButton(icon: const Icon(LucideIcons.x, color: Colors.white), onPressed: () => _navigateTo('dashboard')),
+                child: IconButton(icon: const Icon(LucideIcons.x, color: Colors.white), onPressed: () => _navigateTo('vital_check_page')),
               ),
               ElevatedButton.icon(
                 onPressed: () => _pickImage(ImageSource.gallery),

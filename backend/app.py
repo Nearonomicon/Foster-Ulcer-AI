@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from routes.patients import router as patients_router
 from routes.cases import router as cases_router
 from routes.analysis import router as analysis_router
+from routes.task import router as tasks_router
 
 
 app = FastAPI(title="Wound Care AI Analysis API")
@@ -96,3 +97,4 @@ async def load_dashboard():
 app.include_router(patients_router)
 app.include_router(cases_router)
 app.include_router(analysis_router)
+app.include_router(tasks_router)

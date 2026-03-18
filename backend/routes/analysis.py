@@ -56,6 +56,15 @@ async def fill_in(
                 "image": {"image_folder_url": image_url},
                 "record_updated_at": firestore.SERVER_TIMESTAMP,
             }, merge=True)
+            case_ref = db.collection("cases").document(case_id)
+            case_doc = case_ref.get()
+            if case_doc.exists:
+                case_data = case_doc.to_dict() or {}
+                if case_data.get("current_record_id") == record_id:
+                    case_ref.set({
+                        "current_image": {"image_folder_url": image_url},
+                        "case_updated_at": firestore.SERVER_TIMESTAMP,
+                    }, merge=True)
         except Exception as e:
             print(f"analyze-fillin warning: failed to update record image url: {e}")
 

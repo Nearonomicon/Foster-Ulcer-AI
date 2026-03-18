@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'timeline_image.dart';
 
 /// Mobile / Desktop implementation
 Widget buildTimelineImageImpl({

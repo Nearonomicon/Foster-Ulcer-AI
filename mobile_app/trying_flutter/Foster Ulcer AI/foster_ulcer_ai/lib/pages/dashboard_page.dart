@@ -83,6 +83,9 @@ extension _DashboardPage on _MainNavigationScreenState {
         OutlinedButton.icon(
           onPressed: () {
             _followUpFlow = true;
+            _resetCaseInputs();
+            _clearVitalsInfo();
+            _resetAssessmentInputs();
             _navigateTo('patient_search');
           },
           icon: const Icon(LucideIcons.search),

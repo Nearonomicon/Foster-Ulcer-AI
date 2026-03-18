@@ -137,6 +137,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   }
 
   String _currentStep = 'dashboard';
+  String _previousStep = 'dashboard';
+  int _previousTab = 0;
+  String _taskDetailReturnStep = 'dashboard';
+  int _taskDetailReturnTab = 0;
   final TextEditingController _patientSearchCtrl = TextEditingController();
   String _patientSearchQuery = "";
   final Map<String, dynamic> _patientProfile = {};
@@ -222,9 +226,31 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     _capturedImage = null;
     _capturedImageBytes = null;
   }
+
+  void _resetAssessmentInputs() {
+    _sinbadSite = null;
+    _sinbadIschemia = null;
+    _sinbadNeuropathy = null;
+    _sinbadInfection = null;
+    _sinbadArea = null;
+    _sinbadDepth = null;
+    _sinbadScoreLast = 0;
+    _neuropathyPoints.clear();
+    _ischemiaPoints.clear();
+    _ischemiaChecklist.clear();
+    _ischemiaPulse = null;
+    _infectionChecklist.clear();
+    _fillinReviewed = false;
+    _fillinExpanded = false;
+    _sinbadHelpExpanded.clear();
+    _showInflammatoryLabs = false;
+    _showDeepInfectionIndicators = false;
+    _showObjectiveIschemia = false;
+  }
   List<Map<String, dynamic>> _caseItems = [];
   bool _casesLoading = false;
   String? _casesError;
+  bool _casesFetchedOnce = false;
   String? _casesFilterPatientId;
   Map<String, dynamic>? _caseDetail;
   Map<String, dynamic>? _caseDetailPatientProfile;
@@ -235,17 +261,34 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   String _caseDetailTab = 'specs';
   bool _caseDetailShowWoundDetails = false;
   final ScrollController _caseDetailTimelineCtrl = ScrollController();
+  bool _tasksLoading = false;
+  String? _tasksError;
+  List<Map<String, dynamic>> _tasksItems = [];
+  bool _tasksIsFlat = false;
+  bool _tasksFetchedOnce = false;
   List<Map<String, dynamic>> _patientItems = [];
   bool _patientsLoading = false;
   String? _patientsError;
+  bool _patientsFetchedOnce = false;
     // =========================
   // Task Detail (NEW)
   // =========================
   int? _selectedTaskPatientIndex;
   int? _selectedTaskIndex;
+  String _tasksViewMode = 'plan';
+  String _tasksStatusQuery = '';
+  String _tasksSearchQuery = '';
+  String _tasksTreatmentStatus = 'ALL';
+  String _tasksTaskStatus = 'ALL';
   XFile? _taskEvidencePhotoTemp; // temp holder (optional)
+  Map<String, dynamic>? _selectedTask;
+  Map<String, dynamic>? _selectedTaskPatient;
+  final Map<String, bool> _tasksExpandedByCase = {};
+  final Map<String, bool> _taskDetailExpandedById = {};
+  final Map<String, bool> _taskDetailSelectedById = {};
 
   Map<String, dynamic>? _getSelectedTask() {
+    if (_selectedTask != null) return _selectedTask;
     if (_selectedTaskPatientIndex == null || _selectedTaskIndex == null) return null;
     final p = _patients[_selectedTaskPatientIndex!];
     final aiJson = p['ai_wound_json'];
@@ -257,11 +300,50 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   }
 
   Map<String, dynamic>? _getSelectedTaskPatient() {
+    if (_selectedTaskPatient != null) return _selectedTaskPatient;
     if (_selectedTaskPatientIndex == null) return null;
     return _patients[_selectedTaskPatientIndex!];
   }
 
-  Future<void> _pickTaskEvidencePhoto(ImageSource source) async {
+  Future<bool> _taskUpdateApi({
+    required String caseId,
+    String? planId,
+    required List<Map<String, dynamic>> updates,
+    List<File>? images,
+  }) async {
+    if (updates.isEmpty) return false;
+    final req = http.MultipartRequest('POST', _taskUpdateUri);
+    req.fields['case_id'] = caseId;
+    if (planId != null && planId.isNotEmpty) {
+      req.fields['plan_id'] = planId;
+    }
+    req.fields['updates'] = jsonEncode(updates);
+    debugPrint("[REQUEST] POST /task_update fields=${req.fields} images=${images?.length ?? 0}");
+    if (images != null) {
+      for (final file in images) {
+        if (!await file.exists()) continue;
+        req.files.add(await http.MultipartFile.fromPath('images', file.path));
+      }
+    }
+    try {
+      final streamed = await req.send().timeout(const Duration(seconds: 30));
+      final resp = await http.Response.fromStream(streamed);
+      if (resp.statusCode != 200) {
+        throw Exception("task_update failed (${resp.statusCode}): ${resp.body}");
+      }
+      return true;
+    } catch (e) {
+      debugPrint("task_update error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Task update failed: $e"), backgroundColor: Colors.redAccent),
+        );
+      }
+      return false;
+    }
+  }
+
+  Future<void> _pickTaskEvidencePhoto(ImageSource source, Map<String, dynamic> task, String caseId, {String? planId}) async {
     final picker = ImagePicker();
     try {
       final XFile? image = await picker.pickImage(source: source, imageQuality: 75);
@@ -269,11 +351,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
       setState(() {
         _taskEvidencePhotoTemp = image;
-        final t = _getSelectedTask();
-        if (t != null) {
-          t['evidence_path'] = image.path; // store local file path (demo)
-          t['evidence_captured_at'] = _getFormattedTimestamp();
-        }
+        task['evidence_path'] = image.path; // local preview
+        task['evidence_captured_at'] = _getFormattedTimestamp();
       });
     } catch (e) {
       debugPrint("Error picking task evidence: $e");
@@ -285,21 +364,47 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     }
   }
 
-  void _completeSelectedTask() {
+  Future<void> _completeSelectedTask() async {
     final t = _getSelectedTask();
-    if (t == null) return;
+    final p = _getSelectedTaskPatient();
+    if (t == null || p == null) return;
+    final caseId = (p['case_id'] ?? '').toString();
+    final planId = (p['plan_id'] ?? p['current_treatment']?['plan_id'])?.toString();
+    if (caseId.isEmpty) return;
 
     final evidencePath = (t['evidence_path'] ?? '').toString();
-    if (evidencePath.isEmpty) {
+    final evidenceUrl = (t['task_photo_url'] ?? '').toString();
+    if (evidencePath.isEmpty && evidenceUrl.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Please take an evidence photo before completing."), backgroundColor: Colors.orange),
       );
       return;
     }
 
+    final taskId = (t['task_id'] ?? '').toString();
+    if (taskId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Missing task_id for completion."), backgroundColor: Colors.orange),
+      );
+      return;
+    }
+    final completedAt = _getFormattedTimestamp();
+    final updates = [
+      {
+        'task_id': taskId,
+        'updates': {
+          'status': "COMPLETED",
+          'completed_at': completedAt,
+        },
+      }
+    ];
+    final images = evidencePath.isNotEmpty ? [File(evidencePath)] : null;
+    final ok = await _taskUpdateApi(caseId: caseId, planId: planId, updates: updates, images: images);
+    if (!ok) return;
+
     setState(() {
-      t['status'] = "Completed";
-      t['completed_at'] = _getFormattedTimestamp();
+      t['status'] = "COMPLETED";
+      t['completed_at'] = completedAt;
     });
 
     ScaffoldMessenger.of(context).showSnackBar(
@@ -307,8 +412,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
-  // static const String _baseUrl = "http://10.0.2.2:8080";
-  static const String _baseUrl = "https://foster-ulcer-ai-backend-429230748709.asia-southeast3.run.app";
+  static const String _baseUrl = "http://10.0.2.2:8080";
+  // static const String _baseUrl = "https://foster-ulcer-ai-backend-429230748709.asia-southeast3.run.app";
   final Uri _fillinUri = Uri.parse("$_baseUrl/analyze-fillin");
   final Uri _analyzeWoundUri = Uri.parse("$_baseUrl/analyze-wound");
   final Uri _analyzeHealingUri = Uri.parse("$_baseUrl/analyze-healing");
@@ -318,6 +423,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   final Uri _updateCaseUri = Uri.parse("$_baseUrl/update_cases");
   final Uri _sendToDoctorUri = Uri.parse("$_baseUrl/send-to-doctor");
   final Uri _casesListUri = Uri.parse("$_baseUrl/cases_list");
+  final Uri _tasksListUri = Uri.parse("$_baseUrl/tasks_list");
+  final Uri _taskDetailUri = Uri.parse("$_baseUrl/task_detail");
+  final Uri _taskUpdateUri = Uri.parse("$_baseUrl/task_update");
   final Uri _caseDetailUri = Uri.parse("$_baseUrl/case_detail");
   final Uri _patientListUri = Uri.parse("$_baseUrl/patients_list");
   final Uri _docsUri = Uri.parse("$_baseUrl/docs");
@@ -437,6 +545,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       if (body.containsKey('analysis')) {
         final analysisData = body['analysis'];
         final extracted = _parseAnalysis(analysisData);
+        final preservedVitals = {
+          'temperature': _reviewed['temperature'],
+          'blood_pressure': _reviewed['blood_pressure'],
+          'blood_sugar': _reviewed['blood_sugar'],
+          'heart_rate': _reviewed['heart_rate'],
+          'respiratory_rate': _reviewed['respiratory_rate'],
+        };
         setState(() {
           _responseMode = 'fillin';
           _aiExtraction = extracted;
@@ -445,6 +560,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           _reviewed.remove('odor_presence');
           _reviewed.remove('pain_score');
           _reviewed.remove('has_infection');
+          _reviewed.addAll(preservedVitals);
         });
         _applyPrefillControllersFromReviewed();
         _maybeComputeSinbadAreaFromSize();
@@ -508,7 +624,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           'blood_pressure': _reviewed['blood_pressure'],
           'blood_glucose': _reviewed['blood_sugar'],
           'heart_rate': _reviewed['heart_rate'],
-          'respiratory_rate': _reviewed['repiratory_rate'],
+          'respiratory_rate': _reviewed['respiratory_rate'],
         },
         'wound_detail': {
           'location_primary': _reviewed['location_primary'],
@@ -758,6 +874,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       'treatment_plan': _aiWoundJson?['treatment_plan'],
       'task_list': _aiWoundJson?['treatment_plan']?['plan_tasks'],
     };
+    debugPrint("Send-to-doctor payload: ${jsonEncode(payload)}");
 
     debugPrint("Send-to-doctor payload: ${jsonEncode(payload)}");
 
@@ -936,6 +1053,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       _casesError = null;
       _casesFilterPatientId = patientId;
       _caseItems = [];
+      _casesFetchedOnce = true;
     });
     try {
       final payload = {
@@ -972,6 +1090,99 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       }
     } finally {
       if (mounted) setState(() => _casesLoading = false);
+    }
+  }
+
+  Future<void> _fetchTasksList() async {
+    if (_tasksLoading) return;
+    setState(() {
+      _tasksLoading = true;
+      _tasksError = null;
+      _tasksItems = [];
+      _tasksIsFlat = false;
+      _tasksFetchedOnce = true;
+    });
+    try {
+      final resp = await http
+          .post(
+            _tasksListUri,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({'limit': 200}),
+          )
+          .timeout(const Duration(seconds: 30));
+      if (resp.statusCode != 200) {
+        throw Exception("tasks_list failed (${resp.statusCode}): ${resp.body}");
+      }
+      final decoded = jsonDecode(resp.body);
+      List<Map<String, dynamic>> items = [];
+      bool flat = false;
+      if (decoded is Map && decoded['tasks'] is List) {
+        items = List<Map<String, dynamic>>.from(decoded['tasks']);
+        flat = false;
+      } else if (decoded is Map && decoded['current_treatment_plan'] is List) {
+        items = List<Map<String, dynamic>>.from(decoded['current_treatment_plan']);
+        flat = false;
+      } else {
+        throw Exception("tasks_list: unexpected response");
+      }
+      setState(() {
+        _tasksItems = items;
+        _tasksIsFlat = flat;
+      });
+    } catch (e) {
+      debugPrint("tasks_list error: $e");
+      if (mounted) {
+        setState(() => _tasksError = "Failed to load tasks: $e");
+      }
+    } finally {
+      if (mounted) setState(() => _tasksLoading = false);
+    }
+  }
+
+  Future<bool> _fetchTaskDetail({required String caseId, required int taskIndex}) async {
+    try {
+      final resp = await http
+          .post(
+            _taskDetailUri,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'case_id': caseId,
+              'task_index': taskIndex,
+            }),
+          )
+          .timeout(const Duration(seconds: 30));
+      if (resp.statusCode != 200) {
+        throw Exception("task_detail failed (${resp.statusCode}): ${resp.body}");
+      }
+      final decoded = jsonDecode(resp.body);
+      if (decoded is! Map) {
+        throw Exception("task_detail: unexpected response");
+      }
+      setState(() {
+        _selectedTask = decoded['task'] is Map ? Map<String, dynamic>.from(decoded['task']) : null;
+        final planTasks = decoded['plan_tasks'] is List
+            ? List<Map<String, dynamic>>.from(decoded['plan_tasks'])
+            : (decoded['current_treatment']?['plan_tasks'] is List
+                ? List<Map<String, dynamic>>.from(decoded['current_treatment']['plan_tasks'])
+                : <Map<String, dynamic>>[]);
+        _selectedTaskPatient = {
+          'case_id': (decoded['case_id'] ?? caseId).toString(),
+          'patient_id': (decoded['patient_id'] ?? '').toString(),
+          'patient_name': (decoded['patient_name'] ?? '').toString(),
+          'plan_id': (decoded['current_treatment']?['plan_id'] ?? decoded['plan_id'] ?? '').toString(),
+          'current_treatment': decoded['current_treatment'] is Map ? Map<String, dynamic>.from(decoded['current_treatment']) : <String, dynamic>{},
+          'plan_tasks': planTasks,
+        };
+      });
+      return true;
+    } catch (e) {
+      debugPrint("task_detail error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Failed to load task detail: $e"), backgroundColor: Colors.redAccent),
+        );
+      }
+      return false;
     }
   }
 
@@ -1024,6 +1235,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     setState(() {
       _patientsLoading = true;
       _patientsError = null;
+      _patientsFetchedOnce = true;
     });
     try {
       final resp = await http.get(_patientListUri).timeout(const Duration(seconds: 30));
@@ -1202,7 +1414,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         _clearVitalsInfo();
       }
       if (step == 'patient_search') {
+        setState(() => _patientsFetchedOnce = false);
         _fetchPatientList();
+      }
+      if (step == 'tasks') {
+        _fetchTasksList();
       }
       if (patient != null) {
         _selectedPatient = patient;
@@ -1609,7 +1825,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             _activeTab = index;
             _currentStep = 'dashboard';
           });
+          if (index == 1) {
+            setState(() => _tasksFetchedOnce = false);
+            _fetchTasksList();
+          }
           if (index == 2) {
+            setState(() => _casesFetchedOnce = false);
             _fetchCasesList();
           }
         },

@@ -57,12 +57,46 @@ extension _CaseDetailPage on _MainNavigationScreenState {
     final vitalsForProfile = (activeRecord?['vital_signs'] is Map)
         ? Map<String, dynamic>.from(activeRecord?['vital_signs'])
         : currentVitals;
+    String formatDateTime(String? raw) {
+      if (raw == null || raw.isEmpty) return "-";
+      try {
+        final dt = DateTime.parse(raw).toLocal();
+        final y = dt.year.toString().padLeft(4, '0');
+        final m = dt.month.toString().padLeft(2, '0');
+        final d = dt.day.toString().padLeft(2, '0');
+        final hh = dt.hour.toString().padLeft(2, '0');
+        final mm = dt.minute.toString().padLeft(2, '0');
+        return "$y-$m-$d $hh:$mm";
+      } catch (_) {
+        return raw;
+      }
+    }
+
+    final currentTimestamps = (c['current_timestamps'] is Map) ? Map<String, dynamic>.from(c['current_timestamps']) : <String, dynamic>{};
+    final appointmentAt = activeRecord?['timestamps']?['appointment_at'] ?? currentTimestamps['appointment_at'];
+    final plan = (activeRecord?['treatment_plan'] is Map)
+        ? Map<String, dynamic>.from(activeRecord?['treatment_plan'])
+        : (c['current_treatment_plan'] is Map)
+            ? Map<String, dynamic>.from(c['current_treatment_plan'])
+            : <String, dynamic>{};
+    final planTasks = (plan['plan_tasks'] is List)
+        ? List<Map<String, dynamic>>.from(plan['plan_tasks'])
+        : (activeRecord?['task_list'] is List)
+            ? List<Map<String, dynamic>>.from(activeRecord?['task_list'])
+            : (c['current_task_list'] is List)
+                ? List<Map<String, dynamic>>.from(c['current_task_list'])
+                : <Map<String, dynamic>>[];
 
     return PopScope(
       canPop: false,
       onPopInvoked: (didPop) {
         if (didPop) return;
-        _navigateTo('cases');
+        setState(() {
+          _currentStep = _previousStep;
+          if (_previousStep == 'dashboard') {
+            _activeTab = _previousTab;
+          }
+        });
       },
       child: Column(
         children: [
@@ -91,6 +125,15 @@ extension _CaseDetailPage on _MainNavigationScreenState {
 
                 // --- CLINICAL SNAPSHOT ---
                 _buildClinicalSnapshotCard(activeRecord, currentWound, currentVitals, classifications),
+                const SizedBox(height: 16),
+
+                // --- APPOINTMENT ---
+                _buildAppointmentCard(formatDateTime(appointmentAt?.toString())),
+                const SizedBox(height: 16),
+
+                // --- TREATMENT PLAN ---
+                _buildTreatmentPlanCard(plan, planTasks, formatDateTime, c),
+                const SizedBox(height: 24),
 
                 const SizedBox(height: 100), // Bottom padding
               ],
@@ -143,33 +186,60 @@ extension _CaseDetailPage on _MainNavigationScreenState {
         color: Colors.white,
         border: Border(bottom: BorderSide(color: Color(0xFFF1F5F9))),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          IconButton(
+          Row(
+            children: [
+              IconButton(
             icon: const Icon(LucideIcons.chevronLeft, color: Colors.blueGrey), 
-            onPressed: () => _navigateTo('cases')
+            onPressed: () => setState(() {
+              _currentStep = _previousStep;
+              if (_previousStep == 'dashboard') {
+                _activeTab = _previousTab;
+              }
+            })
           ),
-          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Text("CASE DETAIL", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blueGrey, letterSpacing: 1)),
-            Text(c['case_id'] ?? "-", style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: Color(0xFF1E293B))),
-          ]),
-          const Spacer(),
-          if (status != null && status.isNotEmpty)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: statusBg(status),
-                borderRadius: BorderRadius.circular(99),
-                border: Border.all(color: statusBg(status)),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text("Case Detail", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF1E293B))),
+                  Text(
+                    c['case_id'] ?? "-",
+                    style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13, color: Colors.blueGrey),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
               ),
-              child: Text(status, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: statusFg(status))),
-            ),
-          if (c['urgency'] == 'URGENT')
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(color: const Color(0xFFFEE2E2), borderRadius: BorderRadius.circular(99), border: Border.all(color: const Color(0xFFFECACA))),
-              child: const Text("URGENT", style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFFB91C1C))),
-            ),
+              const Spacer(),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  if (status != null && status.isNotEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: statusBg(status),
+                        borderRadius: BorderRadius.circular(99),
+                        border: Border.all(color: statusBg(status)),
+                      ),
+                      child: Text(status, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: statusFg(status))),
+                    ),
+                  if (c['urgency'] == 'URGENT') ...[
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(color: const Color(0xFFFEE2E2), borderRadius: BorderRadius.circular(99), border: Border.all(color: const Color(0xFFFECACA))),
+                      child: const Text("URGENT", style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFFB91C1C))),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const SizedBox.shrink(),
         ],
       ),
     );
@@ -816,6 +886,130 @@ extension _CaseDetailPage on _MainNavigationScreenState {
         collapsedShape: const RoundedRectangleBorder(side: BorderSide.none),
         title: Text(title, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: Color(0xFF1E293B))),
         children: [child],
+      ),
+    );
+  }
+
+  Widget _buildAppointmentCard(String appointmentAt) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: const Color(0xFFE0F2FE), borderRadius: BorderRadius.circular(12)),
+            child: const Icon(LucideIcons.calendarCheck, color: Color(0xFF0284C7), size: 18),
+          ),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text("APPOINTMENT", style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.blueGrey, letterSpacing: 1)),
+              const SizedBox(height: 4),
+              Text(appointmentAt, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Color(0xFF1E293B))),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTreatmentPlanCard(Map<String, dynamic> plan, List<Map<String, dynamic>> tasks, String Function(String?) fmtDate, Map<String, dynamic> c) {
+    final planText = plan['plan_text']?.toString() ?? "No plan provided.";
+    final followup = plan['followup_days']?.toString();
+    final status = plan['status']?.toString();
+    final caseId = (c['case_id'] ?? '').toString();
+    final taskIndex = tasks.isNotEmpty ? 0 : null;
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text("TREATMENT PLAN", style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Colors.blueGrey, letterSpacing: 1)),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+            ),
+            child: Text(
+              planText,
+              style: const TextStyle(fontSize: 12, color: Colors.black87, height: 1.3),
+            ),
+          ),
+          if (followup != null || status != null) ...[
+            const SizedBox(height: 8),
+            _detailRow("Follow-up (days)", followup ?? "-"),
+            _detailRow("Plan Status", status ?? "-"),
+          ],
+          if (caseId.isNotEmpty && taskIndex != null) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: () async {
+                  _taskDetailReturnStep = _currentStep;
+                  _taskDetailReturnTab = _activeTab;
+                  final ok = await _fetchTaskDetail(caseId: caseId, taskIndex: taskIndex);
+                  if (!ok) return;
+                  if (!mounted) return;
+                  setState(() => _currentStep = 'task_detail');
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0D9488),
+                  foregroundColor: Colors.white,
+                  minimumSize: const Size(double.infinity, 44),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text("Open Tasks", style: TextStyle(fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
+          const SizedBox(height: 12),
+          const Text("Task List", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+          const SizedBox(height: 6),
+          if (tasks.isEmpty)
+            const Text("No tasks.", style: TextStyle(fontSize: 12, color: Colors.grey))
+          else
+            ...tasks.map((t) {
+              final text = t['task_text']?.toString() ?? "(task)";
+              final due = fmtDate(t['task_due']?.toString());
+              final tStatus = t['status']?.toString() ?? "Pending";
+              return Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: const Color(0xFFF8FAFC), borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFF1F5F9))),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(LucideIcons.squareCheck, size: 16, color: Color(0xFF0D9488)),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(text, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                        Text(
+                          "Due: $due || Status: $tStatus",
+                          style: const TextStyle(fontSize: 11, color: Colors.blueGrey),
+                        ),
+                      ]),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+        ],
       ),
     );
   }

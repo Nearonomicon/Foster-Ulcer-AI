@@ -2,7 +2,7 @@ part of '../widgets/main_navigation_screen.dart';
 
 extension _PatientSearchPage on _MainNavigationScreenState {
   Widget _buildPatientSearch() {
-    if (_patientItems.isEmpty && !_patientsLoading && _patientsError == null) {
+    if (!_patientsFetchedOnce && !_patientsLoading) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _fetchPatientList());
     }
     final q = _patientSearchQuery.trim().toLowerCase();
@@ -18,10 +18,16 @@ extension _PatientSearchPage on _MainNavigationScreenState {
       children: [
         _buildHeader("Find Patient", onBack: () => _navigateTo('dashboard')),
         Expanded(
-          child: ListView(
-            padding: const EdgeInsets.all(24),
-            children: [
-              Container(
+          child: RefreshIndicator(
+            color: const Color(0xFF0D9488),
+            onRefresh: () async {
+              await _fetchPatientList();
+            },
+            child: ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(24),
+              children: [
+                Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: const Color(0xFFF8FAFC),
@@ -107,8 +113,9 @@ extension _PatientSearchPage on _MainNavigationScreenState {
                   ),
                 );
               }),
-              const SizedBox(height: 120),
-            ],
+                const SizedBox(height: 120),
+              ],
+            ),
           ),
         ),
         Container(
