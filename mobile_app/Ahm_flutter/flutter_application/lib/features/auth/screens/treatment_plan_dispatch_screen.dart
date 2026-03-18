@@ -84,17 +84,43 @@ class _TreatmentPlanDispatchScreenState
       final aiAnalysis = _asMap(caseBundle["ai_analysis"]);
       final currentPlan = _asMap(caseBundle["current_treatment_plan"]);
 
-      final apiPlanText = (currentPlan["plan_text"] ?? "").toString().trim();
+      Map<String, dynamic> taskDetailResponse = <String, dynamic>{};
+      Map<String, dynamic> taskDetailTreatment = <String, dynamic>{};
+      Map<String, dynamic> firstTaskDetail = <String, dynamic>{};
+
+      try {
+        taskDetailResponse = await _caseService.getTaskDetail(
+          caseId: widget.caseId,
+          taskIndex: 0,
+        );
+        taskDetailTreatment = _asMap(taskDetailResponse["current_treatment"]);
+        firstTaskDetail = _asMap(taskDetailResponse["task"]);
+      } catch (e) {
+        debugPrint("getTaskDetail failed but skipped: $e");
+      }
+
+      final effectivePlan = taskDetailTreatment.isNotEmpty
+          ? taskDetailTreatment
+          : currentPlan;
+
+      final apiPlanText = (effectivePlan["plan_text"] ?? "").toString().trim();
       final aiPlanText =
           (aiAnalysis["treatment_suggestion"] ?? "").toString().trim();
 
-      final apiPlanId = (currentPlan["plan_id"] ?? "").toString();
+      final apiPlanId = (effectivePlan["plan_id"] ?? "").toString();
 
-      final apiFollowupDays = currentPlan["followup_days"] is int
-          ? currentPlan["followup_days"] as int
-          : int.tryParse("${currentPlan["followup_days"] ?? 3}") ?? 3;
+      final apiFollowupDays = effectivePlan["followup_days"] is int
+          ? effectivePlan["followup_days"] as int
+          : int.tryParse("${effectivePlan["followup_days"] ?? 3}") ?? 3;
 
-      final apiTasks = _asMapList(currentPlan["plan_tasks"]);
+      final apiTasks = _asMapList(effectivePlan["plan_tasks"]);
+
+      if (apiTasks.isNotEmpty && firstTaskDetail.isNotEmpty) {
+        apiTasks[0] = {
+          ...apiTasks[0],
+          ...firstTaskDetail,
+        };
+      }
 
       for (final t in tasks) {
         final ctrl = t["controller"];
@@ -116,6 +142,9 @@ class _TreatmentPlanDispatchScreenState
               "source": (t["source"] ?? "ai").toString(),
               "status": (t["status"] ?? "DRAFT").toString(),
               "task_due": t["task_due"],
+              "task_id": t["task_id"],
+              "task_photo_url": t["task_photo_url"],
+              "completed_at": t["completed_at"],
             },
           ),
         );
@@ -128,6 +157,9 @@ class _TreatmentPlanDispatchScreenState
             "source": "ai",
             "status": "DRAFT",
             "task_due": null,
+            "task_id": null,
+            "task_photo_url": null,
+            "completed_at": null,
           },
           {
             "controller": TextEditingController(
@@ -136,6 +168,9 @@ class _TreatmentPlanDispatchScreenState
             "source": "ai",
             "status": "DRAFT",
             "task_due": null,
+            "task_id": null,
+            "task_photo_url": null,
+            "completed_at": null,
           },
           {
             "controller": TextEditingController(
@@ -144,6 +179,9 @@ class _TreatmentPlanDispatchScreenState
             "source": "ai",
             "status": "DRAFT",
             "task_due": null,
+            "task_id": null,
+            "task_photo_url": null,
+            "completed_at": null,
           },
           {
             "controller": TextEditingController(
@@ -152,6 +190,9 @@ class _TreatmentPlanDispatchScreenState
             "source": "ai",
             "status": "DRAFT",
             "task_due": null,
+            "task_id": null,
+            "task_photo_url": null,
+            "completed_at": null,
           },
         ]);
       }
@@ -181,6 +222,9 @@ class _TreatmentPlanDispatchScreenState
         "source": "doctor",
         "status": "DRAFT",
         "task_due": null,
+        "task_id": null,
+        "task_photo_url": null,
+        "completed_at": null,
       });
     });
   }
@@ -200,6 +244,24 @@ class _TreatmentPlanDispatchScreenState
     });
 
     controller.dispose();
+  }
+
+  Future<void> _pickTaskDueDate(int index) async {
+    final current = tasks[index]["task_due"]?.toString();
+    final initialDate = DateTime.tryParse(current ?? "") ?? DateTime.now();
+
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2100),
+    );
+
+    if (picked == null || !mounted) return;
+
+    setState(() {
+      tasks[index]["task_due"] = picked.toIso8601String().split('T').first;
+    });
   }
 
   Future<void> _saveDraftAndContinue() async {
@@ -599,6 +661,8 @@ class _TreatmentPlanDispatchScreenState
                           tasks[i]["controller"] as TextEditingController;
                       final source = (tasks[i]["source"] ?? "ai").toString();
                       final isDoctor = source == "doctor";
+                      final dueText =
+                          _formatTaskDueText(tasks[i]["task_due"]);
 
                       return Padding(
                         padding: EdgeInsets.only(
@@ -617,6 +681,8 @@ class _TreatmentPlanDispatchScreenState
                               ? Icons.medical_services_outlined
                               : Icons.auto_awesome,
                           controller: controller,
+                          dueText: dueText,
+                          onPickDate: () => _pickTaskDueDate(i),
                           onDelete: () => _removeTask(i),
                         ),
                       );
@@ -778,6 +844,19 @@ String _normalizeStage(String raw) {
     return "Stage -";
   }
   return raw;
+}
+
+String _formatTaskDueText(dynamic value) {
+  final raw = (value ?? "").toString().trim();
+  if (raw.isEmpty || raw.toLowerCase() == "null") return "TBD";
+
+  final parsed = DateTime.tryParse(raw);
+  if (parsed == null) return raw;
+
+  final yyyy = parsed.year.toString().padLeft(4, '0');
+  final mm = parsed.month.toString().padLeft(2, '0');
+  final dd = parsed.day.toString().padLeft(2, '0');
+  return "$yyyy-$mm-$dd";
 }
 
 String _buildWoundSummary(Map<String, dynamic> nurse) {
@@ -1120,6 +1199,8 @@ class _EditableTaskCard extends StatelessWidget {
     required this.badgeColor,
     required this.badgeIcon,
     required this.controller,
+    required this.dueText,
+    required this.onPickDate,
     required this.onDelete,
   });
 
@@ -1131,6 +1212,8 @@ class _EditableTaskCard extends StatelessWidget {
   final Color badgeColor;
   final IconData badgeIcon;
   final TextEditingController controller;
+  final String dueText;
+  final VoidCallback onPickDate;
   final VoidCallback onDelete;
 
   @override
@@ -1228,6 +1311,52 @@ class _EditableTaskCard extends StatelessWidget {
                     height: 1.45,
                     fontWeight: FontWeight.w700,
                     color: isDark ? Colors.white70 : Colors.black87,
+                  ),
+                ),
+                const Gap(12),
+                InkWell(
+                  onTap: onPickDate,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: isDark
+                          ? const Color(0xFF0B1220)
+                          : const Color(0xFFF8FAFC),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: border),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.calendar_today_outlined,
+                          size: 16,
+                          color: isDark ? Colors.white54 : Colors.black45,
+                        ),
+                        const Gap(8),
+                        Expanded(
+                          child: Text(
+                            "Due: $dueText",
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              color: isDark ? Colors.white70 : Colors.black87,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          "Pick date",
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w900,
+                            color: badgeColor,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],

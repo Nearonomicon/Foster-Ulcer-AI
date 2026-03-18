@@ -4,6 +4,9 @@ import 'package:flutter_application/features/auth/screens/treatment_plan_dispatc
 import 'package:flutter_application/features/auth/services/case_service.dart';
 import 'package:flutter_application/shared/app_localizations.dart';
 
+const String kSinbadAreaSmall = "< 1 cm²";
+const String kSinbadAreaLarge = ">= 1 cm²";
+
 class AiAnalysisScreen extends StatefulWidget {
   final String caseId;
   final int selectedTimelineIndex;
@@ -22,7 +25,14 @@ class _AiAnalysisScreenState extends State<AiAnalysisScreen> {
   bool aiAccurate = true;
 
   late String woundStageKey;
-  late String diagnosisKey;
+  late String sinbadSiteKey;
+  late String sinbadIschemiaKey;
+  late String sinbadNeuropathyKey;
+  late String sinbadBacterialKey;
+  late String sinbadAreaKey;
+  late String sinbadDepthKey;
+  late String wifiKey;
+  late String idsaKey;
   String healingKey = "heal_improving";
 
   late TextEditingController descCtrl;
@@ -134,9 +144,14 @@ class _AiAnalysisScreenState extends State<AiAnalysisScreen> {
         (ai["wound_stage"] ?? ai["stage"] ?? "STAGE 2").toString(),
       );
 
-      diagnosisKey = _diagnosisKeyFromAi(
-        (ai["diagnosis"] ?? ai["description"] ?? "").toString(),
-      );
+      sinbadSiteKey = _sinbadSiteValueFromAi(ai["sinbad_site"]);
+      sinbadIschemiaKey = _yesNoValueFromAi(ai["sinbad_ischemia"]);
+      sinbadNeuropathyKey = _yesNoValueFromAi(ai["sinbad_neuropathy"]);
+      sinbadBacterialKey = _yesNoValueFromAi(ai["sinbad_infection"]);
+      sinbadAreaKey = _sinbadAreaDisplayValueFromAi(ai["sinbad_area"]);
+      sinbadDepthKey = _sinbadDepthDisplayValueFromAi(ai["sinbad_depth"]);
+      wifiKey = _wifiKeyFromAi(ai["wifi_stage"]);
+      idsaKey = _idsaKeyFromAi(ai["idsa_stage"]);
 
       aiConfidence =
           (ai["confidence"] is num) ? (ai["confidence"] as num).toDouble() : 0.0;
@@ -197,7 +212,7 @@ class _AiAnalysisScreenState extends State<AiAnalysisScreen> {
         isLatestEditable: isLatestEditable,
         doctorReview: {
           "wound_stage": _stageApiValue(woundStageKey),
-          "diagnosis_override": _diagnosisApiValue(diagnosisKey, descCtrl.text),
+          "diagnosis_override": _buildDiagnosisOverride(),
           "clinical_description": descCtrl.text.trim(),
           "proposed_treatment_plan": planCtrl.text.trim(),
           "healing_progress": healingKey,
@@ -586,27 +601,120 @@ class _AiAnalysisScreenState extends State<AiAnalysisScreen> {
                           ),
                           const Gap(18),
 
+                          _Labeled(
+                            label: "SINBAD",
+                            isDark: isDark,
+                            child: Column(
+                              children: [
+                                _SinbadChoiceField(
+                                  label: "Site",
+                                  subtitle: "Where is it?",
+                                  value: sinbadSiteKey,
+                                  options: const [
+                                    "Forefoot",
+                                    "Midfoot/Hindfoot",
+                                  ],
+                                  isDark: isDark,
+                                  enabled: isLatestEditable,
+                                  onChanged: (v) =>
+                                      setState(() => sinbadSiteKey = v),
+                                ),
+                                const Gap(10),
+                                _SinbadChoiceField(
+                                  label: "Ischemia",
+                                  subtitle: "Is the pulse weak?",
+                                  value: sinbadIschemiaKey,
+                                  options: const ["No", "Yes"],
+                                  isDark: isDark,
+                                  enabled: isLatestEditable,
+                                  onChanged: (v) =>
+                                      setState(() => sinbadIschemiaKey = v),
+                                ),
+                                const Gap(10),
+                                _SinbadChoiceField(
+                                  label: "Neuropathy",
+                                  subtitle: "Loss of feeling?",
+                                  value: sinbadNeuropathyKey,
+                                  options: const ["No", "Yes"],
+                                  isDark: isDark,
+                                  enabled: isLatestEditable,
+                                  onChanged: (v) =>
+                                      setState(() => sinbadNeuropathyKey = v),
+                                ),
+                                const Gap(10),
+                                _SinbadChoiceField(
+                                  label: "Bacterial",
+                                  subtitle: "Signs of infection?",
+                                  value: sinbadBacterialKey,
+                                  options: const ["No", "Yes"],
+                                  isDark: isDark,
+                                  enabled: isLatestEditable,
+                                  onChanged: (v) =>
+                                      setState(() => sinbadBacterialKey = v),
+                                ),
+                                const Gap(10),
+                                _SinbadChoiceField(
+                                  label: "Area",
+                                  subtitle: "Size of the wound?",
+                                  value: sinbadAreaKey,
+                                  options: const [
+                                    kSinbadAreaSmall,
+                                    kSinbadAreaLarge,
+                                  ],
+                                  isDark: isDark,
+                                  enabled: isLatestEditable,
+                                  onChanged: (v) =>
+                                      setState(() => sinbadAreaKey = v),
+                                ),
+                                const Gap(10),
+                                _SinbadChoiceField(
+                                  label: "Depth",
+                                  subtitle: "How deep is it?",
+                                  value: sinbadDepthKey,
+                                  options: const [
+                                    "Skin only",
+                                    "Deep/Bone",
+                                  ],
+                                  isDark: isDark,
+                                  enabled: isLatestEditable,
+                                  onChanged: (v) =>
+                                      setState(() => sinbadDepthKey = v),
+                                ),
+                                const Gap(12),
+                                _SinbadScoreMeter(
+                                  score: _calcSinbadScoreFromValues(
+                                    site: sinbadSiteKey,
+                                    ischemia: sinbadIschemiaKey,
+                                    neuropathy: sinbadNeuropathyKey,
+                                    bacterial: sinbadBacterialKey,
+                                    area: sinbadAreaKey,
+                                    depth: sinbadDepthKey,
+                                  ),
+                                  isDark: isDark,
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          const Gap(14),
+
                           Row(
                             children: [
                               Expanded(
                                 child: _Labeled(
-                                  label: context
-                                      .tr('ai_review.field.wound_stage')
-                                      .toUpperCase(),
+                                  label: "WIfI",
                                   isDark: isDark,
                                   child: _DropdownBox(
-                                    value: woundStageKey,
+                                    value: wifiKey,
                                     items: const [
-                                      "stage_1",
-                                      "stage_2",
-                                      "stage_3",
-                                      "stage_4",
-                                      "unstageable"
+                                      "wifi_na",
+                                      "wifi_stage_1",
+                                      "wifi_stage_2",
+                                      "wifi_stage_3",
+                                      "wifi_stage_4",
                                     ],
-                                    itemLabel: (k) =>
-                                        context.tr('ai_review.stage.$k'),
-                                    onChanged: (v) =>
-                                        setState(() => woundStageKey = v),
+                                    itemLabel: _wifiLabel,
+                                    onChanged: (v) => setState(() => wifiKey = v),
                                     cs: cs,
                                     isDark: isDark,
                                     enabled: isLatestEditable,
@@ -674,21 +782,19 @@ class _AiAnalysisScreenState extends State<AiAnalysisScreen> {
                           const Gap(14),
 
                           _Labeled(
-                            label: context
-                                .tr('ai_review.field.diagnostic_classification')
-                                .toUpperCase(),
+                            label: "IDSA",
                             isDark: isDark,
                             child: _DropdownBox(
-                              value: diagnosisKey,
+                              value: idsaKey,
                               items: const [
-                                "diag_dfu_w2",
-                                "diag_venous",
-                                "diag_pressure",
-                                "diag_arterial",
-                                "diag_mixed"
+                                "idsa_na",
+                                "idsa_1",
+                                "idsa_2",
+                                "idsa_3",
+                                "idsa_4",
                               ],
-                              itemLabel: (k) => context.tr('ai_review.diag.$k'),
-                              onChanged: (v) => setState(() => diagnosisKey = v),
+                              itemLabel: _idsaLabel,
+                              onChanged: (v) => setState(() => idsaKey = v),
                               cs: cs,
                               isDark: isDark,
                               bold: true,
@@ -901,32 +1007,140 @@ String _stageApiValue(String key) {
   }
 }
 
-String _diagnosisKeyFromAi(String aiText) {
-  final t = aiText.toLowerCase();
-  if (t.contains("diabetic") || t.contains("foot ulcer")) return "diag_dfu_w2";
-  if (t.contains("venous")) return "diag_venous";
-  if (t.contains("pressure")) return "diag_pressure";
-  if (t.contains("arterial")) return "diag_arterial";
-  if (t.contains("mixed")) return "diag_mixed";
-  return "diag_dfu_w2";
+String _yesNoValueFromAi(dynamic value) {
+  final s = (value ?? '').toString().trim().toLowerCase();
+  if (s == 'yes' || s == 'true' || s == '1') return 'Yes';
+  if (s == 'no' || s == 'false' || s == '0') return 'No';
+  return 'No';
 }
 
-String _diagnosisApiValue(String key, String fallbackText) {
+String _sinbadSiteValueFromAi(dynamic value) {
+  final s = (value ?? '').toString().trim().toLowerCase();
+  return s.contains('midfoot') || s.contains('hindfoot')
+      ? 'Midfoot/Hindfoot'
+      : 'Forefoot';
+}
+
+String _sinbadAreaValueFromAi(dynamic value) {
+  final s = (value ?? '').toString().trim().toLowerCase();
+  return s.contains('>=') || s.contains('≥') ? 'yes' : 'no';
+}
+
+String _sinbadDepthKeyFromAi(dynamic value) {
+  final s = (value ?? '').toString().trim().toLowerCase();
+  return s.contains('deep') ? 'yes' : 'no';
+}
+
+String _sinbadAreaDisplayValueFromAi(dynamic value) {
+  final s = (value ?? '').toString().trim().toLowerCase();
+  return s.contains('>=') || s.contains('≥') || s.contains('â‰¥')
+      ? kSinbadAreaLarge
+      : kSinbadAreaSmall;
+}
+
+String _sinbadDepthDisplayValueFromAi(dynamic value) {
+  final s = (value ?? '').toString().trim().toLowerCase();
+  return s.contains('deep') ? 'Deep/Bone' : 'Skin only';
+}
+
+String _wifiKeyFromAi(dynamic value) {
+  final s = (value ?? '').toString().trim();
+  if (s.isEmpty || s.toLowerCase() == 'null') return 'wifi_na';
+  return 'wifi_stage_$s';
+}
+
+String _idsaKeyFromAi(dynamic value) {
+  final s = (value ?? '').toString().trim();
+  if (s.isEmpty || s.toLowerCase() == 'null') return 'idsa_na';
+  return 'idsa_$s';
+}
+
+String _wifiLabel(String key) {
   switch (key) {
-    case "diag_dfu_w2":
-      return "Grade 2 diabetic foot ulcer";
-    case "diag_venous":
-      return "Venous ulcer";
-    case "diag_pressure":
-      return "Pressure ulcer";
-    case "diag_arterial":
-      return "Arterial ulcer";
-    case "diag_mixed":
-      return "Mixed etiology ulcer";
+    case 'wifi_stage_1':
+      return 'Stage 1';
+    case 'wifi_stage_2':
+      return 'Stage 2';
+    case 'wifi_stage_3':
+      return 'Stage 3';
+    case 'wifi_stage_4':
+      return 'Stage 4';
     default:
-      return fallbackText.trim().isEmpty
-          ? "Unspecified wound diagnosis"
-          : fallbackText.trim();
+      return 'N/A';
+  }
+}
+
+String _idsaLabel(String key) {
+  switch (key) {
+    case 'idsa_1':
+      return 'Stage 1';
+    case 'idsa_2':
+      return 'Stage 2';
+    case 'idsa_3':
+      return 'Stage 3';
+    case 'idsa_4':
+      return 'Stage 4';
+    default:
+      return 'N/A';
+  }
+}
+
+String _buildSinbadSummaryFromKeys({
+  required String site,
+  required String ischemia,
+  required String neuropathy,
+  required String bacterial,
+  required String area,
+  required String depth,
+}) {
+  return 'SINBAD: Site $site, '
+      'Ischemia $ischemia, '
+      'Neuropathy $neuropathy, '
+      'Bacterial $bacterial, '
+      'Area $area, '
+      'Depth $depth';
+}
+
+int _calcSinbadScoreFromValues({
+  required String site,
+  required String ischemia,
+  required String neuropathy,
+  required String bacterial,
+  required String area,
+  required String depth,
+}) {
+  var score = 0;
+  if (site == "Midfoot/Hindfoot") score++;
+  if (ischemia == "Yes") score++;
+  if (neuropathy == "Yes") score++;
+  if (bacterial == "Yes") score++;
+  if (area == kSinbadAreaLarge) score++;
+  if (depth == "Deep/Bone") score++;
+  return score;
+}
+
+Color _sinbadScoreColor(int score) {
+  if (score >= 3) return Colors.red;
+  if (score == 2) return Colors.amber;
+  return const Color(0xFF0D9488);
+}
+
+extension on _AiAnalysisScreenState {
+  String _buildDiagnosisOverride() {
+    final sinbadSummary = _buildSinbadSummaryFromKeys(
+      site: sinbadSiteKey,
+      ischemia: sinbadIschemiaKey,
+      neuropathy: sinbadNeuropathyKey,
+      bacterial: sinbadBacterialKey,
+      area: sinbadAreaKey,
+      depth: sinbadDepthKey,
+    );
+
+    return [
+      sinbadSummary,
+      'WIfI: ${_wifiLabel(wifiKey)}',
+      'IDSA: ${_idsaLabel(idsaKey)}',
+    ].join(' | ');
   }
 }
 
@@ -1229,6 +1443,228 @@ class _Textarea extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _SinbadChoiceField extends StatelessWidget {
+  const _SinbadChoiceField({
+    required this.label,
+    required this.subtitle,
+    required this.value,
+    required this.options,
+    required this.isDark,
+    required this.enabled,
+    required this.onChanged,
+  });
+
+  final String label;
+  final String subtitle;
+  final String value;
+  final List<String> options;
+  final bool isDark;
+  final bool enabled;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final border = isDark ? const Color(0xFF1F2A3A) : const Color(0xFFE2E8F0);
+    final bg = isDark ? const Color(0xFF0B1220) : const Color(0xFFF8FAFC);
+
+    return Opacity(
+      opacity: enabled ? 1 : 0.72,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: border),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                color: isDark ? Colors.white : const Color(0xFF0F172A),
+              ),
+            ),
+            const Gap(2),
+            Text(
+              subtitle,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: isDark ? Colors.white54 : Colors.black45,
+              ),
+            ),
+            const Gap(10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: options
+                  .map(
+                    (option) => _SinbadOptionChip(
+                      text: option,
+                      selected: value == option,
+                      isDark: isDark,
+                      enabled: enabled,
+                      isRisk: _isRiskSinbadOption(label, option),
+                      onTap: () => onChanged(option),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SinbadOptionChip extends StatelessWidget {
+  const _SinbadOptionChip({
+    required this.text,
+    required this.selected,
+    required this.isDark,
+    required this.enabled,
+    required this.isRisk,
+    required this.onTap,
+  });
+
+  final String text;
+  final bool selected;
+  final bool isDark;
+  final bool enabled;
+  final bool isRisk;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final selectedColor = isRisk
+        ? Colors.red
+        : Theme.of(context).colorScheme.primary;
+    final fg = selected
+        ? selectedColor
+        : (isDark ? Colors.white70 : const Color(0xFF334155));
+
+    return InkWell(
+      onTap: enabled ? onTap : null,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: selected
+              ? selectedColor.withOpacity(isDark ? 0.18 : 0.10)
+              : (isDark ? Colors.white10 : Colors.white),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected
+                ? selectedColor
+                : (isDark ? Colors.white12 : const Color(0xFFE2E8F0)),
+          ),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              selected ? Icons.check_circle : Icons.circle_outlined,
+              size: 16,
+              color: fg,
+            ),
+            const Gap(6),
+            Text(
+              text,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: fg,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SinbadScoreMeter extends StatelessWidget {
+  const _SinbadScoreMeter({
+    required this.score,
+    required this.isDark,
+  });
+
+  final int score;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    final scoreColor = _sinbadScoreColor(score);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white10 : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isDark ? Colors.white12 : const Color(0xFFE2E8F0),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            "SINBAD score: $score / 6",
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w900,
+              color: scoreColor,
+            ),
+          ),
+          const Gap(8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              value: score / 6,
+              minHeight: 8,
+              backgroundColor:
+                  isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+              valueColor: AlwaysStoppedAnimation<Color>(scoreColor),
+            ),
+          ),
+          const Gap(8),
+          Text(
+            score >= 3
+                ? "High risk: referral recommended."
+                : "Low risk: continue assessment.",
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: isDark ? Colors.white54 : Colors.black54,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+bool _isRiskSinbadOption(String label, String option) {
+  switch (label) {
+    case "Site":
+      return option == "Midfoot/Hindfoot";
+    case "Ischemia":
+    case "Neuropathy":
+    case "Bacterial":
+      return option == "Yes";
+    case "Area":
+      return option == kSinbadAreaLarge;
+    case "Depth":
+      return option == "Deep/Bone";
+    default:
+      return false;
   }
 }
 

@@ -3,6 +3,7 @@ import 'package:gap/gap.dart';
 import 'package:flutter_application/features/auth/screens/case_detail_screen.dart';
 import 'package:flutter_application/features/auth/services/case_service.dart';
 import 'package:flutter_application/shared/app_localizations.dart';
+import 'dart:convert';
 
 enum InboxTab { needsReview, sentToNurse }
 enum Urgency { high, medium, routine }
@@ -44,6 +45,13 @@ class _CaseInboxScreenState extends State<CaseInboxScreen> {
       final sentToNurseRes =
           await _caseService.getCasesByStatus("TREATMENT_SENT");
 
+      print(
+        'CaseInboxScreen DOCTOR_REVIEW payload: ${jsonEncode(needsReviewRes)}',
+      );
+      print(
+        'CaseInboxScreen TREATMENT_SENT payload: ${jsonEncode(sentToNurseRes)}',
+      );
+
       final needsItems = _mapItemsFromResponse(needsReviewRes);
       final sentItems = _mapItemsFromResponse(sentToNurseRes);
 
@@ -76,6 +84,7 @@ class _CaseInboxScreenState extends State<CaseInboxScreen> {
           rawCaseId.startsWith("#") ? rawCaseId : "#$rawCaseId";
       final urgencyRaw = (item["urgency"] ?? "").toString().toUpperCase();
       final aiStage = (item["ai_stage"] ?? "Unknown Stage").toString();
+      final aiMetricPills = _buildAiMetricPills(aiStage);
 
       final aiConfidence = item["ai_confidence"];
       final confidencePct =
@@ -93,6 +102,7 @@ class _CaseInboxScreenState extends State<CaseInboxScreen> {
         rawCaseId: rawCaseId,
         urgency: _mapUrgency(urgencyRaw),
         aiStage: aiStage,
+        aiMetricPills: aiMetricPills,
         confidencePct: confidencePct,
         timeAgo: timeAgo,
         statusTag: statusTag,
@@ -184,7 +194,7 @@ class _CaseInboxScreenState extends State<CaseInboxScreen> {
               ),
             ),
             SizedBox(
-              height: 44,
+              height: 56,
               child: ListView(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 14),
@@ -362,12 +372,53 @@ Urgency _mapUrgency(String urgencyRaw) {
   }
 }
 
+List<String> _buildAiMetricPills(String aiStage) {
+  final metrics = <String, String>{};
+
+  for (final line in aiStage.split('\n')) {
+    final trimmed = line.trim();
+    if (trimmed.isEmpty) continue;
+
+    final parts = trimmed.split(':');
+    if (parts.length < 2) continue;
+
+    final key = parts.first.trim();
+    final value = parts.sublist(1).join(':').trim();
+    metrics[key] = value;
+  }
+
+  final pills = <String>[];
+
+  if (metrics.containsKey('SINBAD')) {
+    pills.add('SINBAD: ${metrics['SINBAD']}');
+  }
+
+  final wifiParts = <String>[];
+  if (metrics.containsKey('W')) wifiParts.add('W: ${metrics['W']}');
+  if (metrics.containsKey('I')) wifiParts.add('I: ${metrics['I']}');
+  if (metrics.containsKey('fI')) wifiParts.add('fI: ${metrics['fI']}');
+  if (wifiParts.isNotEmpty) {
+    pills.add(wifiParts.join('  '));
+  }
+
+  if (metrics.containsKey('IDSA')) {
+    pills.add('IDSA: ${metrics['IDSA']}');
+  }
+
+  if (pills.isEmpty && aiStage.trim().isNotEmpty) {
+    pills.add(aiStage.trim());
+  }
+
+  return pills;
+}
+
 class CaseItem {
   final String patientName;
   final String caseId;
   final String rawCaseId;
   final Urgency urgency;
   final String aiStage;
+  final List<String> aiMetricPills;
   final int confidencePct;
   final String timeAgo;
   final String statusTag;
@@ -382,6 +433,7 @@ class CaseItem {
     required this.rawCaseId,
     required this.urgency,
     required this.aiStage,
+    required this.aiMetricPills,
     required this.confidencePct,
     required this.timeAgo,
     required this.statusTag,
@@ -420,7 +472,7 @@ class _Chip extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(999),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
         decoration: BoxDecoration(
           color: bg,
           borderRadius: BorderRadius.circular(999),
@@ -433,8 +485,8 @@ class _Chip extends StatelessWidget {
             Text(
               label,
               style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
                 color: fg,
               ),
             ),
@@ -560,6 +612,7 @@ class _CaseCard extends StatelessWidget {
                       child: _MiniBox(
                         title: context.tr('inbox.box.ai_detection'),
                         line1: item.aiStage,
+                        pills: item.aiMetricPills,
                         line2:
                             "${item.confidencePct}% ${context.tr('inbox.box.confidence')}",
                         line2Color: primary,
@@ -622,6 +675,7 @@ class _MiniBox extends StatelessWidget {
     required this.title,
     required this.line1,
     required this.line2,
+    this.pills = const [],
     this.line2Color,
     required this.isDark,
   });
@@ -629,6 +683,7 @@ class _MiniBox extends StatelessWidget {
   final String title;
   final String line1;
   final String line2;
+  final List<String> pills;
   final Color? line2Color;
   final bool isDark;
 
@@ -655,14 +710,23 @@ class _MiniBox extends StatelessWidget {
             ),
           ),
           const Gap(6),
-          Text(
-            line1,
-            style: TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w800,
-              color: isDark ? Colors.white : const Color(0xFF0F172A),
+          if (pills.isNotEmpty)
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: pills
+                  .map((pill) => _MetricPill(text: pill, isDark: isDark))
+                  .toList(),
+            )
+          else
+            Text(
+              line1,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                color: isDark ? Colors.white : const Color(0xFF0F172A),
+              ),
             ),
-          ),
           const Gap(2),
           Text(
             line2,
@@ -673,6 +737,39 @@ class _MiniBox extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+}
+
+class _MetricPill extends StatelessWidget {
+  const _MetricPill({
+    required this.text,
+    required this.isDark,
+  });
+
+  final String text;
+  final bool isDark;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: isDark ? Colors.white10 : const Color(0xFFE2E8F0),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: isDark ? Colors.white12 : const Color(0xFFCBD5E1),
+        ),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 9,
+          fontWeight: FontWeight.w800,
+          color: isDark ? Colors.white70 : const Color(0xFF334155),
+        ),
       ),
     );
   }

@@ -1,126 +1,149 @@
-# Wound Care AI API
+# Wound Care AI API Specification Report
 
-Base URL: `http://127.0.0.1:8000`
+## 1. Overview
 
-All endpoints are unauthenticated by default. CORS allows `*`.
+- Application: `Wound Care AI Analysis API`
+- Framework: FastAPI
+- Default base URL: `http://127.0.0.1:8000`
+- Authentication: none implemented
+- CORS: `allow_origins=["*"]`, `allow_methods=["*"]`, `allow_headers=["*"]`
+- Content types used:
+  - `application/json`
+  - `multipart/form-data`
 
----
+This document summarizes the API as implemented in the backend source, primarily [`app.py`](/c:/Users/Pawarit/Desktop/GitHub/Foster-Ulcer-AI/Foster-Ulcer-AI/backend/app.py), [`routes/patients.py`](/c:/Users/Pawarit/Desktop/GitHub/Foster-Ulcer-AI/Foster-Ulcer-AI/backend/routes/patients.py), [`routes/cases.py`](/c:/Users/Pawarit/Desktop/GitHub/Foster-Ulcer-AI/Foster-Ulcer-AI/backend/routes/cases.py), [`routes/analysis.py`](/c:/Users/Pawarit/Desktop/GitHub/Foster-Ulcer-AI/Foster-Ulcer-AI/backend/routes/analysis.py), [`routes/task.py`](/c:/Users/Pawarit/Desktop/GitHub/Foster-Ulcer-AI/Foster-Ulcer-AI/backend/routes/task.py), and [`schemas.py`](/c:/Users/Pawarit/Desktop/GitHub/Foster-Ulcer-AI/Foster-Ulcer-AI/backend/schemas.py).
 
-**Health**
+## 2. Global Behavior
 
-`POST /load-dashboard`
+- Success responses are not fully standardized. Most endpoints return a JSON object with a `status` field.
+- Error responses are standardized by FastAPI exception handlers:
+  - `HTTPException` -> `{"detail": ...}`
+  - validation error -> `{"detail": [...]}` with FastAPI/Pydantic error details
+  - unhandled error -> `{"detail": "Internal Server Error"}`
+- Several endpoints clamp `limit` values instead of rejecting them.
+- Timestamps are a mix of client-supplied strings, Python `datetime`, and Firestore server timestamps.
+- Route names are not versioned.
 
-**Title:** Health Check  
-**Description:** Simple endpoint to verify the API is reachable and CORS is working.
+## 3. Enumerations
 
-Response 200
-```json
-{"message":"CORS is working!"}
-```
+### Case Status
 
----
+- `CREATION`
+- `AI_PROCESSING`
+- `DOCTOR_REVIEW`
+- `PLAN_ISSUED`
+- `TREATMENT_ACTIVE`
+- `APPOINTMENT`
+- `COMPLETED`
 
-**Patients**
+### Urgency
 
-`GET /patients_list`
+- `URGENT`
+- `MEDIUM`
+- `ROUTINE`
 
-**Title:** List Patients  
-**Description:** Returns a list of patient profiles with optional limit.
+### Wound Shape
 
-**Query Params**
-| Field | Type | Required | Description | Example |
-|---|---|---|---|---|
-| `limit` | integer | No | Max number of patients (default 50, max 200). | `50` |
+- `round`
+- `oval`
+- `irregular`
+- `linear`
+- `punched_out`
 
-Response 200
+### Depth Category
+
+- `superficial`
+- `partial_thickness`
+- `full_thickness`
+- `deep`
+- `very_deep_exposed_bone_tendon`
+
+## 4. Endpoint Summary
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/load-dashboard` | Health/CORS check |
+| `POST` | `/create-patient-profile` | Create a patient profile |
+| `GET` | `/patients_list` | List patients |
+| `PATCH` | `/patients/{patient_id}` | Partially update patient profile |
+| `POST` | `/create-case` | Create a new case and first record |
+| `POST` | `/update_cases` | Create a follow-up record for an existing case |
+| `POST` | `/cases_list` | List cases |
+| `POST` | `/case_detail` | Load one case, its records, and patient profile |
+| `POST` | `/send-to-doctor` | Finalize a record for doctor review and create analysis/plan versions |
+| `POST` | `/analyze-fillin` | Upload wound image and return structured fill-in output |
+| `POST` | `/analyze-wound` | Run layered AI wound analysis |
+| `POST` | `/analyze-healing` | Generate healing-progress summary from records |
+| `POST` | `/tasks_list` | List current treatment plans that contain tasks |
+| `POST` | `/task_detail` | Load current treatment plan or one selected task |
+| `POST` | `/task_update` | Update tasks on current plan |
+
+## 5. Endpoint Specifications
+
+### 5.1 `POST /load-dashboard`
+
+**Purpose**
+
+Returns a simple success message used as a connectivity/CORS check.
+
+**Request body**
+
+None.
+
+**Response 200**
+
 ```json
 {
-  "status": "success",
-  "patients": [
-    {
-      "patient_id": "PT-2603-00001",
-      "patient_name": "John Doe",
-      "nrc_id": "8757446557345",
-      "phone_no": "0812345678",
-      "dob": "1990-01-01",
-      "gender": "Male",
-      "height_cm": 170,
-      "weight_kg": 65,
-      "medical_history": "DM",
-      "diabetes": {
-        "has_diabetes": "yes",
-        "years": "5",
-        "risk_history": [],
-        "complications": []
-      },
-      "status": "Active",
-      "created_at": "2026-03-06",
-      "synced_at": "2026-03-06T01:22:17Z",
-      "photo_url": "https://..."
-    }
-  ]
+  "message": "CORS is working!"
 }
 ```
 
-Errors
-- 500 server errors
+### 5.2 `POST /create-patient-profile`
 
----
+**Purpose**
 
-`POST /create-patient-profile`
+Creates a patient document and optionally uploads a profile image.
 
-**Title:** Create Patient Profile  
-**Description:** Creates a new patient profile and optionally uploads a profile image.
+**Content-Type**
 
-Content-Type: `multipart/form-data`
+`multipart/form-data`
 
-**Form Fields**
-| Field | Type | Required | Description |
+**Form fields**
+
+| Field | Type | Required | Notes |
 |---|---|---|---|
-| `patient_data` | string | Yes | JSON string for patient profile. |
-| `image` | file | No | Profile image file. |
+| `patient_data` | string | Yes | JSON string parsed into `PatientSchema` |
+| `image` | file | No | Uploaded as `profile_photo.jpg` |
 
-**`patient_data` Schema**
-| Field | Type | Required | Description | Example |
-|---|---|---|---|---|
-| `patient_name` | string | Yes | Patient full name. | `John Doe` |
-| `nrc_id` | string | No | National ID. | `8757446557345` |
-| `phone_no` | string | Yes | Phone number. | `0812345678` |
-| `dob` | string | Yes | Date of birth. | `1990-01-01` |
-| `gender` | string | Yes | Gender. | `Male` |
-| `height_cm` | string or number | Yes | Height in cm. | `170` |
-| `weight_kg` | string or number | Yes | Weight in kg. | `65` |
-| `medical_history` | string | Yes | Medical history. | `DM` |
-| `diabetes.has_diabetes` | string | Yes | `yes` or `no`. | `yes` |
-| `diabetes.years` | string | No | Years with diabetes. | `5` |
-| `diabetes.risk_history` | array | No | Risk history list. | `[]` |
-| `diabetes.complications` | array | No | Complications list. | `[]` |
-| `created_at` | string | Yes | Created date/time. | `2026-03-06` |
-| `status` | string | No | Patient status. | `Active` |
+**`patient_data` fields**
 
-**Example `patient_data`**
-```json
-{
-  "patient_name": "John Doe",
-  "nrc_id": "8757446557345",
-  "phone_no": "0812345678",
-  "dob": "1990-01-01",
-  "gender": "Male",
-  "height_cm": "170",
-  "weight_kg": "65",
-  "medical_history": "DM",
-  "diabetes": {
-    "has_diabetes": "yes",
-    "years": "5",
-    "risk_history": [],
-    "complications": []
-  },
-  "created_at": "2026-03-06",
-  "status": "Active"
-}
-```
+| Field | Type | Required |
+|---|---|---|
+| `nrc_id` | string | No |
+| `patient_name` | string | Yes |
+| `phone_no` | string | Yes |
+| `dob` | string | Yes |
+| `gender` | string | Yes |
+| `height_cm` | string or number | Yes |
+| `weight_kg` | string or number | Yes |
+| `medical_history` | string | Yes |
+| `diabetes` | object | Yes |
+| `diabetes.has_diabetes` | string | Yes |
+| `diabetes.years` | string | No |
+| `diabetes.risk_history` | string[] | No |
+| `diabetes.complications` | string[] | No |
+| `created_at` | string | Yes |
+| `status` | string | No, default `"Active"` |
 
-Response 200
+**Stored behavior**
+
+- Generates patient ID as `PT-YYMM-#####`
+- Casts `height_cm` and `weight_kg` to `float`
+- Sets `synced_at` with Firestore server timestamp
+- Stores uploaded image URL in `photo_url`
+
+**Response 200**
+
 ```json
 {
   "status": "success",
@@ -130,32 +153,64 @@ Response 200
 }
 ```
 
-Errors
-- 400 validation / format errors
+**Errors**
 
----
+- `400` if `patient_data` is invalid JSON or fails schema validation
 
-`PATCH /patients/{patient_id}`
+### 5.3 `GET /patients_list`
 
-**Title:** Update Patient Profile  
-**Description:** Updates fields for an existing patient profile.
+**Purpose**
 
-Content-Type: `application/json`
+Returns patient documents ordered by `created_at` descending.
 
-**Request Body**
-| Field | Type | Required | Description |
+**Query parameters**
+
+| Field | Type | Required | Notes |
 |---|---|---|---|
-| Any patient field | various | No | Only provided non-null fields are updated. |
+| `limit` | integer | No | Default `50`, clamped to `1..200` |
 
-**Example**
+**Response 200**
+
 ```json
 {
-  "phone_no": "0899999999",
-  "weight_kg": 70
+  "status": "success",
+  "patients": [
+    {
+      "patient_id": "PT-2603-00001",
+      "patient_name": "John Doe"
+    }
+  ]
 }
 ```
 
-Response 200
+**Errors**
+
+- `500` on server/database failure
+
+### 5.4 `PATCH /patients/{patient_id}`
+
+**Purpose**
+
+Partially updates a patient document.
+
+**Path parameters**
+
+| Field | Type | Required |
+|---|---|---|
+| `patient_id` | string | Yes |
+
+**Request body**
+
+JSON object. Any provided field with a non-null value is merged into the patient document.
+
+**Behavior**
+
+- Null values are discarded
+- `height_cm` and `weight_kg` are cast to `float` if present
+- `synced_at` is always added to the update payload
+
+**Response 200**
+
 ```json
 {
   "status": "success",
@@ -164,957 +219,724 @@ Response 200
 }
 ```
 
-Errors
-- 400 no fields to update
-- 500 server errors
+**Errors**
 
----
+- `400` if no non-null fields are provided
+- `500` on server/database failure
 
-**Cases**
+### 5.5 `POST /create-case`
 
-`POST /cases_list`
+**Purpose**
 
-**Title:** List Cases  
-**Description:** Returns cases, optionally filtered by `patient_id`.
+Creates a case document and its first record.
 
-**Request Body**
-| Field | Type | Required | Description | Example |
-|---|---|---|---|---|
-| `patient_id` | string | No | Filter by patient. | `PT-2603-00005` |
-| `limit` | integer | No | Max number of cases (default 50, max 200). | `50` |
+**Request body**
 
-**Example**
+JSON matching `CreateCaseRequest`.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `patient_id` | string | Yes | |
+| `status` | string | No | Invalid values fall back to `CREATION` |
+| `urgency` | string | No | Invalid values become `null` |
+| `created_by_nurse` | string | No | |
+| `assigned_doctor` | string | No | |
+| `vitals` | object | No | |
+| `vitals.temperature` | string | No | |
+| `vitals.blood_pressure` | string | No | |
+| `vitals.heart_rate` | string | No | |
+| `vitals.respiratory_rate` | string | No | |
+| `vitals.blood_sugar` | string | No | Stored as `blood_glucose` |
+| `meta` | object | No | |
+| `meta.sent_at` | string | No | Parsed using `%Y-%m-%d %H:%M:%S`, otherwise current UTC |
+
+**Behavior**
+
+- Generates case ID as `CS-YYMMDD-#####`
+- First record ID is always `REC-00001`
+- Creates empty default sections for wound detail, ischemia, infection, neuropathy, sinbad, lab results, vascular, and image
+- Copies current record snapshot into top-level `current_*` fields on the case
+
+**Response 200**
+
 ```json
 {
-  "patient_id": "PT-2603-00005",
-  "limit": 50
+  "status": "Case creation success",
+  "patient_id": "PT-2603-00001",
+  "case_id": "CS-260318-00001",
+  "record_id": "REC-00001"
 }
 ```
 
-Notes
-- Request body is optional. If omitted, defaults to `limit=50` and no `patient_id` filter.
-- If `patient_id` is provided, results are not ordered (to avoid needing a composite Firestore index).
+**Errors**
 
-Response 200
+- `500` on server/database failure
+
+### 5.6 `POST /update_cases`
+
+**Purpose**
+
+Creates a new follow-up record for an existing case and updates the case snapshot.
+
+**Request body**
+
+JSON matching `UpdateCaseRequest`.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `patient_id` | string | Yes | Must match stored case patient if one exists |
+| `case_id` | string | Yes | |
+| `status` | string | No | Invalid values fall back to `CREATION` |
+| `urgency` | string | No | Invalid values become `null` |
+| `created_by_nurse` | string | No | |
+| `assigned_doctor` | string | No | |
+| `vitals` | object | No | Same structure as `/create-case` |
+| `meta.sent_at` | string | No | Same parsing behavior as `/create-case` |
+
+**Behavior**
+
+- Computes next record ID from latest record number
+- Builds a new record, then merges non-null sections from the latest/current record into:
+  - `vital_signs`
+  - `wound_detail`
+  - `ischemia`
+  - `infection`
+  - `neuropathy`
+  - `sinbad`
+  - `lab_results`
+  - `vascular`
+  - `gangrene_extent`
+  - `treatment_plan`
+  - `task_list`
+  - `analysis`
+- If the latest record has a treatment plan, duplicates it with a new `plan_id`
+- Updates case `current_record_id`, clears `current_analysis_id`, and sets `current_plan_id` to the duplicated plan ID if one was created
+
+**Response 200**
+
+```json
+{
+  "status": "Case update success",
+  "patient_id": "PT-2603-00001",
+  "case_id": "CS-260318-00001",
+  "record_id": "REC-00002"
+}
+```
+
+**Errors**
+
+- `400` if `case_id` is missing
+- `400` if `patient_id` does not match the case
+- `404` if case does not exist
+- `500` on server/database failure
+
+### 5.7 `POST /cases_list`
+
+**Purpose**
+
+Lists case documents.
+
+**Request body**
+
+JSON object.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `limit` | integer | No | Default `50`, clamped to `1..200` |
+| `patient_id` | string | No | Filters by patient |
+
+**Behavior**
+
+- With `patient_id`: filters by patient and does not apply ordering
+- Without `patient_id`: orders by `case_updated_at` descending
+
+**Response 200**
+
 ```json
 {
   "status": "success",
   "cases": [
     {
-      "case_id": "CS-260306-00001",
+      "case_id": "CS-260318-00001",
       "patient_id": "PT-2603-00001",
-      "status": "CREATION",
-      "urgency": null,
-      "case_created_at": "2026-03-06T01:22:17Z",
-      "case_updated_at": "2026-03-06T01:22:17Z",
-      "current_record_id": "REC-00001",
-      "current_analysis_id": null,
-      "current_plan_id": null
+      "current_record_id": "REC-00002"
     }
   ]
 }
 ```
 
-Errors
-- 500 server errors
+**Errors**
 
----
+- `500` on server/database failure
 
-`POST /case_detail`
+### 5.8 `POST /case_detail`
 
-**Title:** Case Detail  
-**Description:** Returns case data, all records, and the related patient profile.
+**Purpose**
 
-**Request Body**
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `case_id` | string | Yes | Case ID to load. |
+Returns one case, its records, and its patient profile.
 
-**Example**
-```json
-{
-  "case_id": "CS-260306-00001"
-}
-```
+**Request body**
 
-Response 200
+| Field | Type | Required |
+|---|---|---|
+| `case_id` | string | Yes |
+
+**Behavior**
+
+- Case is loaded from `cases/{case_id}`
+- Records are ordered by `record_created_at` ascending
+- Patient profile is loaded using the case `patient_id` if present
+
+**Response 200**
+
 ```json
 {
   "status": "success",
-  "case": {
-    "case_id": "CS-260306-00001",
-    "patient_id": "PT-2603-00001",
-    "status": "CREATION",
-    "urgency": null,
-    "case_created_at": "2026-03-06T01:22:17Z",
-    "case_updated_at": "2026-03-06T01:22:17Z",
-    "current_record_id": "REC-00001",
-    "current_analysis_id": null,
-    "current_plan_id": null
-  },
-  "patient_profile": {
-    "patient_id": "PT-2603-00001",
-    "patient_name": "John Doe",
-    "nrc_id": "8757446557345",
-    "phone_no": "0812345678",
-    "dob": "1990-01-01",
-    "gender": "Male"
-  },
-  "records": [
-    {
-      "record_id": "REC-00001",
-      "case_id": "CS-260306-00001",
-      "patient_id": "PT-2603-00001",
-      "status": "CREATION",
-      "vital_signs": {
-        "temperature": "Warm",
-        "blood_pressure": "Normal",
-        "blood_glucose": "Normal",
-        "heart_rate": "Normal",
-        "respiratory_rate": "Normal"
-      }
-    }
-  ]
+  "case": {},
+  "records": [],
+  "patient_profile": {}
 }
 ```
 
-Errors
-- 400 missing `case_id`
-- 404 case not found
-- 500 server errors
+**Errors**
 
----
+- `400` if `case_id` is missing
+- `404` if case does not exist
+- `500` on server/database failure
 
-`POST /create-case`
+### 5.9 `POST /send-to-doctor`
 
-**Title:** Create Case  
-**Description:** Creates a new case and its first record.
+**Purpose**
 
-Content-Type: `application/json`
+Validates a completed wound case record payload, merges it into the target record, creates analysis and plan versions, and marks the case as `DOCTOR_REVIEW`.
 
-**Request Body**
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `patient_id` | string | Yes | Patient ID. |
-| `status` | string | No | Case status. |
-| `urgency` | string | No | `URGENT`, `MEDIUM`, or `ROUTINE`. |
-| `created_by_nurse` | string | No | Nurse ID. |
-| `assigned_doctor` | string | No | Doctor ID. |
-| `vitals.temperature` | string | No | Temperature. |
-| `vitals.blood_pressure` | string | No | Blood pressure. |
-| `vitals.heart_rate` | string | No | Heart rate. |
-| `vitals.respiratory_rate` | string | No | Respiratory rate. |
-| `vitals.blood_sugar` | string | No | Blood glucose. |
-| `meta.sent_at` | string | No | Client timestamp. |
+**Request body**
 
-**Example**
-```json
-{
-  "patient_id": "PT-2603-00001",
-  "status": "CREATION",
-  "urgency": "MEDIUM",
-  "created_by_nurse": "NUR-0001",
-  "assigned_doctor": "DR-0001",
-  "vitals": {
-    "temperature": "Warm",
-    "blood_pressure": "Normal",
-    "heart_rate": "Normal",
-    "respiratory_rate": "Normal",
-    "blood_sugar": "Normal"
-  },
-  "meta": {
-    "sent_at": "2026-03-06 01:22:17"
-  }
-}
-```
+JSON matching `WoundCaseRecordUpdate`.
 
-Response 200
-```json
-{
-  "status": "Case creation success",
-  "patient_id": "PT-2603-00001",
-  "case_id": "CS-260306-00001",
-  "record_id": "REC-00001"
-}
-```
+**Required top-level fields**
 
-Notes
-- If `urgency` is omitted, it is stored as `null`.
+| Field | Type | Required |
+|---|---|---|
+| `record_id` | string | Yes |
+| `case_id` | string | Yes |
+| `patient_id` | string | Yes |
+| `vital_signs` | object | Yes |
+| `wound_detail` | object | Yes |
+| `ischemia` | object | Yes |
+| `infection` | object | Yes |
+| `neuropathy` | object | Yes |
+| `sinbad` | object | Yes |
+| `lab_results` | object | Yes |
+| `vascular` | object | Yes |
 
-Errors
-- 500 server errors (see terminal for traceback)
+Other fields from `WoundCaseRecord` may also be supplied, including `urgency`, `analysis`, `treatment_plan`, `task_list`, `timestamps`, and `image`.
 
----
+**Behavior**
 
-`POST /update_cases`
+- Merges non-null incoming sections with the existing record
+- If `timestamps` is missing, creates one and stamps `updated_at` and `analyze_at`
+- Sets `record_updated_at` to Firestore server timestamp
+- Generates:
+  - `analysis_id` as `AN-YYYYMMDDHHMMSS`
+  - `plan_id` as `PL-YYYYMMDDHHMMSS`
+- Creates `analysis_versions/{analysis_id}`
+- Creates `plan_versions/{plan_id}`
+- Builds tasks from `task_list` or `treatment_plan.plan_tasks`
+- Auto-generates `task_id` values as `TSK-0001`, `TSK-0002`, ... when missing
+- Writes current snapshot back to the case and sets:
+  - `status = DOCTOR_REVIEW`
+  - `current_record_id`
+  - `current_analysis_id`
+  - `current_plan_id`
 
-**Title:** Add Follow-Up Record  
-**Description:** Updates an existing case and creates a new follow-up record.
+**Response 200**
 
-Content-Type: `application/json`
-
-**Request Body**
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `case_id` | string | Yes | Case ID to update. |
-| `patient_id` | string | Yes | Patient ID. |
-| `status` | string | No | Case status. |
-| `urgency` | string | No | `URGENT`, `MEDIUM`, or `ROUTINE`. |
-| `created_by_nurse` | string | No | Nurse ID. |
-| `assigned_doctor` | string | No | Doctor ID. |
-| `vitals.temperature` | string | No | Temperature. |
-| `vitals.blood_pressure` | string | No | Blood pressure. |
-| `vitals.heart_rate` | string | No | Heart rate. |
-| `vitals.respiratory_rate` | string | No | Respiratory rate. |
-| `vitals.blood_sugar` | string | No | Blood glucose. |
-| `meta.sent_at` | string | No | Client timestamp. |
-
-**Example**
-```json
-{
-  "patient_id": "PT-2603-00001",
-  "case_id": "CS-260306-00001",
-  "status": "CREATION",
-  "vitals": {
-    "temperature": "Warm",
-    "blood_pressure": "Normal",
-    "heart_rate": "Normal",
-    "respiratory_rate": "Normal",
-    "blood_sugar": "Normal"
-  },
-  "meta": {
-    "sent_at": "2026-03-06 01:22:17"
-  }
-}
-```
-
-Response 200
-```json
-{
-  "status": "Case update success",
-  "patient_id": "PT-2603-00001",
-  "case_id": "CS-260306-00001",
-  "record_id": "REC-00002"
-}
-```
-
-Behavior
-- Updates `case_updated_at`
-- Creates a new record under `cases/{case_id}/records/{record_id}`
-- Sets `current_record_id` to the new record
- - Preserve‑non‑null: if the incoming follow‑up payload has nulls, values are carried over from the latest record
-
-Errors
-- 404 if case not found
-- 400 if `patient_id` does not match the case
-- 500 server errors
-
----
-
-`POST /send-to-doctor`
-
-**Title:** Send to Doctor  
-**Description:** Creates analysis/plan versions and updates case status for review.
-
-Content-Type: `application/json`
-
-**Request Body (Summary)**
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `record_id` | string | Yes | Record ID. |
-| `case_id` | string | Yes | Case ID. |
-| `patient_id` | string | Yes | Patient ID. |
-| `status` | string | Yes | Should be `DOCTOR_REVIEW`. |
-| `urgency` | string | No | `URGENT`, `MEDIUM`, or `ROUTINE`. |
-| `vital_signs` | object | Yes | Vital signs object. |
-| `wound_detail` | object | Yes | Wound detail object. |
-| `ischemia` | object | Yes | Ischemia object. |
-| `infection` | object | Yes | Infection object. |
-| `neuropathy` | object | Yes | Neuropathy object. |
-| `sinbad` | object | Yes | SINBAD object. |
-| `lab_results` | object | Yes | Lab results object. |
-| `vascular` | object | Yes | Vascular object. |
-
-**Example**  
-See the full JSON example below (same as current minimal example).
-
-Response 200
 ```json
 {
   "status": "success",
   "message": "Case sent for doctor review",
-  "case_id": "CS-260306-00001",
-  "record_id": "REC-00001",
-  "analysis_id": "AN-20260306012345",
-  "plan_id": "PL-20260306012345"
+  "case_id": "CS-260318-00001",
+  "record_id": "REC-00002",
+  "analysis_id": "AN-20260318120000",
+  "plan_id": "PL-20260318120000"
 }
 ```
 
-Errors
-- 422 validation errors (missing required sections)
-- 500 server errors
+**Errors**
 
-Notes
-- Preserve-non-null: incoming null fields do not overwrite existing stored values for `vital_signs`, `wound_detail`, `ischemia`, `infection`, `neuropathy`, `sinbad`, `lab_results`, `vascular`, `gangrene_extent`, `treatment_plan`, `task_list`, `analysis`, `image`.
-- The server injects `treatment_plan.plan_id` (e.g., `PL-YYYYMMDDHHMMSS`) and `treatment_plan.plan_tasks[*].task_id` into the record and `cases/{case_id}.current_treatment_plan`.
+- `422` if required nested sections are missing according to Pydantic validation
+- `500` on server/database failure
 
+### 5.10 `POST /analyze-fillin`
 
+**Purpose**
 
+Uploads a wound image, stores its URL, and requests a structured AI fill-in result.
 
----
+**Content-Type**
 
-**Analysis**
+`multipart/form-data`
 
-`POST /analyze-fillin`
+**Form fields**
 
-**Title:** Analyze Fill-In  
-**Description:** Uploads a wound image, stores it in Firebase Storage, and returns a structured fill-in analysis.
+| Field | Type | Required |
+|---|---|---|
+| `case_id` | string | Yes |
+| `record_id` | string | Yes |
+| `image` | file | Yes |
 
-Content-Type: `multipart/form-data`
+**Behavior**
 
-**Form Fields**
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `case_id` | string | Yes | Case ID. |
-| `record_id` | string | Yes | Record ID. |
-| `image` | file | Yes | Wound image. |
+- Validates the file with Pillow
+- Uploads to Firebase storage using generated filename `{case_id}-{record_id}-{timestamp}.jpg`
+- Updates record `image.image_folder_url`
+- If the record is the case current record, also updates `case.current_image.image_folder_url`
+- Calls the configured Gemini model with JSON response mode
 
-Response 200
+**Response 200**
+
 ```json
 {
   "status": "success",
-  "case_id": "CS-260306-00001",
-  "record_id": "REC-00001",
-  "analysis": {
-    "location_primary": "dorsal_aspect",
-    "location_detail": "foot",
-    "wound_type": "ulcer",
-    "shape": "irregular",
-    "size_width_cm": 3.0,
-    "size_length_cm": 4.0,
-    "depth_category": "full_thickness",
-    "bed_slough_pct": 20,
-    "bed_necrotic_pct": 10,
-    "edge_description": "irregular",
-    "periwound_status": "erythematous",
-    "discharge_volume": "minimal",
-    "discharge_type": "serosanguineous (pink)",
-    "odor_presence": "faint",
-    "pain_score": 4,
-    "has_infection": true,
-    "skin_condition": "dry"
-  },
-  "image_id": "CS-260306-00001-REC-00001-20260306012345.jpg",
+  "case_id": "CS-260318-00001",
+  "record_id": "REC-00002",
+  "analysis": {},
+  "image_id": "CS-260318-00001-REC-00002-20260318120000.jpg",
   "image_url": "https://..."
 }
 ```
 
-Behavior
-- Updates `records/{record_id}.image.image_folder_url`.
-- If `case.current_record_id == record_id`, also updates `cases/{case_id}.current_image.image_folder_url`.
+**Alternative response**
 
-Errors
-- 400 invalid image
-- 500 server errors
-
----
-
-`POST /analyze-healing`
-
-**Title:** Analyze Healing Progress  
-**Description:** Analyzes chronological records and images to generate a healing progress summary.
-
-Content-Type: `application/json`
-
-**Request Body**
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `case_id` | string | Yes | Case ID to analyze. |
-
-**Example**
 ```json
 {
-  "case_id": "CS-260306-00001"
+  "status": "blocked",
+  "reason": "..."
 }
 ```
 
-Response 200
+**Errors**
+
+- `400` if the uploaded file is not a valid image
+- `500` on AI/storage/server failure
+
+### 5.11 `POST /analyze-wound`
+
+**Purpose**
+
+Runs three-layer AI wound analysis using uploaded image and structured clinical payload.
+
+**Content-Type**
+
+`multipart/form-data`
+
+**Form fields**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `payload_data` | string | Yes | JSON string |
+| `image` | file | Yes | Image is resized client-side in memory for model use |
+
+**`payload_data` minimum contract**
+
+| Field | Type | Required |
+|---|---|---|
+| `case_ref` | object | Yes |
+| `case_ref.patient_id` | string | Yes |
+| `case_ref.case_id` | string | Yes |
+| `case_ref.record_id` | string | Yes |
+
+Optional fields include `patient_profile`, `nurse_reviewed`, and `ai_prefill`.
+
+**Behavior**
+
+- If `case_id` and `record_id` exist in payload:
+  - updates the record with `status = "ANALYZING"` and `nurse_reviewed` sections
+  - updates the case with `status = "ANALYZING"` and `current_*` section snapshots
+- Runs three Gemini calls:
+  - layer 1: image extraction
+  - layer 2: evidence fusion
+  - layer 3: scoring and plan
+- Final `analysis` value is returned as a JSON string, not a nested object
+
+**Response 200**
+
 ```json
 {
   "status": "success",
-  "analysis": "- Overall trend: improving\n- Key changes: ...\n- Concerns: ...",
-  "records": [
-    { "record_id": "REC-00001", "status": "CREATION" }
-  ]
+  "analysis": "{\"creator\":\"...\"}"
 }
 ```
 
-Errors
-- 400 missing `case_id`
-- 404 no records for case
-- 500 server errors
+**Alternative response**
 
----
-
-`POST /analyze-wound`
-
-**Title:** Analyze Wound  
-**Description:** Runs multi-stage AI analysis on the wound image and payload data.
-
-Content-Type: `multipart/form-data`
-
-**Form Fields**
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `payload_data` | string | Yes | JSON string used by the prompt. |
-| `image` | file | Yes | Wound image. |
-
-**`payload_data` Schema**
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `patient_profile` | object | No | Patient profile snapshot. |
-| `nurse_reviewed.nurse_reviewed_flag` | boolean | No | Nurse reviewed flag. |
-| `nurse_reviewed.vital_signs` | object | No | Vital signs. |
-| `nurse_reviewed.wound_detail` | object | No | Wound details. |
-| `nurse_reviewed.ischemia` | object | No | Ischemia assessment. |
-| `nurse_reviewed.infection` | object | No | Infection assessment. |
-| `nurse_reviewed.neuropathy` | object | No | Neuropathy assessment. |
-| `nurse_reviewed.sinbad` | object | No | SINBAD fields. |
-| `nurse_reviewed.lab_results` | object | No | Lab results. |
-| `nurse_reviewed.vascular` | object | No | Vascular tests. |
-| `nurse_reviewed.gangrene_extent` | string | No | Gangrene extent. |
-| `ai_prefill` | object | No | AI prefill data. |
-| `case_ref.patient_id` | string | Yes | Patient ID. |
-| `case_ref.case_id` | string | Yes | Case ID. |
-| `case_ref.record_id` | string | Yes | Record ID. |
-
-**Example `payload_data`**
 ```json
 {
-  "patient_profile": {
-    "patient_id": "PT-2603-00001",
-    "patient_name": "John Doe",
-    "nrc_id": "8757446557345",
-    "phone_no": "0812345678",
-    "dob": "1990-01-01",
-    "gender": "Male",
-    "height_cm": 170,
-    "weight_kg": 65,
-    "medical_history": "DM",
-    "diabetes": { "has_diabetes": "yes", "years": "5", "risk_history": [], "complications": [] }
-  },
-  "nurse_reviewed": {
-    "nurse_reviewed_flag": true,
-    "vital_signs": {
-      "temperature": "Warm",
-      "blood_pressure": "Normal",
-      "blood_glucose": "Normal",
-      "heart_rate": "Normal",
-      "respiratory_rate": "Normal"
-    },
-    "wound_detail": {
-      "location_primary": "dorsal_aspect",
-      "location_detail": "foot",
-      "wound_type": "ulcer",
-      "shape": "irregular",
-      "size": { "width_cm": 3.0, "length_cm": 4.0 },
-      "depth_category": "full_thickness",
-      "bed": { "slough_pct": 20, "necrotic_pct": 10 },
-      "edge_description": "irregular",
-      "periwound_status": "erythematous",
-      "discharge": { "volume": "minimal", "type": "serosanguineous (pink)" },
-      "odor_presence": "faint",
-      "pain_score": 4,
-      "has_infection": true,
-      "skin_condition": "dry"
-    },
-    "ischemia": { "points": [0, 1], "pulse": "yes", "checklist": ["Cold foot"] },
-    "infection": { "checklist": ["Warmth"], "erythema_extent": "gt_2_cm", "probe_to_bone_test": "negative", "has_deep_abscess_or_fasciitis": "no" },
-    "neuropathy": { "points": [0, 1, 3, 4] },
-    "sinbad": { "site": "Forefoot", "ischemia": "Yes", "neuropathy": "Yes", "infection": "Yes", "area": ">= 1 cm²", "depth": "Skin only" },
-    "lab_results": { "wbc_count": "6500", "crp": "5", "esr": "30", "procalcitonin": "0.3" },
-    "vascular": { "abi_value": "0.9", "ankle_pressure_mmHg": "70", "toe_pressure_mmHg": "45", "tcpo2_mmHg": "30" },
-    "gangrene_extent": "digits_only"
-  },
-  "ai_prefill": {
-    "analysis": {
-      "creator": "Gemini AI",
-      "diagnosis": "Moderate infected neuropathic ulcer",
-      "description": "Full-thickness ulcer with erythema and discharge.",
-      "confidence": 0.85,
-      "red_flag": true
-    }
-  },
-  "case_ref": { "patient_id": "PT-2603-00001", "case_id": "CS-260306-00001", "record_id": "REC-00001" }
+  "status": "blocked",
+  "reason": "..."
 }
 ```
 
-Response 200
-```json
-{"status":"success","analysis":"..."}
-```
+**Errors**
 
-Errors
-- 500 server errors
+- `400` if `payload_data` is invalid JSON
+- `500` on AI/server failure
 
----
+### 5.12 `POST /analyze-healing`
 
-**Tasks**
+**Purpose**
 
-`POST /tasks_list`
+Builds a chronological healing summary from stored records and any record image URLs.
 
-**Title:** List Current Tasks  
-**Description:** Returns all current tasks from cases, with patient name and current treatment plan.
+**Request body**
 
-Content-Type: `application/json`
+| Field | Type | Required |
+|---|---|---|
+| `case_id` | string | Yes |
 
-**Request Body**
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `limit` | integer | No | Max number of cases to scan (default 200, max 500). |
+**Behavior**
 
-Response 200
+- Loads all records ordered by `record_created_at` ascending
+- Appends each record JSON to the model prompt
+- Attempts to fetch each record image via URL and attach it to the prompt
+- Stores the result into:
+  - latest record `healing_progress`
+  - case `current_healing_progress`
+
+**Response 200**
+
 ```json
 {
   "status": "success",
-  "tasks": [
+  "analysis": "Overall trend: improving",
+  "records": []
+}
+```
+
+**Alternative response**
+
+```json
+{
+  "status": "blocked",
+  "reason": "...",
+  "records": []
+}
+```
+
+**Errors**
+
+- `400` if `case_id` is missing
+- `404` if no records exist for the case
+- `500` on AI/server failure
+
+### 5.13 `POST /tasks_list`
+
+**Purpose**
+
+Returns cases whose current treatment plan contains tasks.
+
+**Request body**
+
+Optional JSON object.
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `limit` | integer | No | Default `200`, clamped to `1..500` |
+
+**Behavior**
+
+- Reads cases ordered by `case_updated_at` descending
+- Loads patient names in batch
+- Includes only cases whose `current_treatment_plan.plan_tasks` is a non-empty list
+
+**Response 200**
+
+```json
+{
+  "status": "success",
+  "current_treatment_plan": [
     {
-      "case_id": "CS-260314-00002",
-      "patient_id": "PT-2603-00004",
-      "patient_name": "Patient A",
-      "current_record_id": "REC-00001",
-      "current_plan_id": "PL-20260314163734",
+      "case_id": "CS-260318-00001",
+      "patient_id": "PT-2603-00001",
+      "patient_name": "John Doe",
+      "current_record_id": "REC-00002",
+      "current_plan_id": "PL-20260318120000",
       "current_treatment": {
-        "followup_days": 7,
-        "plan_text": "Wound care, dressing care, offloading...",
-        "status": "DRAFT",
-        "plan_tasks": [
-          { "task_text": "Wound care and dressing changes", "status": "DRAFT", "task_due": null, "task_photo_url": "https://..." }
-        ]
+        "plan_tasks": []
       }
     }
   ]
 }
 ```
 
-Errors
-- 500 server errors
+**Implementation note**
 
----
+The response key is `current_treatment_plan`, not `tasks`.
 
-`POST /task_detail`
+**Errors**
 
-**Title:** Task Detail  
-**Description:** Returns current treatment plan and tasks for a case, with optional task selection by index.
+- `500` on server/database failure
 
-Content-Type: `application/json`
+### 5.14 `POST /task_detail`
 
-**Request Body**
-| Field | Type | Required | Description |
+**Purpose**
+
+Returns the current treatment plan for a case and either the full task list or a single indexed task.
+
+**Request body**
+
+Optional JSON object.
+
+| Field | Type | Required | Notes |
 |---|---|---|---|
-| `case_id` | string | Yes | Case ID to load tasks from. |
-| `task_index` | integer | No | Zero‑based index in `plan_tasks` to return a single task. |
+| `case_id` | string | Yes | |
+| `task_index` | integer | No | Zero-based index |
 
-**Example**
-```json
-{
-  "case_id": "CS-260314-00002",
-  "task_index": 0
-}
-```
+**Behavior**
 
-Response 200
+- Loads patient name if case `patient_id` exists
+- If `task_index` is omitted, returns `plan_tasks`
+- If `task_index` is provided, returns `task`
+
+**Response 200**
+
 ```json
 {
   "status": "success",
-  "case_id": "CS-260314-00002",
-  "patient_id": "PT-2603-00004",
-  "patient_name": "Patient A",
-  "current_treatment": {
-    "followup_days": 7,
-    "plan_text": "Wound care, dressing care, offloading...",
-    "status": "DRAFT",
-    "plan_tasks": [
-      { "task_text": "Wound care and dressing changes", "status": "DRAFT", "task_due": null, "task_photo_url": "https://..." }
-    ]
-  },
-  "plan_tasks": [
-    { "task_text": "Wound care and dressing changes", "status": "DRAFT", "task_due": null, "task_photo_url": "https://..." }
-  ]
+  "case_id": "CS-260318-00001",
+  "patient_id": "PT-2603-00001",
+  "patient_name": "John Doe",
+  "current_treatment": {},
+  "plan_tasks": []
 }
 ```
 
-Errors
-- 400 missing/invalid `case_id` or `task_index`
-- 404 case not found / task_index out of range
-- 500 server errors
+**Errors**
 
----
+- `400` if `case_id` is missing
+- `400` if `task_index` cannot be parsed as integer
+- `404` if case does not exist
+- `404` if `task_index` is out of range
+- `500` on server/database failure
 
-`POST /task_update`
+### 5.15 `POST /task_update`
 
-**Title:** Update Active Task  
-**Description:** Updates tasks inside `cases/{case_id}.current_treatment_plan.plan_tasks` and the active plan version tasks.
+**Purpose**
 
-Content-Type: `multipart/form-data`
+Updates tasks in the current treatment plan and in the current plan version task documents.
 
-**Form Fields**
-| Field | Type | Required | Description |
+**Content-Type**
+
+`multipart/form-data`
+
+**Form fields**
+
+| Field | Type | Required | Notes |
 |---|---|---|---|
-| `case_id` | string | Yes | Case ID containing the active plan. |
-| `plan_id` | string | No | Current plan ID (validated if provided). |
-| `updates` | string | Yes | JSON string list of task updates. |
-| `images` | file[] | No | Task photo files; if provided, count must match `updates` list length (index-matched). |
+| `case_id` | string | Yes | |
+| `plan_id` | string | No | If provided, must match case `current_plan_id` |
+| `updates` | string | Yes | JSON string list |
+| `images` | file[] | No | If present, count must equal update count |
 
-**`updates` Fields**
-| Field | Type | Required | Description |
-|---|---|---|---|
-| `status` | string | No | Task status. |
-| `task_due` | string | No | Due date. |
-| `completed_at` | string | No | Completion timestamp. |
-| `task_photo_url` | string | No | Photo URL for the task (set automatically if `image` is provided). |
-| `task_text` | string | No | Task text. |
+**`updates` item format**
 
-**Example `updates`**
 ```json
 [
   {
     "task_id": "TSK-0001",
     "updates": {
       "status": "COMPLETED",
-      "completed_at": "2026-03-17T10:00:00Z"
-    }
-  },
-  {
-    "task_id": "TSK-0002",
-    "updates": {
-      "status": "IN_PROGRESS",
-      "task_due": "2026-03-20"
+      "task_due": "2026-03-20",
+      "completed_at": "2026-03-18T12:00:00Z",
+      "task_photo_url": "https://...",
+      "task_text": "Updated task text"
     }
   }
 ]
 ```
 
-Response 200
+Only these fields are accepted inside each `updates` object:
+
+- `status`
+- `task_due`
+- `completed_at`
+- `task_photo_url`
+- `task_text`
+
+**Behavior**
+
+- Parses `updates` as JSON list
+- Uploads each provided image to Firebase and overwrites `task_photo_url`
+- Updates `cases/{case_id}.current_treatment_plan.plan_tasks`
+- Updates current plan version task documents under the current record
+- Returns the actual `current_plan_id`, not the provided `plan_id`
+
+**Response 200**
+
 ```json
 {
   "status": "success",
-  "case_id": "CS-260314-00002",
-  "plan_id": "PL-20260314163734",
-  "updated_task_ids": ["TSK-0001", "TSK-0002"]
+  "case_id": "CS-260318-00001",
+  "plan_id": "PL-20260318120000",
+  "updated_task_ids": ["TSK-0001"]
 }
 ```
 
-Errors
-- 400 missing/invalid `case_id` or `updates`, or image count mismatch
-- 404 case not found / task_id not found in current plan / current plan version missing
-- 500 server errors
+**Errors**
 
----
+- `400` if `updates` is invalid JSON
+- `400` if `updates` is empty or not a list
+- `400` if `plan_id` does not match current plan
+- `400` if image count does not match update count
+- `400` if any update entry is invalid or has no valid fields
+- `404` if case does not exist
+- `404` if no `plan_tasks` exist
+- `404` if any `task_id` is not in current plan
+- `404` if current plan/record linkage is missing
+- `500` on server/database failure
 
-**Firestore Data Model (Current)**
+## 6. Core Data Models
 
-```
-patients
-  └── {patient_id}
-       patient_name
-       phone_no
-       dob
-       gender
-       ...
+### Patient Profile
 
-cases
-  └── {case_id}
-       patient_id
-       created_by_nurse
-       assigned_doctor
-       status
-       urgency
-       case_created_at
-       case_updated_at
-
-       current_record_id
-       current_analysis_id
-       current_plan_id
-
-       records
-         └── {record_id}
-              record_created_by
-              record_created_at
-              record_updated_at
-
-              timestamps
-              image
-              vital_signs
-              wound_detail
-              ischemia
-              infection
-              neuropathy
-              sinbad
-              lab_results
-              vascular
-              gangrene_extent
-
-              analysis_versions
-                └── {analysis_id}
-
-              plan_versions
-                └── {plan_id}
-                     tasks
-                       └── {task_id}
-                            completed_at
+```json
+{
+  "patient_id": "PT-2603-00001",
+  "nrc_id": "8757446557345",
+  "patient_name": "John Doe",
+  "phone_no": "0812345678",
+  "dob": "1990-01-01",
+  "gender": "Male",
+  "height_cm": 170.0,
+  "weight_kg": 65.0,
+  "medical_history": "DM",
+  "diabetes": {
+    "has_diabetes": "yes",
+    "years": "5",
+    "risk_history": [],
+    "complications": []
+  },
+  "status": "Active",
+  "created_at": "2026-03-18",
+  "synced_at": "server timestamp",
+  "photo_url": "https://..."
+}
 ```
 
----
+### Case Document
 
-**Workflow: Create Case (Typical Sequence)**
-
-1. **Patient Search**  
-   Call: `GET /patients_list`  
-   Input: none  
-   Output: `{ status, patients: [...] }`  
-   Creates/Updates: none (read-only).
-
-2. **Ensure Patient Profile**  
-   If patient exists:  
-   Call: `PATCH /patients/{patient_id}`  
-   Input: patient profile JSON (from intake)  
-   Output: updated patient record  
-   Creates/Updates: updates `patients/{patient_id}` for non-null fields, casts `height_cm`/`weight_kg` to float, sets `synced_at = server timestamp`.
-
-   If patient does not exist:  
-   Call: `POST /create-patient-profile`  
-   Input: multipart form (`patient_data` + optional `image`)  
-   Output: `{ status, patient_id, photo_url, message }`  
-   Creates/Updates: increments `metadata/counters_{yyMM}.last_running_num`; creates `patients/{patient_id}` with `nrc_id`, `patient_name`, `phone_no`, `dob`, `gender`, `height_cm`, `weight_kg`, `medical_history`, `diabetes`, `status`, `created_at`, `synced_at`, `photo_url`; optional image uploaded to Storage at `patients/{patient_id}/profile/profile_photo.jpg` and `photo_url` set.
-
-3. **Create Case**  
-   Call: `POST /create-case`  
-   Input: `{ patient_id, status, vitals, meta }`  
-   Output: `{ status, case_id, record_id, patient_id }`  
-   Creates/Updates: increments `metadata/counters_case_{yyMMdd}.last_running_num`; creates `cases/{case_id}` with `case_id`, `patient_id`, `created_by_nurse`, `assigned_doctor`, `status`, `urgency`, `case_created_at`, `case_updated_at`, `current_record_id`, `current_analysis_id=null`, `current_plan_id=null`, plus current snapshot fields `current_timestamps`, `current_image`, `current_vital_signs`, `current_wound_detail`, `current_ischemia`, `current_infection`, `current_neuropathy`, `current_sinbad`, `current_lab_results`, `current_vascular`, `current_analysis`, `current_treatment_plan`; creates `cases/{case_id}/records/{record_id}` with `record_id`, `case_id`, `patient_id`, `record_created_by`, `record_created_at`, `record_updated_at`, `created_by_nurse`, `assigned_doctor`, `status`, `urgency`, `timestamps`, `image`, `vital_signs`, `wound_detail`, `ischemia`, `infection`, `neuropathy`, `sinbad`, `lab_results`, `vascular`, `gangrene_extent`, `analysis`, `treatment_plan`, `task_list`.
-
-4. **Wound Photo Analyze (Fill-in)**  
-   Call: `POST /analyze-fillin`  
-   Input: multipart form: `case_id`, `record_id`, `image`  
-   Output: `{ status, analysis, image_id, image_url, ... }`  
-   Creates/Updates: uploads image to Storage at `cases/{case_id}/{record_id}/{image_id}`; updates `records/{record_id}.image.image_folder_url` and `record_updated_at`; if `case.current_record_id == record_id`, updates `cases/{case_id}.current_image.image_folder_url` and `case_updated_at`.
-
-5. **Wound Assessment**  
-   Call: `POST /analyze-wound`  
-   Input: multipart form: `payload_data` (JSON string with patient_profile + nurse_reviewed), `image`  
-   Output: `{ status, analysis }`  
-   Creates/Updates (before AI call): updates `records/{record_id}` with `patient_id`, `status=ANALYZING`, `vital_signs`, `wound_detail`, `ischemia`, `infection`, `neuropathy`, `sinbad`, `lab_results`, `vascular`, `gangrene_extent`, `record_updated_at`; updates `cases/{case_id}` with `patient_id`, `status=ANALYZING`, `case_updated_at`, `current_record_id`, `current_vital_signs`, `current_wound_detail`, `current_ischemia`, `current_infection`, `current_neuropathy`, `current_sinbad`, `current_lab_results`, `current_vascular`, `current_gangrene_extent`.
-
-6. **Send To Doctor**  
-   Call: `POST /send-to-doctor`  
-   Input: `{ record_id, case_id, patient_id, status, ... }`  
-   Output: `{ status, case_id, record_id, analysis_id, plan_id }`  
-   Creates/Updates: merges `records/{record_id}` with incoming data for `vital_signs`, `wound_detail`, `ischemia`, `infection`, `neuropathy`, `sinbad`, `lab_results`, `vascular`, `gangrene_extent`, `treatment_plan`, `task_list`, `analysis`, `image` (preserve-non-null; if incoming `vital_signs` is all null, it keeps existing `vital_signs`); sets `records/{record_id}.timestamps.updated_at` and `timestamps.analyze_at` to server timestamp and sets `record_updated_at`; injects `treatment_plan.plan_id` and `treatment_plan.plan_tasks[*].task_id` plus `completed_at`; creates `records/{record_id}/analysis_versions/{analysis_id}` with `payload`, `status`, `source`, `created_at`; creates `records/{record_id}/plan_versions/{plan_id}` with `plan_text`, `followup_days`, `status`, `created_at`; creates `records/{record_id}/plan_versions/{plan_id}/tasks/{task_id}` for each task with `task_text`, `status`, `task_due`, `completed_at`, `created_at`; updates `cases/{case_id}` with `status=DOCTOR_REVIEW`, `urgency`, `case_updated_at`, `current_record_id`, `current_analysis_id`, `current_plan_id`, and current snapshot fields.
-
-**Total create‑case calls (typical path):** 6  
-If you skip photo or exit early, fewer calls happen.
-
----
-
-**Workflow: Follow-Up Flow (Typical Sequence)**
-
-1. **Patient Search**  
-   Call: `GET /patients_list`  
-   Input: none  
-   Output: `{ status, patients: [...] }`  
-   Creates/Updates: none (read-only).
-
-2. **Update Patient Profile**  
-   Call: `PATCH /patients/{patient_id}`  
-   Input: patient profile JSON (from intake)  
-   Output: updated patient record  
-   Creates/Updates: updates `patients/{patient_id}` for non-null fields, sets `synced_at`.
-
-3. **Load Patient Cases**  
-   Call: `POST /cases_list`  
-   Input: `{ "limit": 50, "patient_id": "<patient_id>" }`  
-   Output: `{ status, cases: [...] }`  
-   Creates/Updates: none (read-only).
-
-4. **Select Case → Vital Check**  
-   Call: `POST /update_cases`  
-   Input: `{ patient_id, case_id, status, vitals, meta }`  
-   Output: `{ status, case_id, record_id, patient_id }`  
-   Creates/Updates: creates `cases/{case_id}/records/{record_id}` with merged snapshot from latest record; merged fields are `vital_signs`, `wound_detail`, `ischemia`, `infection`, `neuropathy`, `sinbad`, `lab_results`, `vascular`, `gangrene_extent`, `treatment_plan`, `task_list`, `analysis` (preserve-non-null; if incoming `vital_signs` is all null, it keeps the latest `vital_signs`); duplicates latest `treatment_plan` into the new record with a new `plan_id` when a previous plan exists; creates `records/{record_id}/plan_versions/{plan_id}` and `plan_versions/{plan_id}/tasks/{task_id}` using copied fields (status, plan_text, followup_days, task_text, status, task_due, completed_at, task_photo_url); updates `cases/{case_id}` with `status`, `urgency`, `case_updated_at`, `current_record_id`, `current_analysis_id=null`, `current_plan_id=new_plan_id`, and current snapshot fields.
-
-5. **Wound Photo Analyze (Fill-in)**  
-   Call: `POST /analyze-fillin`  
-   Input: multipart form: `case_id`, `record_id`, `image`  
-   Output: `{ status, analysis, image_id, image_url, ... }`  
-   Creates/Updates: same as Create Case step 4.
-
-6. **Wound Assessment**  
-   Call: `POST /analyze-wound`  
-   Input: multipart form: `payload_data` (JSON string with patient_profile + nurse_reviewed), `image`  
-   Output: `{ status, analysis }`  
-   Creates/Updates: same as Create Case step 5.
-
-7. **Healing Summary (follow-up only)**  
-   Call: `POST /analyze-healing`  
-   Input: `{ "case_id": "<case_id>" }`  
-   Output: `{ status, analysis, records }`  
-   Creates/Updates: updates latest `records/{record_id}.healing_progress` and `cases/{case_id}.current_healing_progress`.
-
-**Total follow‑up calls (typical path):** 7  
-If you skip photo or exit early, fewer calls happen.
-
----
-
-**Workflow Flowchart**
-
-Create Case
-```mermaid
-flowchart TD
-  A[GET /patients_list] --> B{Patient exists?}
-  B -->|Yes| B2["PATCH /patients/{patient_id}"]
-  B -->|No| B3[POST /create-patient-profile]
-  B2 --> C[POST /create-case]
-  B3 --> C
-  C --> D[POST /analyze-fillin]
-  D --> E[POST /analyze-wound]
-  E --> F[POST /send-to-doctor]
-  F --> G(Finish create case)
+```json
+{
+  "case_id": "CS-260318-00001",
+  "patient_id": "PT-2603-00001",
+  "created_by_nurse": "NUR-001",
+  "assigned_doctor": "DR-001",
+  "status": "CREATION",
+  "urgency": "MEDIUM",
+  "case_created_at": "datetime",
+  "case_updated_at": "datetime",
+  "current_record_id": "REC-00001",
+  "current_analysis_id": null,
+  "current_plan_id": null
+}
 ```
 
-Follow-Up Case
-```mermaid
-flowchart TD
-  A[GET /patients_list] --> B["PATCH /patients/{patient_id}"]
-  B --> C[POST /cases_list]
-  C --> D[POST /update_cases]
-  D --> E[POST /analyze-fillin]
-  E --> F[POST /analyze-wound]
-  F --> G[POST /analyze-healing]
-  G --> H(Finish follow up case)
+The case also stores current snapshot fields such as:
+
+- `current_timestamps`
+- `current_image`
+- `current_vital_signs`
+- `current_wound_detail`
+- `current_ischemia`
+- `current_infection`
+- `current_neuropathy`
+- `current_sinbad`
+- `current_lab_results`
+- `current_vascular`
+- `current_analysis`
+- `current_treatment_plan`
+- `current_gangrene_extent` is additionally used by `/analyze-wound`
+- `current_healing_progress` is additionally used by `/analyze-healing`
+
+### Record Document
+
+Record payloads are based on `WoundCaseRecord`.
+
+Important sections:
+
+- identity: `record_id`, `case_id`, `patient_id`
+- ownership: `record_created_by`, `created_by_nurse`, `assigned_doctor`
+- status: `status`, `urgency`
+- timestamps: `record_created_at`, `record_updated_at`, `timestamps`
+- clinical sections:
+  - `vital_signs`
+  - `wound_detail`
+  - `ischemia`
+  - `infection`
+  - `neuropathy`
+  - `sinbad`
+  - `lab_results`
+  - `vascular`
+  - `gangrene_extent`
+- outputs:
+  - `analysis`
+  - `treatment_plan`
+  - `task_list`
+  - `image`
+  - `healing_progress`
+
+### Treatment Plan
+
+```json
+{
+  "plan_id": "PL-20260318120000",
+  "plan_text": "string or null",
+  "followup_days": 7,
+  "status": "DRAFT",
+  "plan_tasks": [
+    {
+      "task_id": "TSK-0001",
+      "task_text": "Wound care",
+      "status": "PENDING",
+      "task_due": "2026-03-20",
+      "completed_at": null,
+      "task_photo_url": "https://..."
+    }
+  ]
+}
 ```
 
-Task Execution
-```mermaid
-flowchart TD
-  A[POST /tasks_list] --> B[POST /task_detail]
-  B --> C[POST /task_update]
-  C --> D(Finish task updates)
+## 7. Firestore Structure Used by the API
+
+```text
+patients/{patient_id}
+
+cases/{case_id}
+cases/{case_id}/records/{record_id}
+cases/{case_id}/records/{record_id}/analysis_versions/{analysis_id}
+cases/{case_id}/records/{record_id}/plan_versions/{plan_id}
+cases/{case_id}/records/{record_id}/plan_versions/{plan_id}/tasks/{task_id}
+
+metadata/counters_{YYMM}
+metadata/counters_case_{YYMMDD}
 ```
 
----
+## 8. Implementation Notes and Gaps
 
-**Endpoint Payloads And Database Updates**
+- The API is implementation-first, not OpenAPI-first.
+- There is no auth, role enforcement, or PHI protection layer in the API itself.
+- Response formats vary by endpoint.
+- Several endpoints use `POST` for reads (`/cases_list`, `/case_detail`, `/tasks_list`, `/task_detail`).
+- `/analyze-wound` returns the final analysis as a JSON string instead of a nested JSON object.
+- `/tasks_list` returns `current_treatment_plan` as the array key, which is slightly misleading.
+- Case status written by `/analyze-wound` is `"ANALYZING"`, which is not part of the `Status` enum in [`schemas.py`](/c:/Users/Pawarit/Desktop/GitHub/Foster-Ulcer-AI/Foster-Ulcer-AI/backend/schemas.py).
+- No explicit request/response versioning is implemented.
 
-| Endpoint | Payload Fields | Database Updates |
-|---|---|---|
-| `POST /load-dashboard` | none | none |
-| `GET /patients_list` | none (query param `limit`) | none |
-| `POST /create-patient-profile` | `patient_data` (JSON string), optional `image` file | Writes `patients/{patient_id}`; increments `metadata/counters_{yyMM}`; uploads image to Storage if provided |
-| `PATCH /patients/{patient_id}` | Partial patient fields (JSON) | Updates `patients/{patient_id}`; sets `synced_at` |
-| `POST /cases_list` | `patient_id` (optional), `limit` (optional) | none |
-| `POST /case_detail` | `case_id` | none |
-| `POST /create-case` | `patient_id`, `status`, `urgency`, `created_by_nurse`, `assigned_doctor`, `vitals`, `meta` | Writes `cases/{case_id}` and `cases/{case_id}/records/{record_id}`; increments `metadata/counters_case_{yyMMdd}` |
-| `POST /update_cases` | `case_id`, `patient_id`, `status`, `urgency`, `created_by_nurse`, `assigned_doctor`, `vitals`, `meta` | Updates `cases/{case_id}` current fields; creates new `records/{record_id}` |
-| `POST /send-to-doctor` | `record_id`, `case_id`, `patient_id`, `status`, `urgency`, `vital_signs`, `wound_detail`, `ischemia`, `infection`, `neuropathy`, `sinbad`, `lab_results`, `vascular`, `gangrene_extent`, `analysis`, `treatment_plan`, `task_list`, optional `timestamps`, `image` | Updates `cases/{case_id}` current fields; merges `records/{record_id}`; creates `analysis_versions/{analysis_id}`, `plan_versions/{plan_id}`, and `plan_versions/{plan_id}/tasks/{task_id}` |
-| `POST /analyze-fillin` | `case_id`, `record_id`, `image` file | Uploads image to Storage; updates `records/{record_id}.image.image_folder_url` |
-| `POST /analyze-healing` | `case_id` | Writes `records/{latest_record_id}.healing_progress` and `cases/{case_id}.current_healing_progress` |
-| `POST /analyze-wound` | `payload_data` (JSON string), `image` file | Updates `records/{record_id}` with `nurse_reviewed` fields and `status=ANALYZING`; updates `cases/{case_id}` current fields and `status=ANALYZING` |
-| `POST /tasks_list` | `limit` (optional) | none |
-| `POST /task_detail` | `case_id`, `task_index` (optional) | none |
-| `POST /task_update` | `case_id`, `plan_id?`, `updates`, `images?` | Updates `cases/{case_id}.current_treatment_plan.plan_tasks` and active plan version tasks |
+## 9. Recommended Next Step
 
----
+If you want this to become a formal API report for handoff or frontend alignment, the next practical step is to convert this document into:
 
-**Observed Standards Gaps And Missing Items**
-
-Compared with a typical production-ready API specification template, the current `API.md` still lacks:
-
-- No versioning strategy (e.g., `/v1` or version header).
-- No authentication/authorization model specified.
-- No standard error schema with machine-readable codes and examples.
-- No endpoint-by-endpoint response schemas (only examples).
-- Field constraints incomplete (enums, ranges, nullable, defaults).
-- Date/time formats not standardized across examples.
-- No pagination contract beyond `limit` (no cursor/offset/total).
-- No idempotency guidance for create/update endpoints.
-- No concurrency/conflict behavior documented for PATCH or follow-ups.
-- No rate limiting/timeout/retry/size limits (esp. image uploads & AI).
-- No media requirements for uploads (type, size, resolution).
-- No environment definitions (local/staging/prod base URLs).
-- No status/state machine definition (CREATION, DOCTOR_REVIEW, URGENT, etc.).
-- No data retention, audit logging, PHI/PII handling, privacy or security notes.
-- No webhook/async job behavior for AI analysis endpoints.
-- No non‑200 error response examples (400/404/422/500).
-- `send-to-doctor` references a full JSON example, but it is not explicitly repeated as a full schema.
-- No rules for case sensitivity, unknown fields, or partial object merge vs replace.
-
----
-
-**Recommended Next Improvements**
-
-- Convert to OpenAPI 3.1 with schemas, enums, validation rules, and examples.
-- Define a shared error model and include example bodies for common errors.
-- Standardize all timestamps to ISO 8601 with timezone.
-- Add authentication, security, and privacy sections before external publication.
-- Add complete schemas for core objects: patient profile, case, record, analysis version, plan version.
-
----
-
-**Plan & Record State Guidance**
-
-Best‑practice rules for plans and records:
-- A plan is always tied to a specific record (`record_id + plan_id`).
-- The case points to the active plan via `current_record_id` and `current_plan_id`.
-- Use plan statuses to track lifecycle: `DRAFT`, `ACTIVE`, `COMPLETED`, `CANCELLED`, `SUPERSEDED`.
-- Do not move a plan to a different record. If a new record is created, create a new plan version (even if content is identical).
-
-Common transitions:
-1. **Activate same plan (Record A / Plan A)**  
-   - Update plan status `DRAFT` → `ACTIVE`.  
-   - No record change, no new plan version.
-
-2. **Plan change only (Record A / Plan B)**  
-   - Create new plan version under Record A.  
-   - Set `current_plan_id = Plan B`.  
-   - Mark Plan A as `SUPERSEDED` or `CANCELLED` (optional).
-
-3. **Record + plan change (Record B / Plan B)**  
-   - Create Record B.  
-   - Create Plan B under Record B.  
-   - Set `current_record_id = Record B`, `current_plan_id = Plan B`.
-
-4. **Record change only**  
-   - Recommended: create a new plan version under Record B (even if duplicate).  
-   - Avoid reusing a plan from Record A to keep audit history clean.
-
----
-
-**Task Execution Workflow**
-
-Typical task execution flow (active plan only):
-1. **Load tasks**  
-   Call: `POST /tasks_list`  
-   Input: `{ "limit": 200 }`  
-   Output: `{ status, tasks: [...] }`  
-   Notes: Each item includes `case_id`, `current_record_id`, `current_plan_id`, and `current_treatment.plan_tasks`.
-
-2. **View task detail (optional)**  
-   Call: `POST /task_detail`  
-   Input: `{ "case_id": "<case_id>", "task_index": 0 }`  
-   Output: `{ status, case_id, current_treatment, plan_tasks }` or `{ status, case_id, current_treatment, task }`
-
-3. **Update task status / due / completion / photo**  
-   Call: `POST /task_update` (multipart)  
-   Form fields: `case_id`, `plan_id` (optional but recommended; must match current plan if provided), `updates` (JSON list of `{ task_id, updates }`), `images` (optional, one file per update, index-matched).  
-   Output: `{ status, case_id, plan_id, updated_task_ids }`  
-   Creates/Updates: updates `cases/{case_id}.current_treatment_plan.plan_tasks` and `case_updated_at`; updates `records/{current_record_id}/plan_versions/{current_plan_id}/tasks/{task_id}` with `updated_at`; if images are provided, uploads to Storage at `cases/{case_id}/tasks/{task_id}/{filename}` and sets `task_photo_url`.
-
-**Task Workflow API Specs (Quick Reference)**
-| Step | Endpoint | Input | Output |
-|---|---|---|---|
-| Load tasks | `POST /tasks_list` | `{ "limit": 200 }` | `{ status, tasks: [...] }` |
-| Task detail | `POST /task_detail` | `{ "case_id": "...", "task_index": 0 }` | `{ status, case_id, current_treatment, plan_tasks }` or `{ status, case_id, current_treatment, task }` |
-| Update tasks | `POST /task_update` | `case_id`, `plan_id?`, `updates`, `images?` | Updates `cases/{case_id}.current_treatment_plan.plan_tasks` and active plan version tasks |
-
-
+1. a strict OpenAPI schema with shared components and examples
+2. a normalized error model
+3. a short workflow appendix for create-case, follow-up, and task execution

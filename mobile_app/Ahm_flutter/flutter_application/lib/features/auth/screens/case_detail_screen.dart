@@ -562,13 +562,9 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                     ),
                     const Gap(18),
 
-                    _SectionCard(
-                      titleIcon: Icons.description,
+                    _ExpandableDataCard(
                       title: "Wound Details",
-                      cs: cs,
                       isDark: isDark,
-                      card: card,
-                      border: border,
                       child: Column(
                         children: [
                           _DataGroupCard(
@@ -603,7 +599,6 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                             ],
                           ),
                           const Gap(14),
-
                           _DataGroupCard(
                             title: "Wound Basics",
                             isDark: isDark,
@@ -620,7 +615,6 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                             ],
                           ),
                           const Gap(14),
-
                           _DataGroupCard(
                             title: "Size & Depth",
                             isDark: isDark,
@@ -635,7 +629,6 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                             ],
                           ),
                           const Gap(14),
-
                           _DataGroupCard(
                             title: "Tissue & Edge",
                             isDark: isDark,
@@ -652,7 +645,6 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                             ],
                           ),
                           const Gap(14),
-
                           _DataGroupCard(
                             title: "Discharge & Symptoms",
                             isDark: isDark,
@@ -670,148 +662,153 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                               ),
                             ],
                           ),
-                          const Gap(14),
+                        ],
+                      ),
+                    ),
+                    const Gap(14),
 
-                          _DataGroupCard(
-                            title: "Advanced Inputs (WIfI / IDSA)",
+                    _ExpandableDataCard(
+                      title: "Advanced Inputs (WIfI / IDSA)",
+                      isDark: isDark,
+                      child: Column(
+                        children: [
+                          _SubGroupTitle(text: "WIfI: Ischemia", isDark: isDark),
+                          _DetailPairTable(
                             isDark: isDark,
-                            children: [
-                              _SubGroupTitle(text: "WIfI: Ischemia", isDark: isDark),
-                              _DetailPairTable(
-                                isDark: isDark,
-                                rows: [
-                                  _DetailRowData("Pulse Check", wifiPulseCheck),
-                                  _DetailRowData("Ischemia Checklist", wifiIschemiaChecklist),
-                                  _DetailRowData("Ischemia Points", wifiIschemiaPoints),
-                                  _DetailRowData("ABI", wifiAbi),
-                                  _DetailRowData("Ankle Pressure", wifiAnklePressure),
-                                  _DetailRowData("Toe Pressure", wifiToePressure),
-                                  _DetailRowData("TcPO2", wifiTcpo2),
-                                ],
-                              ),
-                              const Gap(16),
-                              _SubGroupTitle(text: "WIfI: Wound", isDark: isDark),
-                              _DetailPairTable(
-                                isDark: isDark,
-                                rows: [
-                                  _DetailRowData("Gangrene Extent", wifiGangreneExtent),
-                                  _DetailRowData("Depth Category", wifiWoundDepth),
-                                  _DetailRowData("Location Primary", wifiWoundLocation),
-                                ],
-                              ),
-                              const Gap(16),
-                              _SubGroupTitle(text: "IDSA: Infection", isDark: isDark),
-                              _DetailPairTable(
-                                isDark: isDark,
-                                rows: [
-                                  _DetailRowData("Infection Checklist", idsaChecklist),
-                                  _DetailRowData("Erythema Extent", idsaErythemaExtent),
-                                  _DetailRowData("Probe-to-Bone", idsaProbeToBone),
-                                  _DetailRowData(
-                                    "Deep Abscess/Fasciitis",
-                                    idsaDeepAbscess,
-                                  ),
-                                ],
-                              ),
-                              const Gap(16),
-                              _SubGroupTitle(text: "Neuropathy", isDark: isDark),
-                              _DetailPairTable(
-                                isDark: isDark,
-                                rows: [
-                                  _DetailRowData("Neuropathy Points", neuropathyPoints),
-                                ],
-                              ),
-                              const Gap(16),
-                              _SubGroupTitle(text: "Labs", isDark: isDark),
-                              _DetailPairTable(
-                                isDark: isDark,
-                                rows: [
-                                  _DetailRowData("WBC Count", labWbc),
-                                  _DetailRowData("CRP", labCrp),
-                                  _DetailRowData("ESR", labEsr),
-                                  _DetailRowData("Procalcitonin", labProcalcitonin),
-                                ],
-                              ),
-                              const Gap(16),
-                              _SubGroupTitle(text: "Advanced Inputs", isDark: isDark),
-                              _DetailPairTable(
-                                isDark: isDark,
-                                rows: [
-                                  _DetailRowData("Erythema Extent", advancedErythemaExtent),
-                                  _DetailRowData("Probe-to-Bone", advancedProbeToBone),
-                                  _DetailRowData(
-                                    "Deep Abscess/Fasciitis",
-                                    advancedDeepAbscess,
-                                  ),
-                                  _DetailRowData("Gangrene Extent", advancedGangreneExtent),
-                                ],
+                            rows: [
+                              _DetailRowData("Pulse Check", wifiPulseCheck),
+                              _DetailRowData("Ischemia Checklist", wifiIschemiaChecklist),
+                              _DetailRowData("Ischemia Points", wifiIschemiaPoints),
+                              _DetailRowData("ABI", wifiAbi),
+                              _DetailRowData("Ankle Pressure", wifiAnklePressure),
+                              _DetailRowData("Toe Pressure", wifiToePressure),
+                              _DetailRowData("TcPO2", wifiTcpo2),
+                            ],
+                          ),
+                          const Gap(16),
+                          _SubGroupTitle(text: "WIfI: Wound", isDark: isDark),
+                          _DetailPairTable(
+                            isDark: isDark,
+                            rows: [
+                              _DetailRowData("Gangrene Extent", wifiGangreneExtent),
+                              _DetailRowData("Depth Category", wifiWoundDepth),
+                              _DetailRowData("Location Primary", wifiWoundLocation),
+                            ],
+                          ),
+                          const Gap(16),
+                          _SubGroupTitle(text: "IDSA: Infection", isDark: isDark),
+                          _DetailPairTable(
+                            isDark: isDark,
+                            rows: [
+                              _DetailRowData("Infection Checklist", idsaChecklist),
+                              _DetailRowData("Erythema Extent", idsaErythemaExtent),
+                              _DetailRowData("Probe-to-Bone", idsaProbeToBone),
+                              _DetailRowData(
+                                "Deep Abscess/Fasciitis",
+                                idsaDeepAbscess,
                               ),
                             ],
                           ),
-                          const Gap(14),
-
-                          _DataGroupCard(
-                            title: "AI Results",
+                          const Gap(16),
+                          _SubGroupTitle(text: "Neuropathy", isDark: isDark),
+                          _DetailPairTable(
                             isDark: isDark,
-                            children: [
-                              _SubGroupTitle(text: "AI Narrative", isDark: isDark),
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.all(14),
-                                decoration: BoxDecoration(
-                                  color: isDark
-                                      ? const Color(0xFF0B1220)
-                                      : const Color(0xFFF8FAFC),
-                                  borderRadius: BorderRadius.circular(16),
-                                ),
-                                child: Text(
-                                  aiNarrative,
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    height: 1.45,
-                                    color: isDark ? Colors.white70 : Colors.black87,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
+                            rows: [
+                              _DetailRowData("Neuropathy Points", neuropathyPoints),
+                            ],
+                          ),
+                          const Gap(16),
+                          _SubGroupTitle(text: "Labs", isDark: isDark),
+                          _DetailPairTable(
+                            isDark: isDark,
+                            rows: [
+                              _DetailRowData("WBC Count", labWbc),
+                              _DetailRowData("CRP", labCrp),
+                              _DetailRowData("ESR", labEsr),
+                              _DetailRowData("Procalcitonin", labProcalcitonin),
+                            ],
+                          ),
+                          const Gap(16),
+                          _SubGroupTitle(text: "Advanced Inputs", isDark: isDark),
+                          _DetailPairTable(
+                            isDark: isDark,
+                            rows: [
+                              _DetailRowData("Erythema Extent", advancedErythemaExtent),
+                              _DetailRowData("Probe-to-Bone", advancedProbeToBone),
+                              _DetailRowData(
+                                "Deep Abscess/Fasciitis",
+                                advancedDeepAbscess,
                               ),
-                              const Gap(16),
-                              _SubGroupTitle(text: "AI Classifications", isDark: isDark),
-                              _DetailPairTable(
-                                isDark: isDark,
-                                rows: [
-                                  _DetailRowData("IDSA Stage", aiIdsaStage),
-                                  _DetailRowData("WIfI Wound", aiWifiWound),
-                                  _DetailRowData("WIfI Ischemia", aiWifiIschemia),
-                                  _DetailRowData(
-                                    "WIfI Foot Infection",
-                                    aiWifiFootInfection,
-                                  ),
-                                  _DetailRowData(
-                                    "WIfI Clinical Stage",
-                                    aiWifiClinicalStage,
-                                  ),
-                                  _DetailRowData("SINBAD Total", aiSinbadTotal),
-                                ],
+                              _DetailRowData("Gangrene Extent", advancedGangreneExtent),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Gap(14),
+
+                    _ExpandableDataCard(
+                      title: "AI Results",
+                      isDark: isDark,
+                      child: Column(
+                        children: [
+                          _SubGroupTitle(text: "AI Narrative", isDark: isDark),
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(14),
+                            decoration: BoxDecoration(
+                              color: isDark
+                                  ? const Color(0xFF0B1220)
+                                  : const Color(0xFFF8FAFC),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Text(
+                              aiNarrative,
+                              style: TextStyle(
+                                fontSize: 14,
+                                height: 1.45,
+                                color: isDark ? Colors.white70 : Colors.black87,
+                                fontWeight: FontWeight.w600,
                               ),
-                              const Gap(16),
-                              _SubGroupTitle(text: "SINBAD Breakdown", isDark: isDark),
-                              _DetailPairTable(
-                                isDark: isDark,
-                                rows: [
-                                  _DetailRowData("Site", aiSinbadSite),
-                                  _DetailRowData("Ischemia", aiSinbadIschemia),
-                                  _DetailRowData("Neuropathy", aiSinbadNeuropathy),
-                                  _DetailRowData("Infection", aiSinbadInfection),
-                                  _DetailRowData("Area", aiSinbadArea),
-                                  _DetailRowData("Depth", aiSinbadDepth),
-                                ],
+                            ),
+                          ),
+                          const Gap(16),
+                          _SubGroupTitle(text: "AI Classifications", isDark: isDark),
+                          _DetailPairTable(
+                            isDark: isDark,
+                            rows: [
+                              _DetailRowData("IDSA Stage", aiIdsaStage),
+                              _DetailRowData("WIfI Wound", aiWifiWound),
+                              _DetailRowData("WIfI Ischemia", aiWifiIschemia),
+                              _DetailRowData(
+                                "WIfI Foot Infection",
+                                aiWifiFootInfection,
                               ),
+                              _DetailRowData(
+                                "WIfI Clinical Stage",
+                                aiWifiClinicalStage,
+                              ),
+                              _DetailRowData("SINBAD Total", aiSinbadTotal),
+                            ],
+                          ),
+                          const Gap(16),
+                          _SubGroupTitle(text: "SINBAD Breakdown", isDark: isDark),
+                          _DetailPairTable(
+                            isDark: isDark,
+                            rows: [
+                              _DetailRowData("Site", aiSinbadSite),
+                              _DetailRowData("Ischemia", aiSinbadIschemia),
+                              _DetailRowData("Neuropathy", aiSinbadNeuropathy),
+                              _DetailRowData("Infection", aiSinbadInfection),
+                              _DetailRowData("Area", aiSinbadArea),
+                              _DetailRowData("Depth", aiSinbadDepth),
                             ],
                           ),
                         ],
                       ),
                     ),
                     const Gap(16),
+
                   ],
                 ),
               ),
@@ -1394,39 +1391,49 @@ class _TimelineCard extends StatelessWidget {
                 child: Column(
                   children: [
                     Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          areaLabel,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: isDark ? Colors.white54 : Colors.black45,
-                            fontWeight: FontWeight.w700,
+                        Expanded(
+                          child: Text(
+                            areaLabel,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark ? Colors.white54 : Colors.black45,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
-                        Row(
-                          children: [
-                            Text(
-                              area,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w900,
-                                color: areaIsBad
-                                    ? const Color(0xFFEF4444)
-                                    : (isDark
-                                        ? Colors.white
-                                        : const Color(0xFF0F172A)),
+                        const Gap(8),
+                        Flexible(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  area,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w900,
+                                    color: areaIsBad
+                                        ? const Color(0xFFEF4444)
+                                        : (isDark
+                                            ? Colors.white
+                                            : const Color(0xFF0F172A)),
+                                  ),
+                                ),
                               ),
-                            ),
-                            if (areaIsBad) ...[
-                              const Gap(4),
-                              const Icon(
-                                Icons.trending_up,
-                                size: 16,
-                                color: Color(0xFFEF4444),
-                              ),
+                              if (areaIsBad) ...[
+                                const Gap(4),
+                                const Icon(
+                                  Icons.trending_up,
+                                  size: 16,
+                                  color: Color(0xFFEF4444),
+                                ),
+                              ],
                             ],
-                          ],
+                          ),
                         ),
                       ],
                     ),
@@ -1700,6 +1707,57 @@ class _DataGroupCard extends StatelessWidget {
           const Gap(14),
           ...children,
         ],
+      ),
+    );
+  }
+}
+
+class _ExpandableDataCard extends StatelessWidget {
+  const _ExpandableDataCard({
+    required this.title,
+    required this.isDark,
+    required this.child,
+  });
+
+  final String title;
+  final bool isDark;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final cardColor =
+        isDark ? const Color(0xFF111827) : const Color(0xFFFCFCFD);
+    final borderColor =
+        isDark ? const Color(0xFF273449) : const Color(0xFFE5E7EB);
+    final titleColor = isDark ? Colors.white54 : Colors.black45;
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: borderColor),
+      ),
+      child: Theme(
+        data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+        child: ExpansionTile(
+          tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+          childrenPadding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
+          collapsedIconColor: titleColor,
+          iconColor: titleColor,
+          title: Text(
+            title.toUpperCase(),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w900,
+              letterSpacing: 1.1,
+              color: titleColor,
+            ),
+          ),
+          children: [
+            child,
+          ],
+        ),
       ),
     );
   }

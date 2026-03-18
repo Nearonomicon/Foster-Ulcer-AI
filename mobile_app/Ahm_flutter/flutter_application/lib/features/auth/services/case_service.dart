@@ -74,6 +74,37 @@ class CaseService {
     return _mapCaseDetailResponse(Map<String, dynamic>.from(decoded));
   }
 
+  Future<Map<String, dynamic>> getTaskDetail({
+    required String caseId,
+    required int taskIndex,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/task_detail');
+
+    final response = await http.post(
+      uri,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'case_id': caseId,
+        'task_index': taskIndex,
+      }),
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Failed to load task detail (${response.statusCode}): ${response.body}',
+      );
+    }
+
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map) {
+      throw Exception('Invalid response format for task_detail');
+    }
+
+    return Map<String, dynamic>.from(decoded);
+  }
+
   Future<Map<String, dynamic>> saveDoctorReview({
     required String caseId,
     required String imageId,
@@ -158,6 +189,7 @@ class CaseService {
     final analysis = _asStringDynamicMap(raw['current_analysis']);
     final classifications = _asStringDynamicMap(analysis['classifications']);
     final sinbad = _asStringDynamicMap(classifications['SINBAD']);
+    final wifi = _asStringDynamicMap(classifications['WIfI']);
 
     final wound = _asStringDynamicMap(raw['current_wound_detail']);
     final size = _asStringDynamicMap(wound['size']);
@@ -172,9 +204,13 @@ class CaseService {
         ? (analysis['confidence'] as num).toDouble()
         : 0.0;
 
-    final aiStage = _mapDepthToStage(
-      (wound['depth_category'] ?? '').toString(),
-    );
+    final aiStage = [
+      'SINBAD: ${_displayListMetric(sinbad['total'])}',
+      'W: ${_displayListMetric(wifi['wound_grade'])}',
+      'I: ${_displayListMetric(wifi['ischemia_grade'])}',
+      'fI: ${_displayListMetric(wifi['foot_infection_grade'])}',
+      'IDSA: ${_displayListMetric(classifications['IDSA_infection_stage'])}',
+    ].join('\n');
 
     final imageUrl = _extractImageUrl(raw['current_image']);
     final imageCount = imageUrl.isEmpty ? 0 : 1;
@@ -633,6 +669,11 @@ class CaseService {
     if (diff.inMinutes < 60) return '${diff.inMinutes} mins ago';
     if (diff.inHours < 24) return '${diff.inHours} hours ago';
     return '${diff.inDays} days ago';
+  }
+
+  String _displayListMetric(dynamic value) {
+    final s = (value ?? '').toString().trim();
+    return s.isEmpty || s.toLowerCase() == 'null' ? '-' : s;
   }
 
   Map<String, dynamic> _asStringDynamicMap(dynamic value) {
