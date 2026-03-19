@@ -558,14 +558,55 @@ Optional fields include `patient_profile`, `nurse_reviewed`, and `ai_prefill`.
   - layer 1: image extraction
   - layer 2: evidence fusion
   - layer 3: scoring and plan
-- Final `analysis` value is returned as a JSON string, not a nested object
+- On success, stores AI output immediately into:
+  - `records/{record_id}.analysis`
+  - `records/{record_id}.treatment_plan`
+  - `records/{record_id}.task_list`
+  - `cases/{case_id}.current_analysis`
+  - `cases/{case_id}.current_treatment_plan`
 
 **Response 200**
 
 ```json
 {
-  "status": "success",
-  "analysis": "{\"creator\":\"...\"}"
+  "AI_analysis": {
+    "creator": "Gemini AI",
+    "description": "2-3 sentence conservative clinical summary",
+    "diagnosis": "Standardized diagnosis",
+    "confidence": 0.8,
+    "red_flag": false,
+    "treatment_plan": "Short summary of treatment strategy",
+    "classifications": {
+      "IDSA_infection_stage": 1,
+      "WIfI": {
+        "wound_grade": 0,
+        "ischemia_grade": 0,
+        "foot_infection_grade": 0,
+        "clinical_stage": 1
+      },
+      "SINBAD": {
+        "total": 0,
+        "site": "Forefoot",
+        "ischemia": "No",
+        "neuropathy": "No",
+        "bacterial_infection": "No",
+        "area": "< 1 cm²",
+        "depth": "Superficial"
+      }
+    }
+  },
+  "treatment_plan": {
+    "plan_text": "Detailed treatment-support plan",
+    "followup_days": 7,
+    "status": "DRAFT",
+    "plan_tasks": [
+      {
+        "task_text": "Task description",
+        "status": "DRAFT",
+        "task_due": null
+      }
+    ]
+  }
 }
 ```
 

@@ -273,10 +273,37 @@ Today is {date.today()}.
         if isinstance(layer3_result, dict) and layer3_result.get("blocked"):
             return {"status": "blocked", "reason": layer3_result.get("reason")}
 
-        return {
-            "status": "success",
-            "analysis": json.dumps(layer3_result, ensure_ascii=False)
-        }
+        if not isinstance(layer3_result, dict):
+            raise HTTPException(status_code=500, detail="Model returned unexpected analyze-wound output")
+
+        ai_analysis = layer3_result.get("AI_analysis")
+        treatment_plan = layer3_result.get("treatment_plan")
+
+        if case_id and record_id:
+            try:
+                record_ai_update = {
+                    "analysis": ai_analysis if isinstance(ai_analysis, dict) else None,
+                    "treatment_plan": treatment_plan if isinstance(treatment_plan, dict) else None,
+                    "task_list": (
+                        treatment_plan.get("plan_tasks")
+                        if isinstance(treatment_plan, dict)
+                        else None
+                    ),
+                    "record_updated_at": firestore.SERVER_TIMESTAMP,
+                }
+                record_ref = db.collection("cases").document(case_id).collection("records").document(record_id)
+                record_ref.set(record_ai_update, merge=True)
+
+                case_ai_update = {
+                    "case_updated_at": firestore.SERVER_TIMESTAMP,
+                    "current_analysis": ai_analysis if isinstance(ai_analysis, dict) else None,
+                    "current_treatment_plan": treatment_plan if isinstance(treatment_plan, dict) else None,
+                }
+                db.collection("cases").document(case_id).set(case_ai_update, merge=True)
+            except Exception as e:
+                print(f"analyze-wound warning: failed to store AI analysis data: {e}")
+
+        return layer3_result
 
     except json.JSONDecodeError as e:
         raise HTTPException(status_code=400, detail=f"Invalid payload_data JSON: {str(e)}")

@@ -66,7 +66,9 @@ flowchart TD
    - Updates current record with submitted `nurse_reviewed` sections.
    - Sets record and case status to `"ANALYZING"`.
    - Updates case `current_*` wound/clinical snapshots.
-   - Runs layered AI analysis and returns final result as a JSON string.
+   - Runs layered AI analysis.
+   - Stores returned `AI_analysis` into record `analysis` and case `current_analysis`.
+   - Stores returned `treatment_plan` into record `treatment_plan`, record `task_list`, and case `current_treatment_plan`.
 6. `POST /send-to-doctor`
    - Merges completed record payload into the existing record.
    - Generates `analysis_id` and `plan_id`.
@@ -153,6 +155,7 @@ flowchart TD
    - Stores nurse-reviewed clinical sections.
    - Marks case and record as `"ANALYZING"`.
    - Runs three-layer AI analysis.
+   - Stores `AI_analysis` and `treatment_plan` onto the active record and case snapshot immediately.
 6. `POST /send-to-doctor`
    - Finalizes record data.
    - Creates analysis version, plan version, and task records.
@@ -241,6 +244,7 @@ flowchart TD
    - Writes new nurse-reviewed clinical data into the follow-up record.
    - Updates case status and current clinical snapshot fields.
    - Runs AI analysis.
+   - Stores `AI_analysis` and `treatment_plan` onto the follow-up record and current case snapshot.
 7. `POST /analyze-healing`
    - Reads all records for the case in chronological order.
    - Sends records and available images to the AI model.
@@ -265,12 +269,14 @@ flowchart TD
     J --> K[new record image updated]
     K --> L[POST /analyze-wound]
     L --> M[record and case status = ANALYZING]
-    M --> N[POST /analyze-healing]
-    N --> O[latest record.healing_progress updated]
-    N --> P[case.current_healing_progress updated]
-    P --> Q[POST /send-to-doctor]
-    Q --> R[new analysis version created]
-    Q --> S[new plan version created]
+    M --> N[record.analysis and treatment_plan updated]
+    N --> O[case.current_analysis and current_treatment_plan updated]
+    O --> P[POST /analyze-healing]
+    P --> Q[latest record.healing_progress updated]
+    P --> R[case.current_healing_progress updated]
+    R --> S[POST /send-to-doctor]
+    S --> T[new analysis version created]
+    S --> U[new plan version created]
 ```
 
 ## 3. Case List -> Case Detail
