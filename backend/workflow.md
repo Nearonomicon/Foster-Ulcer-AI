@@ -247,7 +247,9 @@ flowchart TD
 7. `POST /analyze-healing`
    - Reads all records for the case in chronological order.
    - Sends records and available images to the AI model.
-   - Stores returned healing summary on the latest record and case current snapshot.
+   - Stores returned healing summary on the latest record current snapshot and the case current snapshot.
+   - Moves the latest record and case status to `DOCTOR_REVIEW`.
+   - Creates a new `analysis_versions/{analysis_id}` entry for the latest record with `healing_progress`.
 8. `POST /send-to-doctor`
    - Optional finalization step if the follow-up record should be sent for doctor review.
    - Creates new analysis and plan version records tied to the follow-up record.
@@ -269,11 +271,13 @@ flowchart TD
     K --> L[POST /analyze-wound]
     L --> M[record and case status = ANALYZING]
     M --> N[POST /analyze-healing]
-    N --> O[latest record.healing_progress updated]
+    N --> O[record.current_healing_progress updated]
     N --> P[case.current_healing_progress updated]
-    P --> Q[POST /send-to-doctor]
-    Q --> R[new analysis version created]
-    Q --> S[new plan version created]
+    N --> Q[new healing analysis_version created]
+    N --> R[latest record and case status = DOCTOR_REVIEW]
+    R --> S[POST /send-to-doctor]
+    S --> T[new analysis version created]
+    S --> U[new plan version created]
 ```
 
 ## 3. Case List -> Case Detail

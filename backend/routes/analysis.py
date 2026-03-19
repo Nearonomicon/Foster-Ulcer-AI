@@ -395,10 +395,38 @@ Today is {date.today()}.
             latest_record_id = latest_record.get("record_id")
             if latest_record_id:
                 record_ref = db.collection("cases").document(case_id).collection("records").document(latest_record_id)
-                record_ref.set({"healing_progress": result}, merge=True)
+                analysis_id = f"AN-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+                existing_analysis = latest_record.get("analysis")
+                analysis_payload = dict(existing_analysis) if isinstance(existing_analysis, dict) else {}
+                analysis_payload["healing_progress"] = result
+
+                record_ref.set({
+                    "current_healing_progress": result,
+                    "status": "DOCTOR_REVIEW",
+                    "record_updated_at": firestore.SERVER_TIMESTAMP,
+                    "timestamps": {
+                        "updated_at": firestore.SERVER_TIMESTAMP,
+                        "doctor_review_at": firestore.SERVER_TIMESTAMP,
+                    },
+                }, merge=True)
+                record_ref.collection("analysis_versions").document(analysis_id).set({
+                    "analysis_id": analysis_id,
+                    "case_id": case_id,
+                    "record_id": latest_record_id,
+                    "status": "DRAFT",
+                    "source": "AI_HEALING",
+                    "created_at": firestore.SERVER_TIMESTAMP,
+                    "payload": analysis_payload,
+                }, merge=True)
 
             case_ref = db.collection("cases").document(case_id)
-            case_ref.set({"current_healing_progress": result}, merge=True)
+            case_ref.set({
+                "current_healing_progress": result,
+                "status": "DOCTOR_REVIEW",
+                "current_record_id": latest_record_id,
+                "current_analysis_id": analysis_id if latest_record_id else None,
+                "case_updated_at": firestore.SERVER_TIMESTAMP,
+            }, merge=True)
         except Exception as e:
             print(f"analyze-healing warning: failed to store healing_progress: {e}")
 

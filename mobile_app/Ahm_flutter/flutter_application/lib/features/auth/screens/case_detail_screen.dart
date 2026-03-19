@@ -235,6 +235,8 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
     final aiDiagnosis = (ai["diagnosis"] ?? "").toString();
     final aiDescription = (ai["description"] ?? "").toString();
     final aiDraftStatus = (ai["draft_status"] ?? "READY").toString();
+    final selectedHealingProgress =
+        (selectedImage["nurse_note"] ?? "").toString().trim();
 
     final selectedImageUrl = _safeImageUrl(selectedImage["image_url"]);
 
@@ -532,6 +534,26 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
                             },
                           );
                         },
+                      ),
+                    ),
+                    const Gap(18),
+
+                    _SectionCard(
+                      cs: cs,
+                      isDark: isDark,
+                      card: card,
+                      border: border,
+                      title: "Healing Progress",
+                      titleIcon: Icons.monitor_heart_outlined,
+                      child: Text(
+                        selectedHealingProgress.isEmpty
+                            ? context.tr('common.na')
+                            : selectedHealingProgress,
+                        style: TextStyle(
+                          fontSize: 14,
+                          height: 1.5,
+                          color: isDark ? Colors.white70 : Colors.black87,
+                        ),
                       ),
                     ),
                     const Gap(18),

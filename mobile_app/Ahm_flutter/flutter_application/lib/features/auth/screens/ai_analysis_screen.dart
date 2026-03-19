@@ -35,10 +35,9 @@ class _AiAnalysisScreenState extends State<AiAnalysisScreen> {
   String wifiIschemiaKey = "wifi_na";
   String wifiFootInfectionKey = "wifi_na";
   String idsaKey = "idsa_na";
-  String healingKey = "heal_improving";
-
   late TextEditingController descCtrl;
   late TextEditingController planCtrl;
+  late TextEditingController healingProgressCtrl;
 
   double aiConfidence = 0.0;
 
@@ -46,6 +45,11 @@ class _AiAnalysisScreenState extends State<AiAnalysisScreen> {
   String genderText = "na";
   int age = 0;
   String caseIdText = "";
+  String diagnosisText = "";
+  String analysisId = "";
+  String recordId = "";
+  bool redFlag = false;
+  int? wifiClinicalStage;
 
   String selectedImageUrl = "";
   bool isLatestEditable = false;
@@ -65,6 +69,7 @@ class _AiAnalysisScreenState extends State<AiAnalysisScreen> {
     caseIdText = "#${widget.caseId}";
     descCtrl = TextEditingController();
     planCtrl = TextEditingController();
+    healingProgressCtrl = TextEditingController();
     _loadCaseDetail();
   }
 
@@ -89,6 +94,70 @@ class _AiAnalysisScreenState extends State<AiAnalysisScreen> {
     final s = (value ?? "").toString().trim();
     if (s.isEmpty || s.toLowerCase() == "null") return "";
     return s;
+  }
+
+  int? _tryParseInt(dynamic value) {
+    if (value is int) return value;
+    return int.tryParse((value ?? "").toString());
+  }
+
+  int? _wifiGradeFromKey(String key) {
+    switch (key) {
+      case "wifi_0":
+        return 0;
+      case "wifi_1":
+        return 1;
+      case "wifi_2":
+        return 2;
+      case "wifi_3":
+        return 3;
+      default:
+        return null;
+    }
+  }
+
+  int? _idsaStageFromKey(String key) {
+    switch (key) {
+      case "idsa_1":
+        return 1;
+      case "idsa_2":
+        return 2;
+      case "idsa_3":
+        return 3;
+      case "idsa_4":
+        return 4;
+      default:
+        return null;
+    }
+  }
+
+  Map<String, dynamic> _buildDoctorReviewDraft() {
+    return {
+      "analysis_id": analysisId,
+      "case_id": widget.caseId,
+      "record_id": recordId,
+      "payload": {
+        "AI_analysis": {
+          "creator": "Doctor",
+          "description": descCtrl.text.trim(),
+          "diagnosis": diagnosisText,
+          "confidence": aiConfidence,
+          "red_flag": redFlag,
+          "treatment_plan": planCtrl.text.trim(),
+          "classifications": {
+            "IDSA_infection_stage": _idsaStageFromKey(idsaKey),
+            "WIfI": {
+              "wound_grade": _wifiGradeFromKey(wifiWoundKey),
+              "ischemia_grade": _wifiGradeFromKey(wifiIschemiaKey),
+              "foot_infection_grade":
+                  _wifiGradeFromKey(wifiFootInfectionKey),
+              "clinical_stage": wifiClinicalStage,
+            },
+          },
+        },
+        "healing_progress": healingProgressCtrl.text.trim(),
+      },
+    };
   }
 
   Future<void> _loadCaseDetail() async {
@@ -160,10 +229,17 @@ class _AiAnalysisScreenState extends State<AiAnalysisScreen> {
 
       aiConfidence =
           (ai["confidence"] is num) ? (ai["confidence"] as num).toDouble() : 0.0;
+      diagnosisText = (ai["diagnosis"] ?? "").toString();
+      redFlag = ai["red_flag"] == true;
+      analysisId = (selectedImage["analysis_id"] ?? "").toString();
+      recordId = (selectedImage["record_id"] ?? "").toString();
+      wifiClinicalStage = _tryParseInt(ai["wifi_stage"]);
 
       descCtrl.text = (ai["description"] ?? ai["narrative"] ?? "").toString();
       planCtrl.text =
           (ai["treatment_suggestion"] ?? ai["treatment_plan"] ?? "").toString();
+      healingProgressCtrl.text =
+          (selectedImage["nurse_note"] ?? "").toString();
 
       selectedImageUrl = _safeImageUrl(selectedImage["image_url"]);
       if (selectedImageUrl.isEmpty) {
@@ -197,10 +273,10 @@ class _AiAnalysisScreenState extends State<AiAnalysisScreen> {
   Future<void> _proceedToTreatmentPlan() async {
     if (!isLatestEditable) return;
 
-    if (selectedImageId.trim().isEmpty) {
+    if (selectedImageId.trim().isEmpty || recordId.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Missing image_id for doctor review."),
+          content: Text("Missing record data for doctor review."),
         ),
       );
       return;
@@ -210,36 +286,6 @@ class _AiAnalysisScreenState extends State<AiAnalysisScreen> {
       _isSaving = true;
     });
 
-    try {
-      await _caseService.saveDoctorReview(
-        caseId: widget.caseId,
-        imageId: selectedImageId,
-        isLatestEditable: isLatestEditable,
-        doctorReview: {
-          "wound_stage": _stageApiValue(woundStageKey),
-          "diagnosis_override": _buildDiagnosisOverride(),
-          "clinical_description": descCtrl.text.trim(),
-          "proposed_treatment_plan": planCtrl.text.trim(),
-          "healing_progress": healingKey,
-          "ai_accurate": aiAccurate,
-          "reviewed_by": "USR-DOCTOR-001",
-          "reviewed_at": DateTime.now().toUtc().toIso8601String(),
-        },
-      );
-    } catch (e) {
-      debugPrint("saveDoctorReview failed but skipped: $e");
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              "Doctor Review API not ready yet. Proceeding with treatment plan.",
-            ),
-          ),
-        );
-      }
-    }
-
     if (!mounted) return;
 
     Navigator.push(
@@ -247,6 +293,8 @@ class _AiAnalysisScreenState extends State<AiAnalysisScreen> {
       MaterialPageRoute(
         builder: (_) => TreatmentPlanDispatchScreen(
           caseId: widget.caseId,
+          doctorReviewDraft: _buildDoctorReviewDraft(),
+          aiResultEditFlag: !aiAccurate,
         ),
       ),
     );
@@ -262,6 +310,7 @@ class _AiAnalysisScreenState extends State<AiAnalysisScreen> {
   void dispose() {
     descCtrl.dispose();
     planCtrl.dispose();
+    healingProgressCtrl.dispose();
     super.dispose();
   }
 
@@ -627,7 +676,7 @@ class _AiAnalysisScreenState extends State<AiAnalysisScreen> {
                                     "Midfoot / Hindfoot",
                                   ],
                                   isDark: isDark,
-                                  enabled: isLatestEditable,
+                                  enabled: false,
                                   onChanged: (v) =>
                                       setState(() => sinbadSiteKey = v),
                                 ),
@@ -637,7 +686,7 @@ class _AiAnalysisScreenState extends State<AiAnalysisScreen> {
                                   value: sinbadIschemiaKey,
                                   options: const ["NO", "YES"],
                                   isDark: isDark,
-                                  enabled: isLatestEditable,
+                                  enabled: false,
                                   onChanged: (v) =>
                                       setState(() => sinbadIschemiaKey = v),
                                 ),
@@ -647,7 +696,7 @@ class _AiAnalysisScreenState extends State<AiAnalysisScreen> {
                                   value: sinbadNeuropathyKey,
                                   options: const ["NO", "YES"],
                                   isDark: isDark,
-                                  enabled: isLatestEditable,
+                                  enabled: false,
                                   onChanged: (v) =>
                                       setState(() => sinbadNeuropathyKey = v),
                                 ),
@@ -657,7 +706,7 @@ class _AiAnalysisScreenState extends State<AiAnalysisScreen> {
                                   value: sinbadBacterialKey,
                                   options: const ["NO", "YES"],
                                   isDark: isDark,
-                                  enabled: isLatestEditable,
+                              enabled: false,
                                   onChanged: (v) =>
                                       setState(() => sinbadBacterialKey = v),
                                 ),
@@ -670,7 +719,7 @@ class _AiAnalysisScreenState extends State<AiAnalysisScreen> {
                                     ">= 1 cm²",
                                   ],
                                   isDark: isDark,
-                                  enabled: isLatestEditable,
+                              enabled: false,
                                   onChanged: (v) =>
                                       setState(() => sinbadAreaKey = v),
                                 ),
@@ -683,7 +732,7 @@ class _AiAnalysisScreenState extends State<AiAnalysisScreen> {
                                     "Deep/Bone",
                                   ],
                                   isDark: isDark,
-                                  enabled: isLatestEditable,
+                              enabled: false,
                                   onChanged: (v) =>
                                       setState(() => sinbadDepthKey = v),
                                 ),
@@ -718,7 +767,7 @@ class _AiAnalysisScreenState extends State<AiAnalysisScreen> {
                                   prefix: "W",
                                   value: wifiWoundKey,
                                   isDark: isDark,
-                                  enabled: isLatestEditable,
+                                  enabled: true,
                                   cs: cs,
                                   onChanged: (v) =>
                                       setState(() => wifiWoundKey = v),
@@ -728,7 +777,7 @@ class _AiAnalysisScreenState extends State<AiAnalysisScreen> {
                                   prefix: "I",
                                   value: wifiIschemiaKey,
                                   isDark: isDark,
-                                  enabled: isLatestEditable,
+                                  enabled: true,
                                   cs: cs,
                                   onChanged: (v) =>
                                       setState(() => wifiIschemiaKey = v),
@@ -738,7 +787,7 @@ class _AiAnalysisScreenState extends State<AiAnalysisScreen> {
                                   prefix: "fI",
                                   value: wifiFootInfectionKey,
                                   isDark: isDark,
-                                  enabled: isLatestEditable,
+                                  enabled: true,
                                   cs: cs,
                                   onChanged: (v) => setState(
                                     () => wifiFootInfectionKey = v,
@@ -767,7 +816,7 @@ class _AiAnalysisScreenState extends State<AiAnalysisScreen> {
                               cs: cs,
                               isDark: isDark,
                               bold: true,
-                              enabled: isLatestEditable,
+                                  enabled: true,
                             ),
                           ),
 
@@ -781,21 +830,7 @@ class _AiAnalysisScreenState extends State<AiAnalysisScreen> {
                             child: _Textarea(
                               controller: descCtrl,
                               isDark: isDark,
-                              enabled: isLatestEditable,
-                            ),
-                          ),
-
-                          const Gap(14),
-
-                          _Labeled(
-                            label: context
-                                .tr('ai_review.field.proposed_treatment_plan')
-                                .toUpperCase(),
-                            isDark: isDark,
-                            child: _Textarea(
-                              controller: planCtrl,
-                              isDark: isDark,
-                              enabled: isLatestEditable,
+                                  enabled: true,
                             ),
                           ),
 
@@ -806,21 +841,10 @@ class _AiAnalysisScreenState extends State<AiAnalysisScreen> {
                                 .tr('ai_review.field.healing_progress')
                                 .toUpperCase(),
                             isDark: isDark,
-                            child: _DropdownBox(
-                              value: healingKey,
-                              items: const [
-                                "heal_improving",
-                                "heal_stable",
-                                "heal_declining",
-                                "heal_critical"
-                              ],
-                              itemLabel: (k) =>
-                                  context.tr('ai_review.heal.$k'),
-                              onChanged: (v) => setState(() => healingKey = v),
-                              cs: cs,
+                            child: _Textarea(
+                              controller: healingProgressCtrl,
                               isDark: isDark,
-                              tint: const Color(0xFF10B981),
-                              enabled: isLatestEditable,
+                              enabled: true,
                             ),
                           ),
                         ],
@@ -1343,6 +1367,7 @@ class _DropdownBox extends StatelessWidget {
     this.bold = false,
     this.tint,
     this.enabled = true,
+    this.compact = false,
   });
 
   final String value;
@@ -1354,6 +1379,7 @@ class _DropdownBox extends StatelessWidget {
   final bool bold;
   final Color? tint;
   final bool enabled;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -1362,15 +1388,19 @@ class _DropdownBox extends StatelessWidget {
 
     final effectiveTint =
         tint ?? (bold ? cs.primary : (isDark ? Colors.white70 : Colors.black87));
+    final height = compact ? 36.0 : 44.0;
+    final horizontalPadding = compact ? 8.0 : 10.0;
+    final fontSize = compact ? 12.0 : 13.0;
+    final radius = compact ? 12.0 : 14.0;
 
     return Opacity(
       opacity: enabled ? 1 : 0.72,
       child: Container(
-        height: 44,
-        padding: const EdgeInsets.symmetric(horizontal: 10),
+        height: height,
+        padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
         decoration: BoxDecoration(
           color: bg,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(radius),
           border: Border.all(color: border),
         ),
         child: DropdownButtonHideUnderline(
@@ -1382,7 +1412,7 @@ class _DropdownBox extends StatelessWidget {
               color: isDark ? Colors.white54 : Colors.black45,
             ),
             style: TextStyle(
-              fontSize: 13,
+              fontSize: fontSize,
               fontWeight: bold ? FontWeight.w900 : FontWeight.w700,
               color: effectiveTint,
             ),
@@ -1471,55 +1501,58 @@ class _SinbadChoiceField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Opacity(
-      opacity: enabled ? 1 : 0.72,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 92,
-            child: Padding(
-              padding: const EdgeInsets.only(top: 2),
-              child: Text(
-                "$label:",
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  color: isDark ? Colors.white : const Color(0xFF0F172A),
+    return IgnorePointer(
+      ignoring: !enabled,
+      child: Opacity(
+        opacity: enabled ? 1 : 0.72,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 92,
+              child: Padding(
+                padding: const EdgeInsets.only(top: 2),
+                child: Text(
+                  "$label:",
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: isDark ? Colors.white : const Color(0xFF0F172A),
+                  ),
                 ),
               ),
             ),
-          ),
-          Expanded(
-            child: Wrap(
-              crossAxisAlignment: WrapCrossAlignment.center,
-              alignment: WrapAlignment.start,
-              spacing: 8,
-              runSpacing: 8,
-              children: options.asMap().entries.expand((entry) sync* {
-                final option = entry.value;
-                yield _SinbadOptionChip(
-                  text: option,
-                  selected: value == option,
-                  isDark: isDark,
-                  enabled: enabled,
-                  isRisk: _isRiskSinbadOption(label, option),
-                  onTap: () => onChanged(option),
-                );
-                if (entry.key != options.length - 1) {
-                  yield Text(
-                    "|",
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                      color: isDark ? Colors.white38 : Colors.black38,
-                    ),
+            Expanded(
+              child: Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                alignment: WrapAlignment.start,
+                spacing: 8,
+                runSpacing: 8,
+                children: options.asMap().entries.expand((entry) sync* {
+                  final option = entry.value;
+                  yield _SinbadOptionChip(
+                    text: option,
+                    selected: value == option,
+                    isDark: isDark,
+                    enabled: enabled,
+                    isRisk: _isRiskSinbadOption(label, option),
+                    onTap: () => onChanged(option),
                   );
-                }
-              }).toList(),
+                  if (entry.key != options.length - 1) {
+                    yield Text(
+                      "|",
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        color: isDark ? Colors.white38 : Colors.black38,
+                      ),
+                    );
+                  }
+                }).toList(),
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1587,7 +1620,7 @@ class _WifiComponentField extends StatelessWidget {
         ),
         const Gap(6),
         SizedBox(
-          width: 84,
+          width: 68,
           child: _DropdownBox(
             value: value,
             items: const [
@@ -1602,6 +1635,7 @@ class _WifiComponentField extends StatelessWidget {
             cs: cs,
             isDark: isDark,
             enabled: enabled,
+            compact: true,
           ),
         ),
       ],
@@ -1649,9 +1683,12 @@ class _SinbadOptionChip extends StatelessWidget {
     final selectedColor = isRisk
         ? Colors.red
         : Theme.of(context).colorScheme.primary;
-    final fg = selected
-        ? selectedColor
-        : (isDark ? Colors.white70 : const Color(0xFF334155));
+    final disabledColor = isDark ? Colors.white38 : const Color(0xFF94A3B8);
+    final fg = !enabled
+        ? disabledColor
+        : selected
+            ? selectedColor
+            : (isDark ? Colors.white70 : const Color(0xFF334155));
 
     return InkWell(
       onTap: enabled ? onTap : null,

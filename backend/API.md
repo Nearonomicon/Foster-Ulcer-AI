@@ -71,6 +71,7 @@ This document summarizes the API as implemented in the backend source, primarily
 | `POST` | `/cases_list` | List cases |
 | `POST` | `/case_detail` | Load one case, its records, and patient profile |
 | `POST` | `/send-to-doctor` | Finalize a record for doctor review and create analysis/plan versions |
+| `POST` | `/doctor-review` | Save doctor-edited analysis as a doctor-sourced analysis version |
 | `POST` | `/analyze-fillin` | Upload wound image and return structured fill-in output |
 | `POST` | `/analyze-wound` | Run layered AI wound analysis |
 | `POST` | `/analyze-healing` | Generate healing-progress summary from records |
@@ -468,7 +469,95 @@ Other fields from `WoundCaseRecord` may also be supplied, including `urgency`, `
 - `422` if required nested sections are missing according to Pydantic validation
 - `500` on server/database failure
 
-### 5.10 `POST /analyze-fillin`
+### 5.10 `POST /doctor-review`
+
+**Purpose**
+
+Creates a doctor-sourced `analysis_versions/{analysis_id}` entry for an existing record and updates the current analysis snapshot on the record and case.
+
+**Request body**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `case_id` | string | Yes | |
+| `record_id` | string | Yes | |
+| `payload` | object | Yes | Doctor-edited analysis payload |
+| `analysis_id` | string | No | Source analysis version to copy `SINBAD` from; falls back to case `current_analysis_id` |
+| `treatment_plan` | object | No | Doctor-reviewed treatment plan snapshot; if omitted, backend also checks `payload.treatment_plan` |
+| `signature` | string or object | No | Added into the stored review payload |
+| `signature_base64` | string | No | Stored on record and inside the saved review payload |
+
+Any incoming `analysis_id`, `status`, `source`, or `created_at` values are not used. The backend generates and stores:
+
+- `analysis_id`
+- `status = "SENT"`
+- `source = "Doctor"`
+- `created_at = Firestore server timestamp`
+
+**Stored analysis version format**
+
+```json
+{
+  "analysis_id": "AN-YYYYMMDDHHMMSS",
+  "case_id": "CS-...",
+  "record_id": "REC-...",
+  "status": "SENT",
+  "source": "Doctor",
+  "created_at": "Firestore server timestamp",
+  "payload": {
+    "...": "doctor-edited analysis",
+    "healing_progress": "...",
+    "ai_result_edit_flag": true,
+    "healing_progress_edit_flag": true
+  }
+}
+```
+
+**Behavior**
+
+- Validates that the case and record exist
+- Accepts doctor analysis from `payload.analysis`, `payload.AI_analysis`, or `payload` directly
+- Creates a new doctor-sourced analysis version under the record
+- Creates a new `plan_versions/{plan_id}` and task documents when a treatment plan is provided
+- Copies `payload.classifications.SINBAD` from the previous analysis version so the doctor cannot overwrite it
+- If `signature` is provided, stores it inside the saved analysis payload
+- If `signature_base64` is provided, stores it on the record and inside the saved analysis payload
+- If `treatment_plan` is provided, updates:
+  - `records/{record_id}.treatment_plan`
+  - `records/{record_id}.task_list`
+  - `cases/{case_id}.current_treatment_plan`
+  - `cases/{case_id}.current_plan_id`
+- Updates:
+  - `records/{record_id}.analysis`
+  - `records/{record_id}.status = DOCTOR_REVIEW`
+  - `records/{record_id}.timestamps.doctor_review_at`
+  - `cases/{case_id}.current_analysis`
+  - `cases/{case_id}.current_analysis_id`
+  - `cases/{case_id}.current_record_id`
+  - `cases/{case_id}.status = DOCTOR_REVIEW`
+
+**Response 200**
+
+```json
+{
+  "status": "success",
+  "message": "Doctor review saved",
+  "analysis_id": "AN-YYYYMMDDHHMMSS",
+  "plan_id": "PL-YYYYMMDDHHMMSS",
+  "case_id": "CS-...",
+  "record_id": "REC-...",
+  "source": "Doctor",
+  "sinbad_copied": true
+}
+```
+
+**Errors**
+
+- `400` if `case_id`, `record_id`, or `payload` is missing/invalid
+- `404` if the case or record does not exist
+- `500` on server/database failure
+
+### 5.11 `POST /analyze-fillin`
 
 **Purpose**
 
@@ -521,7 +610,7 @@ Uploads a wound image, stores its URL, and requests a structured AI fill-in resu
 - `400` if the uploaded file is not a valid image
 - `500` on AI/storage/server failure
 
-### 5.11 `POST /analyze-wound`
+### 5.12 `POST /analyze-wound`
 
 **Purpose**
 
@@ -586,7 +675,7 @@ Optional fields include `patient_profile`, `nurse_reviewed`, and `ai_prefill`.
 - `400` if `payload_data` is invalid JSON
 - `500` on AI/server failure
 
-### 5.12 `POST /analyze-healing`
+### 5.13 `POST /analyze-healing`
 
 **Purpose**
 
@@ -604,8 +693,15 @@ Builds a chronological healing summary from stored records and any record image 
 - Appends each record JSON to the model prompt
 - Attempts to fetch each record image via URL and attach it to the prompt
 - Stores the result into:
-  - latest record `healing_progress`
+  - latest record `current_healing_progress`
   - case `current_healing_progress`
+- On success, also updates:
+  - latest record `status = DOCTOR_REVIEW`
+  - latest record `timestamps.doctor_review_at`
+  - latest record `analysis_versions/{analysis_id}` with `payload.healing_progress`
+  - case `status = DOCTOR_REVIEW`
+  - case `current_record_id` to the latest record
+  - case `current_analysis_id` to the new healing analysis version
 
 **Response 200**
 
@@ -633,7 +729,7 @@ Builds a chronological healing summary from stored records and any record image 
 - `404` if no records exist for the case
 - `500` on AI/server failure
 
-### 5.13 `POST /tasks_list`
+### 5.14 `POST /tasks_list`
 
 **Purpose**
 
@@ -681,7 +777,7 @@ The response key is `current_treatment_plan`, not `tasks`.
 
 - `500` on server/database failure
 
-### 5.14 `POST /task_detail`
+### 5.15 `POST /task_detail`
 
 **Purpose**
 
@@ -723,7 +819,7 @@ Optional JSON object.
 - `404` if `task_index` is out of range
 - `500` on server/database failure
 
-### 5.15 `POST /task_update`
+### 5.16 `POST /task_update`
 
 **Purpose**
 
@@ -887,7 +983,7 @@ Important sections:
   - `treatment_plan`
   - `task_list`
   - `image`
-  - `healing_progress`
+  - `current_healing_progress`
 
 ### Treatment Plan
 
