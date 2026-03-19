@@ -706,9 +706,22 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       final response = await http.Response.fromStream(streamed);
       if (response.statusCode != 200) throw Exception("Server Error");
       final Map<String, dynamic> body = jsonDecode(response.body);
+      final followUpFlowEnabled = _followUpFlow;
+      final followUpCaseId = _caseRefs['case_id']?.toString();
+      debugPrint(
+        "Follow-up gate before analyze-healing: "
+        "_followUpFlow=$followUpFlowEnabled, "
+        "case_id=${followUpCaseId ?? 'null'}, "
+        "caseRefs=${jsonEncode(_caseRefs)}",
+      );
       if (body['status'] == 'success' && body.containsKey('analysis')) {
         final analysisVal = body['analysis'];
         final parsed = _parseAnalysis(analysisVal);
+        debugPrint(
+          "Analyze-wound success: parsed=${parsed != null}, "
+          "hasAIAnalysis=${parsed?.containsKey('AI_analysis') == true}, "
+          "hasTreatmentPlan=${parsed?.containsKey('treatment_plan') == true}",
+        );
         if (parsed != null && (parsed.containsKey('AI_analysis') || parsed.containsKey('treatment_plan'))) {
           if (!parsed.containsKey('treatment_plan')) {
             final ai = parsed['AI_analysis'];
@@ -723,6 +736,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           if (_followUpFlow) {
             try {
               final caseId = _caseRefs['case_id']?.toString();
+              debugPrint(
+                "Follow-up flow enabled. Preparing /analyze-healing with case_id=${caseId ?? 'null'}",
+              );
               if (caseId != null && caseId.isNotEmpty) {
                 final resp = await http
                     .post(
@@ -753,15 +769,21 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                   });
                   _navigateTo('healing_progress');
                 }
+              } else {
+                debugPrint("Skip /analyze-healing: _followUpFlow=true but case_id is missing.");
               }
             } catch (e) {
               debugPrint("Analyze-healing error: $e");
             }
           } else {
+            debugPrint("Skip /analyze-healing: _followUpFlow=false.");
             _navigateTo('doctor_summary');
           }
           return;
         }
+        debugPrint(
+          "Skip /analyze-healing: analyze-wound response did not satisfy parsed AI gate.",
+        );
         setState(() {
           _responseMode = 'analysis';
           _rawResponse = analysisVal?.toString();
