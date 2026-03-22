@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
@@ -12,6 +13,12 @@ class ReviewTreatmentPlanScreen extends StatefulWidget {
   final String planId;
   final String planText;
   final List<Map<String, dynamic>> tasks;
+  final int followupDays;
+  final double aiConfidence;
+  final String diagnosis;
+  final Map<String, dynamic>? doctorReviewDraft;
+  final bool aiResultEditFlag;
+  final bool treatmentPlanEditFlag;
 
   const ReviewTreatmentPlanScreen({
     super.key,
@@ -19,6 +26,12 @@ class ReviewTreatmentPlanScreen extends StatefulWidget {
     required this.planId,
     required this.planText,
     required this.tasks,
+    required this.followupDays,
+    required this.aiConfidence,
+    required this.diagnosis,
+    this.doctorReviewDraft,
+    this.aiResultEditFlag = false,
+    this.treatmentPlanEditFlag = false,
   });
 
   @override
@@ -31,14 +44,7 @@ class _ReviewTreatmentPlanScreenState extends State<ReviewTreatmentPlanScreen> {
 
   final CaseService _caseService = CaseService();
 
-  bool _isLoading = true;
   bool _isSending = false;
-
-  String? _error;
-
-  Map<String, dynamic>? _caseResponse;
-
-  List<Map<String, dynamic>> _tasks = [];
 
   @override
   void initState() {
@@ -49,8 +55,6 @@ class _ReviewTreatmentPlanScreenState extends State<ReviewTreatmentPlanScreen> {
       penColor: Colors.black,
       exportBackgroundColor: Colors.white,
     );
-
-    _loadData();
   }
 
   @override
@@ -64,32 +68,6 @@ class _ReviewTreatmentPlanScreenState extends State<ReviewTreatmentPlanScreen> {
       return Map<String, dynamic>.from(value);
     }
     return {};
-  }
-
-  Future<void> _loadData() async {
-    try {
-      final res = await _caseService.getCaseDetail(widget.caseId);
-
-      final caseMap = _asMap(res["case"]);
-
-      final plan = _asMap(caseMap["current_treatment_plan"]);
-
-      final tasks = (plan["plan_tasks"] as List?)
-              ?.map((e) => Map<String, dynamic>.from(e))
-              .toList() ??
-          [];
-
-      setState(() {
-        _caseResponse = res;
-        _tasks = tasks;
-        _isLoading = false;
-      });
-    } catch (e) {
-      setState(() {
-        _error = e.toString();
-        _isLoading = false;
-      });
-    }
   }
 
   String _safeStr(dynamic v) => v == null ? "-" : v.toString();
@@ -124,14 +102,39 @@ class _ReviewTreatmentPlanScreenState extends State<ReviewTreatmentPlanScreen> {
         throw Exception("Signature export failed");
       }
 
-      final res = await _caseService.sendTreatmentPlan(
-        planId: widget.planId,
-        sentBy: "USR-DOCTOR-001",
-        signatureBytes: signature,
-      );
+      if (widget.doctorReviewDraft != null) {
+        final payload = Map<String, dynamic>.from(widget.doctorReviewDraft!);
+        final payloadBody = _asMap(payload["payload"]);
+        final aiAnalysis = _asMap(payloadBody["AI_analysis"]);
+        final signatureBase64 = base64Encode(signature);
+        payload["status"] = "SENT";
+        payload["source"] = "Doctor";
+        payload["created_at"] = DateTime.now().toUtc().toIso8601String();
+        payload["signature_base64"] = "data:image/png;base64,$signatureBase64";
+        payload["payload"] = {
+          ...payloadBody,
+          "analysis": aiAnalysis,
+          "treatment_plan": {
+            "plan_text": widget.planText,
+            "followup_days": widget.followupDays,
+            "status": "SENT",
+            "plan_tasks": widget.tasks
+                .map(
+                  (task) => {
+                    "task_text": (task["task_text"] ?? "").toString(),
+                    "status": (task["status"] ?? "DRAFT").toString(),
+                    "task_due": task["task_due"],
+                  },
+                )
+                .toList(),
+          },
+          "ai_result_edit_flag": widget.aiResultEditFlag,
+          "treatment_plan_edit_flag": widget.treatmentPlanEditFlag,
+        };
+        await _caseService.submitDoctorReview(payload: payload);
+      }
 
-      final message =
-          (res["message"] ?? "Treatment plan sent successfully").toString();
+      final message = "Doctor review sent successfully";
 
       if (!mounted) return;
 
@@ -160,28 +163,8 @@ class _ReviewTreatmentPlanScreenState extends State<ReviewTreatmentPlanScreen> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-
-    if (_isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
-    }
-
-    if (_error != null) {
-      return Scaffold(
-        appBar: AppBar(title: const Text("Review Treatment Plan")),
-        body: Center(child: Text(_error!)),
-      );
-    }
-
-    final caseMap = _asMap(_caseResponse!["case"]);
-
-    final ai = _asMap(caseMap["current_analysis"]);
-
-    final confidence =
-        (ai["confidence"] is num) ? (ai["confidence"] as num).toDouble() : 0.0;
-
-    final diagnosis = _safeStr(ai["diagnosis"]);
+    final confidence = widget.aiConfidence;
+    final diagnosis = _safeStr(widget.diagnosis);
 
     return Scaffold(
       appBar: AppBar(
@@ -245,9 +228,9 @@ class _ReviewTreatmentPlanScreenState extends State<ReviewTreatmentPlanScreen> {
 
             Expanded(
               child: ListView.builder(
-                itemCount: _tasks.length,
+                itemCount: widget.tasks.length,
                 itemBuilder: (context, i) {
-                  final t = _tasks[i];
+                  final t = widget.tasks[i];
 
                   final due = t["task_due"] ?? t["due_date"];
 

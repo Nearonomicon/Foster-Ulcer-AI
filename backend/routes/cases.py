@@ -676,3 +676,177 @@ async def send_to_doctor(payload: WoundCaseRecordUpdate):
     except Exception as e:
         print(f"Error sending to doctor: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/doctor-review")
+async def doctor_review(payload: dict):
+    try:
+        incoming_analysis_id = payload.get("analysis_id")
+        case_id = payload.get("case_id")
+        record_id = payload.get("record_id")
+        review_payload = payload.get("payload")
+        treatment_plan = payload.get("treatment_plan")
+        signature = payload.get("signature")
+        signature_base64 = payload.get("signature_base64")
+
+        if not case_id:
+            raise HTTPException(status_code=400, detail="case_id is required")
+        if not record_id:
+            raise HTTPException(status_code=400, detail="record_id is required")
+        if not isinstance(review_payload, dict):
+            raise HTTPException(status_code=400, detail="payload must be an object")
+        if treatment_plan is None:
+            treatment_plan = review_payload.get("treatment_plan")
+        if treatment_plan is not None and not isinstance(treatment_plan, dict):
+            raise HTTPException(status_code=400, detail="treatment_plan must be an object")
+
+        case_ref = db.collection("cases").document(case_id)
+        case_snapshot = case_ref.get()
+        if not case_snapshot.exists:
+            raise HTTPException(status_code=404, detail="Case not found")
+        case_data = case_snapshot.to_dict() or {}
+
+        record_ref = case_ref.collection("records").document(record_id)
+        record_snapshot = record_ref.get()
+        if not record_snapshot.exists:
+            raise HTTPException(status_code=404, detail="Record not found")
+
+        source_analysis_id = incoming_analysis_id or case_data.get("current_analysis_id")
+        previous_sinbad = None
+        if source_analysis_id:
+            source_analysis_snapshot = record_ref.collection("analysis_versions").document(source_analysis_id).get()
+            if source_analysis_snapshot.exists:
+                source_analysis_data = source_analysis_snapshot.to_dict() or {}
+                source_payload = source_analysis_data.get("payload") or {}
+                classifications = source_payload.get("classifications") or {}
+                if isinstance(classifications, dict):
+                    previous_sinbad = classifications.get("SINBAD")
+
+        doctor_analysis = review_payload.get("analysis")
+        if not isinstance(doctor_analysis, dict):
+            doctor_analysis = review_payload.get("AI_analysis")
+        if not isinstance(doctor_analysis, dict):
+            doctor_analysis = dict(review_payload)
+
+        if previous_sinbad is not None:
+            classifications = doctor_analysis.get("classifications")
+            if not isinstance(classifications, dict):
+                classifications = {}
+            classifications["SINBAD"] = previous_sinbad
+            doctor_analysis["classifications"] = classifications
+
+        if isinstance(review_payload.get("analysis"), dict):
+            review_payload["analysis"] = doctor_analysis
+        if isinstance(review_payload.get("AI_analysis"), dict):
+            review_payload["AI_analysis"] = doctor_analysis
+        if "analysis" not in review_payload and "AI_analysis" not in review_payload:
+            review_payload = doctor_analysis
+
+        if signature is not None:
+            review_payload["signature"] = signature
+        if signature_base64 is not None:
+            review_payload["signature_base64"] = signature_base64
+
+        analysis_id = f"AN-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+        plan_id = None
+        normalized_treatment_plan = None
+        normalized_tasks = []
+        if isinstance(treatment_plan, dict):
+            plan_id = f"PL-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+            normalized_treatment_plan = dict(treatment_plan)
+            normalized_treatment_plan["plan_id"] = plan_id
+            if "status" not in normalized_treatment_plan or normalized_treatment_plan.get("status") is None:
+                normalized_treatment_plan["status"] = "SENT"
+            for idx, task in enumerate(normalized_treatment_plan.get("plan_tasks") or [], start=1):
+                task_data = dict(task) if isinstance(task, dict) else {}
+                if not task_data.get("task_id"):
+                    task_data["task_id"] = f"TSK-{idx:04d}"
+                if "completed_at" not in task_data:
+                    task_data["completed_at"] = None
+                normalized_tasks.append(task_data)
+            normalized_treatment_plan["plan_tasks"] = normalized_tasks
+            review_payload["treatment_plan"] = normalized_treatment_plan
+
+        analysis_data = {
+            "analysis_id": analysis_id,
+            "case_id": case_id,
+            "record_id": record_id,
+            "status": "SENT",
+            "source": "Doctor",
+            "created_at": firestore.SERVER_TIMESTAMP,
+            "payload": review_payload,
+        }
+
+        batch = db.batch()
+        analysis_ref = record_ref.collection("analysis_versions").document(analysis_id)
+        batch.set(analysis_ref, analysis_data, merge=True)
+        record_update = {
+            "analysis": doctor_analysis,
+            "status": Status.DOCTOR_REVIEW,
+            "record_updated_at": firestore.SERVER_TIMESTAMP,
+            "timestamps": {
+                "updated_at": firestore.SERVER_TIMESTAMP,
+                "doctor_review_at": firestore.SERVER_TIMESTAMP,
+            },
+        }
+        case_update = {
+            "status": Status.DOCTOR_REVIEW,
+            "current_record_id": record_id,
+            "current_analysis_id": analysis_id,
+            "current_analysis": doctor_analysis,
+            "case_updated_at": firestore.SERVER_TIMESTAMP,
+        }
+        if signature is not None:
+            record_update["signature"] = signature
+        if signature_base64 is not None:
+            record_update["signature_base64"] = signature_base64
+        if normalized_treatment_plan is not None:
+            record_update["treatment_plan"] = normalized_treatment_plan
+            record_update["task_list"] = normalized_tasks
+            case_update["current_treatment_plan"] = normalized_treatment_plan
+            case_update["current_plan_id"] = plan_id
+
+        batch.set(record_ref, record_update, merge=True)
+        batch.set(case_ref, case_update, merge=True)
+        if normalized_treatment_plan is not None and plan_id is not None:
+            plan_ref = record_ref.collection("plan_versions").document(plan_id)
+            batch.set(plan_ref, {
+                "plan_id": plan_id,
+                "case_id": case_id,
+                "record_id": record_id,
+                "created_at": firestore.SERVER_TIMESTAMP,
+                "status": normalized_treatment_plan.get("status") or "SENT",
+                "plan_text": normalized_treatment_plan.get("plan_text"),
+                "followup_days": normalized_treatment_plan.get("followup_days"),
+                "source": "Doctor",
+            }, merge=True)
+            for task in normalized_tasks:
+                task_id = task.get("task_id")
+                task_ref = plan_ref.collection("tasks").document(task_id)
+                batch.set(task_ref, {
+                    "task_id": task_id,
+                    "case_id": case_id,
+                    "record_id": record_id,
+                    "plan_id": plan_id,
+                    "created_at": firestore.SERVER_TIMESTAMP,
+                    "task_text": task.get("task_text"),
+                    "status": task.get("status"),
+                    "task_due": task.get("task_due"),
+                    "completed_at": task.get("completed_at"),
+                }, merge=True)
+        batch.commit()
+
+        return {
+            "status": "success",
+            "message": "Doctor review saved",
+            "analysis_id": analysis_id,
+            "plan_id": plan_id,
+            "case_id": case_id,
+            "record_id": record_id,
+            "source": "Doctor",
+            "sinbad_copied": previous_sinbad is not None,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

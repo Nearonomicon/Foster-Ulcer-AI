@@ -4,7 +4,8 @@ import 'package:http/http.dart' as http;
 
 class CaseService {
   static const String _baseUrl =
-      'https://foster-ulcer-ai-backend-429230748709.asia-southeast3.run.app';
+  "http://10.0.2.2:8080"; // for local testing 
+      // 'https://foster-ulcer-ai-backend-429230748709.asia-southeast3.run.app';
   static const String _apiBaseUrl = '$_baseUrl/api/v1';
 
   Future<Map<String, dynamic>> getCasesByStatus(String status) async {
@@ -128,6 +129,25 @@ class CaseService {
     return _decodeStandardResponse(
       response,
       fallbackErrorPrefix: 'Failed to save doctor review',
+    );
+  }
+
+  Future<Map<String, dynamic>> submitDoctorReview({
+    required Map<String, dynamic> payload,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/doctor-review');
+
+    final response = await http.post(
+      uri,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode(payload),
+    );
+
+    return _decodeStandardResponse(
+      response,
+      fallbackErrorPrefix: 'Failed to submit doctor review',
     );
   }
 
@@ -312,6 +332,12 @@ class CaseService {
         "image_id":
             (rImage["image_id"] ?? r["image_id"] ?? r["record_id"] ?? "")
                 .toString(),
+        "record_id": (r["record_id"] ?? "").toString(),
+        "analysis_id": (r["analysis_id"] ??
+                ((r["record_id"]?.toString() == latestRecord["record_id"]?.toString())
+                    ? caseMap["current_analysis_id"]
+                    : ""))
+            .toString(),
         "image_url": resolvedImageUrl,
         "visit_day_label": (r["record_id"] ?? "Visit").toString(),
         "is_latest": (r["record_id"]?.toString() ==

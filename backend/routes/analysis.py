@@ -273,6 +273,26 @@ Today is {date.today()}.
         if isinstance(layer3_result, dict) and layer3_result.get("blocked"):
             return {"status": "blocked", "reason": layer3_result.get("reason")}
 
+        if case_id and record_id:
+            try:
+                analysis_snapshot = layer3_result
+                if isinstance(layer3_result, dict) and isinstance(layer3_result.get("AI_analysis"), dict):
+                    analysis_snapshot = layer3_result.get("AI_analysis")
+
+                if isinstance(analysis_snapshot, dict):
+                    record_ref = db.collection("cases").document(case_id).collection("records").document(record_id)
+                    record_ref.set({
+                        "analysis": analysis_snapshot,
+                        "record_updated_at": firestore.SERVER_TIMESTAMP,
+                    }, merge=True)
+
+                    db.collection("cases").document(case_id).set({
+                        "current_analysis": analysis_snapshot,
+                        "case_updated_at": firestore.SERVER_TIMESTAMP,
+                    }, merge=True)
+            except Exception as e:
+                print(f"analyze-wound warning: failed to store analysis snapshot: {e}")
+
         return {
             "status": "success",
             "analysis": json.dumps(layer3_result, ensure_ascii=False)
@@ -375,10 +395,38 @@ Today is {date.today()}.
             latest_record_id = latest_record.get("record_id")
             if latest_record_id:
                 record_ref = db.collection("cases").document(case_id).collection("records").document(latest_record_id)
-                record_ref.set({"healing_progress": result}, merge=True)
+                analysis_id = f"AN-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+                existing_analysis = latest_record.get("analysis")
+                analysis_payload = dict(existing_analysis) if isinstance(existing_analysis, dict) else {}
+                analysis_payload["healing_progress"] = result
+
+                record_ref.set({
+                    "current_healing_progress": result,
+                    "status": "DOCTOR_REVIEW",
+                    "record_updated_at": firestore.SERVER_TIMESTAMP,
+                    "timestamps": {
+                        "updated_at": firestore.SERVER_TIMESTAMP,
+                        "doctor_review_at": firestore.SERVER_TIMESTAMP,
+                    },
+                }, merge=True)
+                record_ref.collection("analysis_versions").document(analysis_id).set({
+                    "analysis_id": analysis_id,
+                    "case_id": case_id,
+                    "record_id": latest_record_id,
+                    "status": "DRAFT",
+                    "source": "AI_HEALING",
+                    "created_at": firestore.SERVER_TIMESTAMP,
+                    "payload": analysis_payload,
+                }, merge=True)
 
             case_ref = db.collection("cases").document(case_id)
-            case_ref.set({"current_healing_progress": result}, merge=True)
+            case_ref.set({
+                "current_healing_progress": result,
+                "status": "DOCTOR_REVIEW",
+                "current_record_id": latest_record_id,
+                "current_analysis_id": analysis_id if latest_record_id else None,
+                "case_updated_at": firestore.SERVER_TIMESTAMP,
+            }, merge=True)
         except Exception as e:
             print(f"analyze-healing warning: failed to store healing_progress: {e}")
 

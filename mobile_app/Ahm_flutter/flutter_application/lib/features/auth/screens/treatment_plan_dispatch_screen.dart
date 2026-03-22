@@ -6,10 +6,14 @@ import 'package:flutter_application/shared/app_localizations.dart';
 
 class TreatmentPlanDispatchScreen extends StatefulWidget {
   final String caseId;
+  final Map<String, dynamic>? doctorReviewDraft;
+  final bool aiResultEditFlag;
 
   const TreatmentPlanDispatchScreen({
     super.key,
     required this.caseId,
+    this.doctorReviewDraft,
+    this.aiResultEditFlag = false,
   });
 
   @override
@@ -32,6 +36,13 @@ class _TreatmentPlanDispatchScreenState
   String? aiAccuracySelection; // "accurate" | "needs_correction"
   String _planId = "";
   int _followupDays = 3;
+
+  void _changeFollowupDays(int delta) {
+    setState(() {
+      final next = _followupDays + delta;
+      _followupDays = next < 1 ? 1 : next;
+    });
+  }
 
   @override
   void initState() {
@@ -309,16 +320,15 @@ class _TreatmentPlanDispatchScreenState
     });
 
     try {
-      final res = await _caseService.saveTreatmentPlanDraft(
-        caseId: widget.caseId,
-        doctorId: "USR-DOCTOR-001",
-        planText: planCtrl.text.trim(),
-        followupDays: _followupDays,
-        tasks: cleanedTasks,
-      );
-
-      final data = _asMap(res["data"]);
-      final planId = (data["plan_id"] ?? _planId).toString();
+      final response = _caseResponse ?? <String, dynamic>{};
+      final data = _asMap(response["data"]);
+      final caseBundle = _asMap(data["case_bundle"]);
+      final aiAnalysis = _asMap(caseBundle["ai_analysis"]);
+      final confidence = (aiAnalysis["confidence"] is num)
+          ? (aiAnalysis["confidence"] as num).toDouble()
+          : 0.0;
+      final diagnosis = (aiAnalysis["diagnosis"] ?? "").toString();
+      final planId = _planId;
 
       if (!mounted) return;
 
@@ -330,6 +340,13 @@ class _TreatmentPlanDispatchScreenState
             planId: planId,
             planText: planCtrl.text.trim(),
             tasks: cleanedTasks,
+            followupDays: _followupDays,
+            aiConfidence: confidence,
+            diagnosis: diagnosis,
+            doctorReviewDraft: widget.doctorReviewDraft,
+            aiResultEditFlag: widget.aiResultEditFlag,
+            treatmentPlanEditFlag:
+                aiAccuracySelection == "needs_correction",
           ),
         ),
       );
@@ -598,7 +615,7 @@ class _TreatmentPlanDispatchScreenState
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            context.tr("tp_dispatch.plan_text").toUpperCase(),
+                            context.tr("Treatment Plan").toUpperCase(),
                             style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w900,
@@ -622,7 +639,10 @@ class _TreatmentPlanDispatchScreenState
                           ),
                           const Gap(8),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 8,
+                            ),
                             decoration: BoxDecoration(
                               color: isDark
                                   ? const Color(0xFF0B1220)
@@ -630,26 +650,46 @@ class _TreatmentPlanDispatchScreenState
                               borderRadius: BorderRadius.circular(14),
                               border: Border.all(color: border),
                             ),
-                            child: DropdownButtonHideUnderline(
-                              child: DropdownButton<int>(
-                                value: _followupDays,
-                                isExpanded: true,
-                                items: const [3, 5, 7, 14, 30]
-                                    .map(
-                                      (d) => DropdownMenuItem(
-                                        value: d,
-                                        child: Text("Every $d days"),
+                            child: Row(
+                              children: [
+                                IconButton(
+                                  onPressed: () => _changeFollowupDays(-1),
+                                  icon: const Icon(Icons.remove),
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                                Expanded(
+                                  child: Column(
+                                    children: [
+                                      Text(
+                                        "$_followupDays",
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.w900,
+                                          color: isDark
+                                              ? Colors.white
+                                              : const Color(0xFF0F172A),
+                                        ),
                                       ),
-                                    )
-                                    .toList(),
-                                onChanged: (v) {
-                                  if (v != null) {
-                                    setState(() {
-                                      _followupDays = v;
-                                    });
-                                  }
-                                },
-                              ),
+                                      Text(
+                                        _followupDays == 1 ? "day" : "days",
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          color: isDark
+                                              ? Colors.white54
+                                              : Colors.black45,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                IconButton(
+                                  onPressed: () => _changeFollowupDays(1),
+                                  icon: const Icon(Icons.add),
+                                  visualDensity: VisualDensity.compact,
+                                ),
+                              ],
                             ),
                           ),
                         ],
