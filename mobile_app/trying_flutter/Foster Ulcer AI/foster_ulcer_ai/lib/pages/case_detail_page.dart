@@ -469,7 +469,7 @@ extension _CaseDetailPage on _MainNavigationScreenState {
                   controller: _caseDetailTimelineCtrl,
                   scrollDirection: Axis.horizontal,
                   itemCount: records.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  separatorBuilder: (_, _) => const SizedBox(width: 8),
                   itemBuilder: (context, i) {
                     String? recordTime(Map r) {
                       return (r['record_created_at'] ??
@@ -1008,7 +1008,7 @@ extension _CaseDetailPage on _MainNavigationScreenState {
                   ],
                 ),
               );
-            }).toList(),
+            }),
         ],
       ),
     );
@@ -1046,7 +1046,7 @@ extension _CaseDetailPage on _MainNavigationScreenState {
   void _showComparisonDialog(BuildContext context, Map<String, dynamic>? baseline, Map<String, dynamic>? current) {
     if (baseline == null || current == null) return;
 
-    Widget _buildCompareCard(String title, Map<String, dynamic> record, Color themeColor) {
+    Widget buildCompareCard(String title, Map<String, dynamic> record, Color themeColor) {
       final img = record['image']?['image_folder_url']?.toString();
       final wound = (record['wound_detail'] is Map) ? Map<String, dynamic>.from(record['wound_detail']) : {};
       
@@ -1140,10 +1140,10 @@ extension _CaseDetailPage on _MainNavigationScreenState {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  _buildCompareCard("BASELINE (REC-00001)", baseline, Colors.white),
+                  buildCompareCard("BASELINE (REC-00001)", baseline, Colors.white),
                   const Icon(LucideIcons.arrowDown, color: Colors.white24, size: 24),
                   const SizedBox(height: 16),
-                  _buildCompareCard("CURRENT (${current['record_id'] ?? 'Latest'})", current, const Color(0xFF0D9488)),
+                  buildCompareCard("CURRENT (${current['record_id'] ?? 'Latest'})", current, const Color(0xFF0D9488)),
                 ],
               ),
             ),

@@ -18,25 +18,25 @@ extension _DoctorSummaryPage on _MainNavigationScreenState {
         : diagnosisRaw.toString();
     final classifications = (ai['classifications'] is Map) ? Map<String, dynamic>.from(ai['classifications']) : <String, dynamic>{};
 
-    int? _intOrNull(dynamic v) {
+    int? intOrNull(dynamic v) {
       if (v == null) return null;
       if (v is int) return v;
       return int.tryParse(v.toString());
     }
 
-    int? _clampIntSet(dynamic v, List<int> allowed) {
-      final n = _intOrNull(v);
+    int? clampIntSet(dynamic v, List<int> allowed) {
+      final n = intOrNull(v);
       if (n == null) return null;
       return allowed.contains(n) ? n : null;
     }
 
-    String? _enumOrNull(dynamic v, List<String> allowed) {
+    String? enumOrNull(dynamic v, List<String> allowed) {
       if (v == null) return null;
       final s = v.toString();
       return allowed.contains(s) ? s : null;
     }
 
-    double? _confidence(dynamic v) {
+    double? confidence0(dynamic v) {
       if (v == null) return null;
       final n = v is num ? v.toDouble() : double.tryParse(v.toString());
       if (n == null) return null;
@@ -44,37 +44,37 @@ extension _DoctorSummaryPage on _MainNavigationScreenState {
       return n;
     }
 
-    final idsaStage = _clampIntSet(
+    final idsaStage = clampIntSet(
       classifications['IDSA_infection_stage'] ?? ai['IDSA_infection_stage'] ?? ai['IDSA_infaction_stage'],
       const [1, 2, 3, 4],
     );
 
     final wIfi = (classifications['WIfI'] is Map) ? Map<String, dynamic>.from(classifications['WIfI']) : <String, dynamic>{};
-    final wIfiWound = _clampIntSet(
+    final wIfiWound = clampIntSet(
       wIfi['wound_grade'] ?? ai['WIfI_wound_stage'] ?? ai['WIfI_wound_grade'] ?? ai['wIfI_wound_stage'],
       const [0, 1, 2, 3],
     );
-    final wIfiIschemia = _clampIntSet(
+    final wIfiIschemia = clampIntSet(
       wIfi['ischemia_grade'] ?? ai['WIfI_ischemia_stage'] ?? ai['WIfI_ischemia_grade'] ?? ai['wIfI_ischemia_stage'],
       const [0, 1, 2, 3],
     );
-    final wIfiFootInf = _clampIntSet(
+    final wIfiFootInf = clampIntSet(
       wIfi['foot_infection_grade'] ?? ai['WIfI_foot_infection_stage'] ?? ai['WIfI_foot_infection_grade'] ?? ai['wIfI_foot_infection_stage'],
       const [0, 1, 2, 3],
     );
-    final wIfiStage = _clampIntSet(
+    final wIfiStage = clampIntSet(
       wIfi['clinical_stage'] ?? ai['WIfI_clinical_stage'] ?? ai['WIfI_stage'] ?? ai['wIfI_stage'],
       const [1, 2, 3, 4],
     );
 
     final sinbad = (classifications['SINBAD'] is Map) ? Map<String, dynamic>.from(classifications['SINBAD']) : <String, dynamic>{};
-    final sinbadTotal = _clampIntSet(sinbad['total'] ?? _calcSinbadScore(), const [0, 1, 2, 3, 4, 5, 6]);
-    final sinbadSite = _enumOrNull(sinbad['site'], const ["Forefoot", "Midfoot/Hindfoot", "unknown"]) ?? _reviewed['sinbad_site'];
-    final sinbadIschemia = _enumOrNull(sinbad['ischemia'], const ["No", "Yes", "unknown"]) ?? _reviewed['sinbad_ischemia'];
-    final sinbadNeuropathy = _enumOrNull(sinbad['neuropathy'], const ["No", "Yes", "unknown"]) ?? _reviewed['sinbad_neuropathy'];
-    final sinbadInfection = _enumOrNull(sinbad['bacterial_infection'], const ["No", "Yes", "unknown"]) ?? _reviewed['sinbad_infection'];
-    final sinbadArea = _enumOrNull(sinbad['area'], const ["< 1 cm²", "≥ 1 cm²", "unknown"]) ?? _reviewed['sinbad_area'];
-    final sinbadDepth = _enumOrNull(sinbad['depth'], const ["Superficial", "Deep", "unknown"]) ?? _reviewed['sinbad_depth'];
+    final sinbadTotal = clampIntSet(sinbad['total'] ?? _calcSinbadScore(), const [0, 1, 2, 3, 4, 5, 6]);
+    final sinbadSite = enumOrNull(sinbad['site'], const ["Forefoot", "Midfoot/Hindfoot", "unknown"]) ?? _reviewed['sinbad_site'];
+    final sinbadIschemia = enumOrNull(sinbad['ischemia'], const ["No", "Yes", "unknown"]) ?? _reviewed['sinbad_ischemia'];
+    final sinbadNeuropathy = enumOrNull(sinbad['neuropathy'], const ["No", "Yes", "unknown"]) ?? _reviewed['sinbad_neuropathy'];
+    final sinbadInfection = enumOrNull(sinbad['bacterial_infection'], const ["No", "Yes", "unknown"]) ?? _reviewed['sinbad_infection'];
+    final sinbadArea = enumOrNull(sinbad['area'], const ["< 1 cm²", "≥ 1 cm²", "unknown"]) ?? _reviewed['sinbad_area'];
+    final sinbadDepth = enumOrNull(sinbad['depth'], const ["Superficial", "Deep", "unknown"]) ?? _reviewed['sinbad_depth'];
 
     int sinbadScoreValue(String group, dynamic value) {
       final v = value?.toString();
@@ -96,7 +96,7 @@ extension _DoctorSummaryPage on _MainNavigationScreenState {
       }
     }
 
-    final confidence = _confidence(ai['confidence']);
+    final confidence = confidence0(ai['confidence']);
     final confPct = confidence == null ? null : (confidence * 100).round();
     final treatmentSummary = ai['treatment_plan_summary']?.toString();
 

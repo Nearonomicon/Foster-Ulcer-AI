@@ -80,7 +80,7 @@ extension _HealingProgressPage on _MainNavigationScreenState {
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
                       itemCount: records.length,
-                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      separatorBuilder: (_, _) => const SizedBox(width: 8),
                       itemBuilder: (context, i) {
                         final raw = recordTime(records[i]);
                         final isActive = currentIndex == i;

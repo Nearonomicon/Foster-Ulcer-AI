@@ -258,7 +258,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   bool _caseDetailLoading = false;
   String? _caseDetailError;
   int _caseDetailIndex = 0;
-  String _caseDetailTab = 'specs';
+  final String _caseDetailTab = 'specs';
   bool _caseDetailShowWoundDetails = false;
   final ScrollController _caseDetailTimelineCtrl = ScrollController();
   bool _tasksLoading = false;
@@ -276,7 +276,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int? _selectedTaskPatientIndex;
   int? _selectedTaskIndex;
   String _tasksViewMode = 'plan';
-  String _tasksStatusQuery = '';
+  final String _tasksStatusQuery = '';
   String _tasksSearchQuery = '';
   String _tasksTreatmentStatus = 'ALL';
   String _tasksTaskStatus = 'ALL';
@@ -343,7 +343,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     }
   }
 
-  Future<void> _pickTaskEvidencePhoto(ImageSource source, Map<String, dynamic> task, String caseId, {String? planId}) async {
+  Future<void> _pickTaskEvidencePhoto(ImageSource source, Map<String, dynamic> task, String caseId) async {
     final picker = ImagePicker();
     try {
       final XFile? image = await picker.pickImage(source: source, imageQuality: 75);
