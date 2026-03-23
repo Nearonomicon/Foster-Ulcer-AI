@@ -1738,6 +1738,86 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     });
   }
 
+  Color _statusBgColor(String? status) {
+    switch ((status ?? '').toUpperCase()) {
+      case 'CREATION':
+        return const Color(0xFFE0F2FE);
+      case 'ANALYZING':
+        return const Color(0xFFFFF7ED);
+      case 'DOCTOR_REVIEW':
+        return const Color(0xFFE0E7FF);
+      case 'DRAFT':
+        return const Color(0xFFFEF3C7);
+      case 'SENT':
+        return const Color(0xFFDCFCE7);
+      case 'ACTIVE':
+        return const Color(0xFFFCE7F3);
+      case 'APPOINTMENT':
+        return const Color(0xFFFEF3C7);
+      case 'REQUEST_CLOSE':
+        return const Color(0xFFFEE2E2);
+      case 'COMPLETED':
+        return const Color(0xFFEDE9FE);
+      case 'PENDING':
+        return const Color(0xFFE0F2FE);
+      default:
+        return const Color(0xFFF1F5F9);
+    }
+  }
+
+  Color _statusFgColor(String? status) {
+    switch ((status ?? '').toUpperCase()) {
+      case 'CREATION':
+        return const Color(0xFF0369A1);
+      case 'ANALYZING':
+        return const Color(0xFF9A3412);
+      case 'DOCTOR_REVIEW':
+        return const Color(0xFF4338CA);
+      case 'DRAFT':
+        return const Color(0xFFB45309);
+      case 'SENT':
+        return const Color(0xFF15803D);
+      case 'ACTIVE':
+        return const Color(0xFFBE185D);
+      case 'APPOINTMENT':
+        return const Color(0xFFB45309);
+      case 'REQUEST_CLOSE':
+        return const Color(0xFFB91C1C);
+      case 'COMPLETED':
+        return const Color(0xFF6D28D9);
+      case 'PENDING':
+        return const Color(0xFF0369A1);
+      default:
+        return const Color(0xFF64748B);
+    }
+  }
+
+  Color _urgencyColor(String? urgency) {
+    switch ((urgency ?? '').toUpperCase()) {
+      case 'HIGH_URGENT':
+      case 'URGENT':
+        return Colors.red;
+      case 'MEDIUM':
+        return Colors.orange;
+      case 'ROUTINE':
+      default:
+        return const Color(0xFF0D9488);
+    }
+  }
+
+  String _urgencyLabel(String? urgency) {
+    switch ((urgency ?? '').toUpperCase()) {
+      case 'HIGH_URGENT':
+      case 'URGENT':
+        return "HIGH";
+      case 'MEDIUM':
+        return "MEDIUM";
+      case 'ROUTINE':
+      default:
+        return "ROUTINE";
+    }
+  }
+
   // Static UI Blocks
   Widget _buildStatCard({required IconData icon, required String label, required String value, required String subValue, required Color color, required Color iconColor}) => Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: const Color(0xFFF8FAFC), borderRadius: BorderRadius.circular(24), border: Border.all(color: const Color(0xFFF1F5F9))), child: Row(children: [Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(16)), child: Icon(icon, color: iconColor, size: 24)), const SizedBox(width: 16), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(value, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)), Text(label.toUpperCase(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey))])), Text(subValue, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: iconColor))]));
   Widget _buildActionCard() => Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: const Color(0xFFD97706), borderRadius: BorderRadius.circular(24)), child: const Row(children: [Icon(LucideIcons.listTodo, color: Colors.white), SizedBox(width: 16), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text("4", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)), Text("TASKS FOR TODAY", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white70))])), Icon(LucideIcons.chevronRight, color: Colors.white70)]));
@@ -1769,28 +1849,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   Widget _buildFixedBottomButton(String label, IconData icon, VoidCallback onPressed) => Container(padding: const EdgeInsets.all(24), decoration: const BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: Color(0xFFF1F5F9)))), child: ElevatedButton.icon(onPressed: onPressed, icon: Icon(icon), label: Text(label, style: const TextStyle(fontWeight: FontWeight.bold)), style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0D9488), foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 60), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)))));
 
   Widget _buildPatientListTile(Map<String, dynamic> p, {VoidCallback? onTap}) {
-    Color urgencyColor;
-    String urgencyText;
-    
-    switch (p['urgency']) {
-      case 'high_urgent':
-      case 'URGENT':
-        urgencyColor = Colors.red;
-        urgencyText = "HIGH";
-        break;
-      case 'medium':
-      case 'MEDIUM':
-        urgencyColor = Colors.orange;
-        urgencyText = "MEDIUM";
-        break;
-      case 'routine':
-      case 'ROUTINE':
-      default:
-        urgencyColor = const Color(0xFF0D9488);
-        urgencyText = "ROUTINE";
-        break;
-    }
-
+    final urgencyColor = _urgencyColor(p['urgency']?.toString());
+    final urgencyText = _urgencyLabel(p['urgency']?.toString());
     final image = p['image'] ?? p['image_url'] ?? p['patient_photo_url'] ?? '';
     final patientId = p['patient_id'] ?? p['patientId'];
     final id = p['id'] ?? p['case_id'] ?? p['caseId'] ?? "-";
@@ -1800,35 +1860,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         (patientId != null ? "Patient $patientId" : "Unknown");
     final title = (p['case_id'] ?? p['caseId']) != null ? id.toString() : name.toString();
     final status = p['status']?.toString() ?? "unknown";
-    Color statusBg(String s) {
-      switch (s.toUpperCase()) {
-        case 'CREATION':
-          return const Color(0xFFE0F2FE);
-        case 'ANALYZING':
-          return const Color(0xFFFFF7ED);
-        case 'DOCTOR_REVIEW':
-          return const Color(0xFFE0E7FF);
-        case 'COMPLETED':
-          return const Color(0xFFDCFCE7);
-        default:
-          return const Color(0xFFF1F5F9);
-      }
-    }
-
-    Color statusFg(String s) {
-      switch (s.toUpperCase()) {
-        case 'CREATION':
-          return const Color(0xFF0369A1);
-        case 'ANALYZING':
-          return const Color(0xFF9A3412);
-        case 'DOCTOR_REVIEW':
-          return const Color(0xFF4338CA);
-        case 'COMPLETED':
-          return const Color(0xFF15803D);
-        default:
-          return const Color(0xFF64748B);
-      }
-    }
 
     String formatCaseUpdated(dynamic raw) {
       if (raw == null || raw.toString().isEmpty) return "-";
@@ -1937,7 +1968,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               decoration: BoxDecoration(
-                color: statusBg(status),
+                color: _statusBgColor(status),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
@@ -1945,7 +1976,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 style: TextStyle(
                   fontSize: 9,
                   fontWeight: FontWeight.bold,
-                  color: statusFg(status),
+                  color: _statusFgColor(status),
                 ),
               ),
             ),

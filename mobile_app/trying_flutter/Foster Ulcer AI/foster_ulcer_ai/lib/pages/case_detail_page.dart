@@ -155,36 +155,7 @@ extension _CaseDetailPage on _MainNavigationScreenState {
 
   Widget _buildModernHeader(Map<String, dynamic> c) {
     final status = c['status']?.toString();
-    Color statusBg(String? s) {
-      switch ((s ?? '').toUpperCase()) {
-        case 'CREATION':
-          return const Color(0xFFE0F2FE);
-        case 'ANALYZING':
-          return const Color(0xFFFFF7ED);
-        case 'DOCTOR_REVIEW':
-          return const Color(0xFFE0E7FF);
-        case 'COMPLETED':
-          return const Color(0xFFDCFCE7);
-        default:
-          return const Color(0xFFF1F5F9);
-      }
-    }
-
-    Color statusFg(String? s) {
-      switch ((s ?? '').toUpperCase()) {
-        case 'CREATION':
-          return const Color(0xFF0369A1);
-        case 'ANALYZING':
-          return const Color(0xFF9A3412);
-        case 'DOCTOR_REVIEW':
-          return const Color(0xFF4338CA);
-        case 'COMPLETED':
-          return const Color(0xFF15803D);
-        default:
-          return const Color(0xFF64748B);
-      }
-    }
-
+    final urgency = c['urgency']?.toString();
     return Container(
       padding: const EdgeInsets.fromLTRB(8, 12, 16, 12),
       decoration: const BoxDecoration(
@@ -225,18 +196,29 @@ extension _CaseDetailPage on _MainNavigationScreenState {
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
-                        color: statusBg(status),
+                        color: _statusBgColor(status),
                         borderRadius: BorderRadius.circular(99),
-                        border: Border.all(color: statusBg(status)),
+                        border: Border.all(color: _statusBgColor(status)),
                       ),
-                      child: Text(status, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: statusFg(status))),
+                      child: Text(status, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: _statusFgColor(status))),
                     ),
-                  if (c['urgency'] == 'URGENT') ...[
+                  if (urgency != null && urgency.isNotEmpty) ...[
                     const SizedBox(height: 6),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(color: const Color(0xFFFEE2E2), borderRadius: BorderRadius.circular(99), border: Border.all(color: const Color(0xFFFECACA))),
-                      child: const Text("URGENT", style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFFB91C1C))),
+                      decoration: BoxDecoration(
+                        color: _urgencyColor(urgency).withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(99),
+                        border: Border.all(color: _urgencyColor(urgency).withOpacity(0.28)),
+                      ),
+                      child: Text(
+                        _urgencyLabel(urgency),
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w900,
+                          color: _urgencyColor(urgency),
+                        ),
+                      ),
                     ),
                   ],
                 ],

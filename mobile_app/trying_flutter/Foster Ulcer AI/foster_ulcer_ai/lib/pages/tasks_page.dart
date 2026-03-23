@@ -285,12 +285,12 @@ extension _TasksPage on _MainNavigationScreenState {
                                           Container(
                                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                             decoration: BoxDecoration(
-                                              color: status == 'DRAFT' ? const Color(0xFFFEF3C7) : const Color(0xFFD1FAE5),
+                                              color: _statusBgColor(status),
                                               borderRadius: BorderRadius.circular(8),
                                             ),
                                             child: Text(
                                               status,
-                                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: status == 'DRAFT' ? const Color(0xFFB45309) : const Color(0xFF047857)),
+                                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _statusFgColor(status)),
                                             ),
                                           ),
                                         ],

@@ -40,32 +40,6 @@ extension _TaskDetailPage on _MainNavigationScreenState {
       }
     }
 
-    Color statusBg(String status) {
-      switch (status.toUpperCase()) {
-        case 'DRAFT':
-          return const Color(0xFFFEF3C7);
-        case 'SENT':
-          return const Color(0xFFDBEAFE);
-        case 'COMPLETED':
-          return const Color(0xFFDCFCE7);
-        default:
-          return const Color(0xFFE2E8F0);
-      }
-    }
-
-    Color statusFg(String status) {
-      switch (status.toUpperCase()) {
-        case 'DRAFT':
-          return const Color(0xFFB45309);
-        case 'SENT':
-          return const Color(0xFF1D4ED8);
-        case 'COMPLETED':
-          return const Color(0xFF15803D);
-        default:
-          return const Color(0xFF64748B);
-      }
-    }
-
     final status = (t['status'] ?? 'Pending').toString();
     final due = fmtDueFull(t['task_due']?.toString());
     final evidencePath = (t['evidence_path'] ?? '').toString();
@@ -193,7 +167,7 @@ extension _TaskDetailPage on _MainNavigationScreenState {
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                                 decoration: BoxDecoration(
-                                  color: statusBg(taskStatus),
+                                  color: _statusBgColor(taskStatus),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
                                 child: Text(
@@ -201,7 +175,7 @@ extension _TaskDetailPage on _MainNavigationScreenState {
                                   style: TextStyle(
                                     fontSize: 10,
                                     fontWeight: FontWeight.bold,
-                                    color: statusFg(taskStatus),
+                                    color: _statusFgColor(taskStatus),
                                   ),
                                 ),
                               ),
