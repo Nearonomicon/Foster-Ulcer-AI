@@ -238,18 +238,6 @@ extension _DoctorSummaryPage on _MainNavigationScreenState {
                             border: Border.all(color: const Color(0xFF5EEAD4)),
                           ),
                           child: Text(
-                            "WIfI Stage: ${(wIfiStage ?? '-').toString()}",
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF134E4A)),
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFE2F7F3),
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(color: const Color(0xFF5EEAD4)),
-                          ),
-                          child: Text(
                             "SINBAD: ${(sinbadTotal ?? '-').toString()}",
                             style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF134E4A)),
                           ),
@@ -343,11 +331,11 @@ extension _DoctorSummaryPage on _MainNavigationScreenState {
                         runSpacing: 12,
                         children: [
                           card("Vitals", [
-                            _kv("Temperature", _tempLevel?.toString() ?? '-'),
-                            _kv("Blood Pressure", _bpLevel?.toString() ?? '-'),
-                            _kv("Heart Rate", _heartRateLevel?.toString() ?? '-'),
-                            _kv("Respiratory Rate", _respRateLevel?.toString() ?? _reviewed['respiratory_rate']?.toString() ?? '-'),
-                            _kv("Blood Sugar", _sugarLevel?.toString() ?? _reviewed['blood_sugar']?.toString() ?? '-'),
+                            _kv("Temperature", _reviewed['temperature']?.toString() ?? '-'),
+                            _kv("Blood Pressure", _reviewed['blood_pressure']?.toString() ?? '-'),
+                            _kv("Heart Rate", _reviewed['heart_rate']?.toString() ?? '-'),
+                            _kv("Respiratory Rate", _reviewed['respiratory_rate']?.toString() ?? '-'),
+                            _kv("Blood Sugar", _reviewed['blood_sugar']?.toString() ?? '-'),
                           ]),
                           card("SINBAD", [
                             _kv("Site", _reviewed['sinbad_site']?.toString() ?? '-'),

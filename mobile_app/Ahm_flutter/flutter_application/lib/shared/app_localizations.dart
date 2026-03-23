@@ -64,10 +64,14 @@ class AppLocalizations {
        
         'inbox.title': 'Case Inbox',
         'inbox.tab.needs_review': 'Needs Review',
+        'inbox.tab.sent_to_nurse': 'Sent to Nurse',
+        'inbox.tab.request_close': 'Request Close',
         'inbox.tab.ai_processed': 'AI Processed',
         'inbox.tab.recent': 'Recent',
 
         'inbox.section.pending_review': 'Pending Review',
+        'inbox.section.sent_to_nurse': 'Sent to Nurse',
+        'inbox.section.request_close': 'Request Close',
         'inbox.section.ai_processed': 'AI Processed',
         'inbox.section.recent': 'Recent',
 
@@ -299,10 +303,14 @@ class AppLocalizations {
         // Inbox
         'inbox.title': 'ကိစ္စအဝင်ပုံး',
         'inbox.tab.needs_review': 'ပြန်စစ်ရန်လို',
+        'inbox.tab.sent_to_nurse': 'Sent to Nurse',
+        'inbox.tab.request_close': 'Request Close',
         'inbox.tab.ai_processed': 'AI ပြီးဆုံး',
         'inbox.tab.recent': 'နောက်ဆုံး',
 
         'inbox.section.pending_review': 'စစ်ဆေးရန်ကျန်',
+        'inbox.section.sent_to_nurse': 'Sent to Nurse',
+        'inbox.section.request_close': 'Request Close',
         'inbox.section.ai_processed': 'AI ပြီးဆုံး',
         'inbox.section.recent': 'နောက်ဆုံး',
 

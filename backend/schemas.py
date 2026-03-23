@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional, Union
+from typing import Any, List, Optional, Union
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 # -----------------------------
@@ -16,6 +18,7 @@ class Status(str, Enum):
     PLAN_ISSUED = "PLAN_ISSUED"
     TREATMENT_ACTIVE = "TREATMENT_ACTIVE"
     APPOINTMENT = "APPOINTMENT"
+    REQUEST_CLOSE = "REQUEST_CLOSE"
     COMPLETED = "COMPLETED"
 
 
@@ -25,20 +28,147 @@ class Urgency(str, Enum):
     ROUTINE = "ROUTINE"
 
 
+class LocationPrimary(str, Enum):
+    TOE = "toe"
+    SOLE = "sole"
+    SIDE = "side"
+    HEEL = "heel"
+    DORSAL_ASPECT = "dorsal_aspect"
+    MEDIAL_MALLEOLUS = "medial_malleolus"
+    LATERAL_MALLEOLUS = "lateral_malleolus"
+
+
+class WoundType(str, Enum):
+    ULCER = "ulcer"
+    SURGICAL = "surgical"
+    TRAUMATIC = "traumatic"
+    PRESSURE = "pressure"
+    BURN = "burn"
+    OTHER = "other"
+
+
 class Shape(str, Enum):
-    round = "round"
-    oval = "oval"
-    irregular = "irregular"
-    linear = "linear"
-    punched_out = "punched_out"
+    ROUND = "round"
+    OVAL = "oval"
+    IRREGULAR = "irregular"
+    LINEAR = "linear"
+    PUNCHED_OUT = "punched_out"
 
 
 class DepthCategory(str, Enum):
-    superficial = "superficial"
-    partial_thickness = "partial_thickness"
-    full_thickness = "full_thickness"
-    deep = "deep"
-    very_deep_exposed_bone_tendon = "very_deep_exposed_bone_tendon"
+    SUPERFICIAL = "superficial"
+    PARTIAL_THICKNESS = "partial_thickness"
+    FULL_THICKNESS = "full_thickness"
+    DEEP = "deep"
+    VERY_DEEP_EXPOSED_BONE_TENDON = "very_deep_exposed_bone_tendon"
+
+
+class EdgeDescription(str, Enum):
+    SMOOTH = "smooth"
+    THICKENED = "thickened"
+    IRREGULAR = "irregular"
+    ROLLED_EPIBOLE = "rolled_epibole"
+    UNDERMINED = "undermined"
+    CALLOUSED = "calloused"
+
+
+class PeriwoundStatus(str, Enum):
+    NORMAL = "normal"
+    ERYTHEMATOUS = "erythematous"
+    EDEMATOUS = "edematous"
+    INDURATED = "indurated"
+    MACERATED = "macerated"
+    FLUCTUANT = "fluctuant"
+    HYPERPIGMENTED = "hyperpigmented"
+
+
+class DischargeVolume(str, Enum):
+    NONE = "none"
+    MINIMAL = "minimal"
+    MODERATE = "moderate"
+    HEAVY = "heavy"
+
+
+class DischargeType(str, Enum):
+    SEROUS = "serous (clear)"
+    SANGUINEOUS = "sanguineous (bloody)"
+    SEROSANGUINEOUS = "serosanguineous (pink)"
+    PURULENT = "purulent (yellow/pus)"
+    SEROPURULENT = "seropurulent (cloudy yellow)"
+
+
+class OdorPresence(str, Enum):
+    NONE = "none"
+    FAINT = "faint"
+    MODERATE = "moderate"
+    FOUL = "foul"
+    PUTRID = "putrid"
+
+
+class SkinCondition(str, Enum):
+    HEALTHY = "healthy"
+    DRY = "dry"
+    CRACKED = "cracked"
+    MACERATED = "macerated"
+    FRAGILE = "fragile"
+    SCALING = "scaling"
+
+
+class IschemiaChecklistItem(str, Enum):
+    COLOR_PALE_BLUE = "Color (pale/blue)"
+    COLD_FOOT = "Cold foot"
+    BLACK_TISSUE = "Black tissue (tissue loss)"
+
+
+class InfectionChecklistItem(str, Enum):
+    PUS_GOO = "Pus / Goo (Purulent discharge)"
+    WARMTH = "Warmth (hotter than other foot)"
+    SWELLING = "Swelling (puffy, tight, hard)"
+    PAIN = "Pain (tender or hurts to touch)"
+
+
+class ErythemaExtent(str, Enum):
+    NONE = "none"
+    GT_0_5_CM = "gt_0_5_cm"
+    GT_2_CM = "gt_2_cm"
+
+
+class ProbeToBoneTest(str, Enum):
+    NOT_PERFORMED = "not_performed"
+    NEGATIVE = "negative"
+    POSITIVE = "positive"
+
+
+class GangreneExtent(str, Enum):
+    NONE = "none"
+    DIGITS_ONLY = "digits_only"
+    FOREFOOT_MIDFOOT = "forefoot_midfoot"
+    HEEL_FULL_THICKNESS = "heel_full_thickness"
+
+
+class YesNoSinbad(str, Enum):
+    NO = "No"
+    YES = "Yes"
+
+
+class SinbadSite(str, Enum):
+    FOREFOOT = "Forefoot"
+    MIDFOOT_HINDFOOT = "Midfoot/Hindfoot"
+
+
+class SinbadArea(str, Enum):
+    LT_1_CM2 = "< 1 cm\u00b2"
+    GTE_1_CM2 = ">= 1 cm\u00b2"
+
+
+class SinbadDepth(str, Enum):
+    SKIN_ONLY = "Skin only"
+    DEEP_BONE = "Deep/Bone"
+
+
+class IschemiaPulse(str, Enum):
+    YES = "yes"
+    NO_WEAK = "no_weak"
 
 
 class WIfI(BaseModel):
@@ -99,53 +229,48 @@ class Bed(BaseModel):
 
 
 class Discharge(BaseModel):
-    volume: Optional[str] = None
-    type: Optional[str] = None
+    volume: Optional[DischargeVolume] = None
+    type: Optional[DischargeType] = None
 
 
 class VitalSigns(BaseModel):
     temperature: Optional[str] = None
     blood_pressure: Optional[str] = None
+    blood_pressure_systolic: Optional[str] = None
+    blood_pressure_diastolic: Optional[str] = None
     blood_glucose: Optional[str] = None
     heart_rate: Optional[str] = None
     respiratory_rate: Optional[str] = None
 
 
 class WoundDetail(BaseModel):
-    location_primary: Optional[str] = None
+    location_primary: Optional[LocationPrimary] = None
     location_detail: Optional[str] = None
-    wound_type: Optional[str] = None
-
+    wound_type: Optional[WoundType] = None
     shape: Optional[Shape] = None
-
-    size: Size = Field(default_factory=Size)
+    size: Size
     depth_category: Optional[DepthCategory] = None
-
-    bed: Bed = Field(default_factory=Bed)
-
-    edge_description: Optional[str] = None
-    periwound_status: Optional[str] = None
-
-    discharge: Discharge = Field(default_factory=Discharge)
-    odor_presence: Optional[str] = None
-
-    pain_score: Optional[int] = None
+    bed: Bed
+    edge_description: Optional[EdgeDescription] = None
+    periwound_status: Optional[PeriwoundStatus] = None
+    discharge: Discharge
+    odor_presence: Optional[OdorPresence] = None
+    pain_score: Optional[int] = Field(default=None, ge=0, le=10)
     has_infection: Optional[bool] = None
-
-    skin_condition: Optional[str] = None
+    skin_condition: Optional[SkinCondition] = None
 
 
 class Ischemia(BaseModel):
     points: List[int] = Field(default_factory=list)
-    pulse: Optional[str] = None
-    checklist: List[str] = Field(default_factory=list)
+    pulse: Optional[IschemiaPulse] = None
+    checklist: List[IschemiaChecklistItem] = Field(default_factory=list)
 
 
 class Infection(BaseModel):
-    checklist: List[str] = Field(default_factory=list)
-    erythema_extent: Optional[str] = None
-    probe_to_bone_test: Optional[str] = None
-    has_deep_abscess_or_fasciitis: Optional[str] = None
+    checklist: List[InfectionChecklistItem] = Field(default_factory=list)
+    erythema_extent: Optional[ErythemaExtent] = None
+    probe_to_bone_test: Optional[ProbeToBoneTest] = None
+    has_deep_abscess_or_fasciitis: Optional[bool] = None
 
 
 class Neuropathy(BaseModel):
@@ -153,12 +278,12 @@ class Neuropathy(BaseModel):
 
 
 class Sinbad(BaseModel):
-    site: Optional[str] = None
-    ischemia: Optional[str] = None
-    neuropathy: Optional[str] = None
-    infection: Optional[str] = None
-    area: Optional[str] = None
-    depth: Optional[str] = None
+    site: Optional[SinbadSite] = None
+    ischemia: Optional[YesNoSinbad] = None
+    neuropathy: Optional[YesNoSinbad] = None
+    infection: Optional[YesNoSinbad] = None
+    area: Optional[SinbadArea] = None
+    depth: Optional[SinbadDepth] = None
 
 
 class LabResults(BaseModel):
@@ -211,30 +336,35 @@ class CaseRef(BaseModel):
 
 
 class NurseReviewed(BaseModel):
-    nurse_reviewed_flag: Optional[bool] = None
-    vital_signs: Optional[VitalSigns] = None
-    wound_detail: Optional[WoundDetail] = None
-    ischemia: Optional[Ischemia] = None
-    infection: Optional[Infection] = None
-    neuropathy: Optional[Neuropathy] = None
-    sinbad: Optional[Sinbad] = None
-    lab_results: Optional[LabResults] = None
-    vascular: Optional[Vascular] = None
-    gangrene_extent: Optional[str] = None
+    nurse_reviewed_flag: bool
+    vital_signs: VitalSigns
+    wound_detail: WoundDetail
+    ischemia: Ischemia
+    infection: Infection
+    neuropathy: Neuropathy
+    sinbad: Sinbad
+    lab_results: LabResults
+    vascular: Vascular
+    gangrene_extent: Optional[GangreneExtent] = None
 
 
 class AnalyzeWoundPayload(BaseModel):
-    patient_profile: Optional[dict] = None
-    nurse_reviewed: Optional[NurseReviewed] = None
-    ai_prefill: Optional[dict] = None
-    case_ref: CaseRef
+    model_config = ConfigDict(extra="allow")
+
+    patient_profile: dict[str, Any]
+    nurse_reviewed: NurseReviewed
+    ai_prefill: Optional[dict[str, Any]] = None
+    case_ref: Optional[dict[str, Any]] = None
 
 
 class CreateCaseVitals(BaseModel):
     temperature: Optional[str] = None
     blood_pressure: Optional[str] = None
+    blood_pressure_systolic: Optional[str] = None
+    blood_pressure_diastolic: Optional[str] = None
     heart_rate: Optional[str] = None
     respiratory_rate: Optional[str] = None
+    blood_glucose: Optional[str] = None
     blood_sugar: Optional[str] = None
 
 
@@ -286,7 +416,7 @@ class WoundCaseRecord(BaseModel):
     sinbad: Optional[Sinbad] = None
     lab_results: Optional[LabResults] = None
     vascular: Optional[Vascular] = None
-    gangrene_extent: Optional[str] = None
+    gangrene_extent: Optional[GangreneExtent] = None
 
     analysis: Optional[dict] = None
     treatment_plan: Optional[TreatmentPlan] = None

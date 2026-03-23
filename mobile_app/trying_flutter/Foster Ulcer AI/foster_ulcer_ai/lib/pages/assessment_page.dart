@@ -615,7 +615,7 @@ extension _AssessmentPage on _MainNavigationScreenState {
                       _ischemiaPoints.add(i);
                     }
                     _reviewed['ischemia_points'] = _ischemiaPoints.toList()..sort();
-                    if (_ischemiaPoints.length == 2 || _ischemiaChecklist.isNotEmpty || _ischemiaPulse == "no_weak") {
+                    if (_ischemiaPoints.length == 2 || _ischemiaChecklist.isNotEmpty || _ischemiaPulse == "yes") {
                       _sinbadIschemia = "Yes";
                       _reviewed['sinbad_ischemia'] = "Yes";
                     }
@@ -667,7 +667,7 @@ extension _AssessmentPage on _MainNavigationScreenState {
             setState(() {
               _ischemiaPulse = v == true ? "yes" : null;
               _reviewed['ischemia_pulse'] = _ischemiaPulse;
-              if (_ischemiaPulse == "no_weak" || _ischemiaChecklist.isNotEmpty || _ischemiaPoints.length == 2) {
+              if (_ischemiaPulse == "yes" || _ischemiaChecklist.isNotEmpty || _ischemiaPoints.length == 2) {
                 _sinbadIschemia = "Yes";
                 _reviewed['sinbad_ischemia'] = "Yes";
               }
@@ -1027,7 +1027,7 @@ extension _AssessmentPage on _MainNavigationScreenState {
                                       _ischemiaPoints.add(i);
                                     }
                                     _reviewed['ischemia_points'] = _ischemiaPoints.toList()..sort();
-                                    if (_ischemiaPoints.length == 2 || _ischemiaChecklist.isNotEmpty || _ischemiaPulse == "no_weak") {
+                                    if (_ischemiaPoints.length == 2 || _ischemiaChecklist.isNotEmpty || _ischemiaPulse == "yes") {
                                       _sinbadIschemia = "Yes";
                                       _reviewed['sinbad_ischemia'] = "Yes";
                                     }
@@ -1081,7 +1081,7 @@ extension _AssessmentPage on _MainNavigationScreenState {
                             setState(() {
                               _ischemiaPulse = v == true ? "yes" : null;
                           _reviewed['ischemia_pulse'] = _ischemiaPulse;
-                          if (_ischemiaPulse == "no_weak" || _ischemiaChecklist.isNotEmpty || _ischemiaPoints.length == 2) {
+                          if (_ischemiaPulse == "yes" || _ischemiaChecklist.isNotEmpty || _ischemiaPoints.length == 2) {
                             _sinbadIschemia = "Yes";
                             _reviewed['sinbad_ischemia'] = "Yes";
                           }

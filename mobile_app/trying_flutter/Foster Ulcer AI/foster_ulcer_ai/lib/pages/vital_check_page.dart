@@ -11,263 +11,98 @@ extension _VitalCheckPage on _MainNavigationScreenState {
             children: [
               _buildSectionTitle(LucideIcons.heartPulse, "Blood Pressure"),
               const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
+              Row(
                 children: [
-                  ["Low", "< 90/60"],
-                  ["Normal", "90/60 - 120/80"],
-                  ["High", "130-139/80-89"],
-                  ["Very High", ">= 140/90"],
-                ].map((parts) {
-                  final label = parts[0];
-                  final range = parts[1];
-                  final selected = _bpLevel == label;
-                  return FilterChip(
-                    label: SizedBox(
-                      width: 120,
-                      child: Center(
-                        child: RichText(
-                          textAlign: TextAlign.center,
-                          text: TextSpan(
-                            style: TextStyle(
-                              fontWeight: selected ? FontWeight.w800 : FontWeight.bold,
-                              color: selected ? const Color(0xFF0D9488) : Colors.blueGrey,
-                            ),
-                            children: [
-                              TextSpan(text: label),
-                              const TextSpan(text: "\n"),
-                              TextSpan(
-                                text: range,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.normal,
-                                  fontSize: 11,
-                                  color: selected ? const Color(0xFF0D9488) : Colors.blueGrey,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                  Expanded(
+                    child: _buildVitalInputCard(
+                      label: "Systolic",
+                      hint: "120",
+                      unit: "mmHg",
+                      icon: LucideIcons.heartPulse,
+                      keyboardType: TextInputType.number,
+                      bindKey: "blood_pressure_systolic",
+                      onChanged: (_) => setState(_syncBloodPressureValue),
                     ),
-                    selected: selected,
-                    onSelected: (_) => setState(() {
-                      _bpLevel = label;
-                      _reviewed['blood_pressure'] = label;
-                    }),
-                    selectedColor: const Color(0xFF0D9488).withOpacity(0.15),
-                    checkmarkColor: const Color(0xFF0D9488),
-                  );
-                }).toList(),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildVitalInputCard(
+                      label: "Diastolic",
+                      hint: "80",
+                      unit: "mmHg",
+                      icon: LucideIcons.activity,
+                      keyboardType: TextInputType.number,
+                      bindKey: "blood_pressure_diastolic",
+                      onChanged: (_) => setState(_syncBloodPressureValue),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: const Color(0xFFE2E8F0)),
+                ),
+                child: Text(
+                  "Saved as: ${_reviewed['blood_pressure']?.toString().isNotEmpty == true ? _reviewed['blood_pressure'] : '--/--'}",
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF1E293B),
+                  ),
+                ),
               ),
               const SizedBox(height: 24),
 
               _buildSectionTitle(LucideIcons.droplet, "Blood Sugar"),
               const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  ["Low", "< 70"],
-                  ["Normal", "70 - 140"],
-                  ["High", "141 - 200"],
-                  ["Very High", "> 200"],
-                ].map((parts) {
-                  final label = parts[0];
-                  final range = parts[1];
-                  final selected = _sugarLevel == label;
-                  return FilterChip(
-                    label: SizedBox(
-                      width: 120,
-                      child: Center(
-                        child: RichText(
-                          textAlign: TextAlign.center,
-                          text: TextSpan(
-                            style: TextStyle(
-                              fontWeight: selected ? FontWeight.w800 : FontWeight.bold,
-                              color: selected ? const Color(0xFF0D9488) : Colors.blueGrey,
-                            ),
-                            children: [
-                              TextSpan(text: label),
-                              const TextSpan(text: "\n"),
-                              TextSpan(
-                                text: range,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.normal,
-                                  fontSize: 11,
-                                  color: selected ? const Color(0xFF0D9488) : Colors.blueGrey,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    selected: selected,
-                    onSelected: (_) => setState(() {
-                      _sugarLevel = label;
-                      _reviewed['blood_sugar'] = label;
-                    }),
-                    selectedColor: const Color(0xFF0D9488).withOpacity(0.15),
-                    checkmarkColor: const Color(0xFF0D9488),
-                  );
-                }).toList(),
+              _buildVitalInputCard(
+                label: "Blood Sugar",
+                hint: "110",
+                unit: "mg/dL",
+                icon: LucideIcons.droplet,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                bindKey: "blood_sugar",
               ),
               const SizedBox(height: 24),
 
               _buildSectionTitle(LucideIcons.heart, "Heart Rate"),
               const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  ["Low", "< 60"],
-                  ["Normal", "60 - 100"],
-                  ["High", "> 100"],
-                ].map((parts) {
-                  final label = parts[0];
-                  final range = parts[1];
-                  final selected = _heartRateLevel == label;
-                  return FilterChip(
-                    label: SizedBox(
-                      width: 120,
-                      child: Center(
-                        child: RichText(
-                          textAlign: TextAlign.center,
-                          text: TextSpan(
-                            style: TextStyle(
-                              fontWeight: selected ? FontWeight.w800 : FontWeight.bold,
-                              color: selected ? const Color(0xFF0D9488) : Colors.blueGrey,
-                            ),
-                            children: [
-                              TextSpan(text: label),
-                              const TextSpan(text: "\n"),
-                              TextSpan(
-                                text: range,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.normal,
-                                  fontSize: 11,
-                                  color: selected ? const Color(0xFF0D9488) : Colors.blueGrey,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    selected: selected,
-                    onSelected: (_) => setState(() {
-                      _heartRateLevel = label;
-                      _reviewed['heart_rate'] = label;
-                    }),
-                    selectedColor: const Color(0xFF0D9488).withOpacity(0.15),
-                    checkmarkColor: const Color(0xFF0D9488),
-                  );
-                }).toList(),
+              _buildVitalInputCard(
+                label: "Heart Rate",
+                hint: "72",
+                unit: "bpm",
+                icon: LucideIcons.heart,
+                keyboardType: TextInputType.number,
+                bindKey: "heart_rate",
               ),
               const SizedBox(height: 24),
 
               _buildSectionTitle(LucideIcons.wind, "Respiratory Rate"),
               const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  ["Low", "< 12"],
-                  ["Normal", "12 - 20"],
-                  ["High", "> 20"],
-                ].map((parts) {
-                  final label = parts[0];
-                  final range = parts[1];
-                  final selected = _respRateLevel == label;
-                  return FilterChip(
-                    label: SizedBox(
-                      width: 120,
-                      child: Center(
-                        child: RichText(
-                          textAlign: TextAlign.center,
-                          text: TextSpan(
-                            style: TextStyle(
-                              fontWeight: selected ? FontWeight.w800 : FontWeight.bold,
-                              color: selected ? const Color(0xFF0D9488) : Colors.blueGrey,
-                            ),
-                            children: [
-                              TextSpan(text: label),
-                              const TextSpan(text: "\n"),
-                              TextSpan(
-                                text: range,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.normal,
-                                  fontSize: 11,
-                                  color: selected ? const Color(0xFF0D9488) : Colors.blueGrey,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    selected: selected,
-                    onSelected: (_) => setState(() {
-                      _respRateLevel = label;
-                      _reviewed['respiratory_rate'] = label;
-                    }),
-                    selectedColor: const Color(0xFF0D9488).withOpacity(0.15),
-                    checkmarkColor: const Color(0xFF0D9488),
-                  );
-                }).toList(),
+              _buildVitalInputCard(
+                label: "Respiratory Rate",
+                hint: "16",
+                unit: "breaths/min",
+                icon: LucideIcons.wind,
+                keyboardType: TextInputType.number,
+                bindKey: "respiratory_rate",
               ),
               const SizedBox(height: 24),
 
               _buildSectionTitle(LucideIcons.thermometer, "Body Temp"),
               const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  ["Normal", "36.1 - 37.2°C"],
-                  ["Warm", "37.3 - 37.9°C"],
-                  ["High", "> 38°C"],
-                ].map((parts) {
-                  final label = parts[0];
-                  final range = parts[1];
-                  final selected = _tempLevel == label;
-                  return FilterChip(
-                    label: SizedBox(
-                      width: 120,
-                      child: Center(
-                        child: RichText(
-                          textAlign: TextAlign.center,
-                          text: TextSpan(
-                            style: TextStyle(
-                              fontWeight: selected ? FontWeight.w800 : FontWeight.bold,
-                              color: selected ? const Color(0xFF0D9488) : Colors.blueGrey,
-                            ),
-                            children: [
-                              TextSpan(text: label),
-                              const TextSpan(text: "\n"),
-                              TextSpan(
-                                text: range,
-                                style: TextStyle(
-                                  fontWeight: FontWeight.normal,
-                                  fontSize: 11,
-                                  color: selected ? const Color(0xFF0D9488) : Colors.blueGrey,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    selected: selected,
-                    onSelected: (_) => setState(() {
-                      _tempLevel = label;
-                      _reviewed['temperature'] = label;
-                    }),
-                    selectedColor: const Color(0xFF0D9488).withOpacity(0.15),
-                    checkmarkColor: const Color(0xFF0D9488),
-                  );
-                }).toList(),
+              _buildVitalInputCard(
+                label: "Temperature",
+                hint: "36.8",
+                unit: "°C",
+                icon: LucideIcons.thermometer,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                bindKey: "temperature",
               ),
               const SizedBox(height: 120),
             ],
@@ -313,6 +148,74 @@ extension _VitalCheckPage on _MainNavigationScreenState {
           ),
         ),
       ],
+    );
+  }
+
+  void _syncBloodPressureValue() {
+    final systolic = _reviewed['blood_pressure_systolic']?.toString().trim() ?? '';
+    final diastolic = _reviewed['blood_pressure_diastolic']?.toString().trim() ?? '';
+    if (systolic.isEmpty && diastolic.isEmpty) {
+      _reviewed.remove('blood_pressure');
+      return;
+    }
+    _reviewed['blood_pressure'] = "$systolic/$diastolic";
+  }
+
+  Widget _buildVitalInputCard({
+    required String label,
+    required String hint,
+    required String unit,
+    required IconData icon,
+    required TextInputType keyboardType,
+    required String bindKey,
+    ValueChanged<String>? onChanged,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, size: 18, color: const Color(0xFF0D9488)),
+              const SizedBox(width: 8),
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF0D9488),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: _ctrl(bindKey, initial: _reviewed[bindKey]?.toString() ?? ''),
+            keyboardType: keyboardType,
+            onChanged: (value) {
+              _reviewed[bindKey] = value.trim();
+              onChanged?.call(value);
+            },
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+            decoration: InputDecoration(
+              hintText: hint,
+              suffixText: unit,
+              filled: true,
+              fillColor: const Color(0xFFF8FAFC),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(14),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

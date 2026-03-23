@@ -6,10 +6,12 @@ import 'package:flutter_application/shared/app_localizations.dart';
 
 class CaseDetailScreen extends StatefulWidget {
   final String caseId;
+  final List<String>? filterStatuses;
 
   const CaseDetailScreen({
     super.key,
     required this.caseId,
+    this.filterStatuses,
   });
 
   @override
@@ -22,6 +24,7 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
   final CaseService _caseService = CaseService();
 
   bool _isLoading = true;
+  bool _isClosingCase = false;
   String? _error;
   Map<String, dynamic>? _caseResponse;
 
@@ -38,7 +41,10 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
     });
 
     try {
-      final res = await _caseService.getCaseDetail(widget.caseId);
+      final res = await _caseService.getCaseDetail(
+        widget.caseId,
+        filterStatuses: widget.filterStatuses,
+      );
 
       if (!mounted) return;
 
@@ -52,6 +58,58 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
       setState(() {
         _error = e.toString();
         _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _completeCase() async {
+    if (_isClosingCase) return;
+
+    final confirmed = await showDialog<bool>(
+          context: context,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text("Close case"),
+            content: const Text(
+              "Have you checked the correction? Closing this case will mark it as completed.",
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext, false),
+                child: const Text("Cancel"),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(dialogContext, true),
+                child: const Text("Confirm"),
+              ),
+            ],
+          ),
+        ) ??
+        false;
+
+    if (!confirmed || !mounted) return;
+
+    setState(() {
+      _isClosingCase = true;
+    });
+
+    try {
+      final response = await _caseService.completeCase(caseId: widget.caseId);
+
+      if (!mounted) return;
+
+      final message = (response['message'] ?? 'Case completed').toString();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
+      Navigator.pop(context, true);
+    } catch (e) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+      setState(() {
+        _isClosingCase = false;
       });
     }
   }
@@ -227,6 +285,10 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
 
     final urgencyRaw = (summary["urgency"] ?? "").toString().toUpperCase();
     final isHighUrgency = urgencyRaw == "HIGH" || urgencyRaw == "HIGH_URGENT";
+    final caseStatus = (summary["status"] ?? "").toString().toUpperCase();
+    final shouldShowCloseCaseButton =
+        widget.filterStatuses?.contains('REQUEST_CLOSE') == true ||
+        caseStatus == 'REQUEST_CLOSE';
 
     final aiConfidence = (ai["confidence"] is num)
         ? (ai["confidence"] as num).toDouble()
@@ -838,6 +900,47 @@ class _CaseDetailScreenState extends State<CaseDetailScreen> {
           ],
         ),
       ),
+      bottomNavigationBar: shouldShowCloseCaseButton
+          ? SafeArea(
+              top: false,
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                decoration: BoxDecoration(
+                  color: card,
+                  border: Border(
+                    top: BorderSide(color: border),
+                  ),
+                ),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _isClosingCase ? null : _completeCase,
+                    icon: _isClosingCase
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Icon(Icons.check_circle_outline),
+                    label: Text(
+                      _isClosingCase ? "Closing..." : "Close case",
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF059669),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            )
+          : null,
     );
   }
 }

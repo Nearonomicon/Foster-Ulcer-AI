@@ -5,7 +5,7 @@ import 'package:flutter_application/features/auth/services/case_service.dart';
 import 'package:flutter_application/shared/app_localizations.dart';
 import 'dart:convert';
 
-enum InboxTab { needsReview, sentToNurse }
+enum InboxTab { needsReview, sentToNurse, requestClose }
 enum Urgency { high, medium, routine }
 enum ActionStyle { primary, tonal }
 
@@ -26,6 +26,7 @@ class _CaseInboxScreenState extends State<CaseInboxScreen> {
 
   List<CaseItem> _needsReviewItems = [];
   List<CaseItem> _sentToNurseItems = [];
+  List<CaseItem> _requestCloseItems = [];
 
   @override
   void initState() {
@@ -44,6 +45,8 @@ class _CaseInboxScreenState extends State<CaseInboxScreen> {
           await _caseService.getCasesByStatus("DOCTOR_REVIEW");
       final sentToNurseRes =
           await _caseService.getCasesByStatus("TREATMENT_SENT");
+      final requestCloseRes =
+          await _caseService.getCasesByStatus("REQUEST_CLOSE");
 
       print(
         'CaseInboxScreen DOCTOR_REVIEW payload: ${jsonEncode(needsReviewRes)}',
@@ -51,15 +54,20 @@ class _CaseInboxScreenState extends State<CaseInboxScreen> {
       print(
         'CaseInboxScreen TREATMENT_SENT payload: ${jsonEncode(sentToNurseRes)}',
       );
+      print(
+        'CaseInboxScreen REQUEST_CLOSE payload: ${jsonEncode(requestCloseRes)}',
+      );
 
       final needsItems = _mapItemsFromResponse(needsReviewRes);
       final sentItems = _mapItemsFromResponse(sentToNurseRes);
+      final requestCloseItems = _mapItemsFromResponse(requestCloseRes);
 
       if (!mounted) return;
 
       setState(() {
         _needsReviewItems = needsItems;
         _sentToNurseItems = sentItems;
+        _requestCloseItems = requestCloseItems;
         _isLoading = false;
       });
     } catch (e) {
@@ -122,6 +130,8 @@ class _CaseInboxScreenState extends State<CaseInboxScreen> {
         return _needsReviewItems;
       case InboxTab.sentToNurse:
         return _sentToNurseItems;
+      case InboxTab.requestClose:
+        return _requestCloseItems;
     }
   }
 
@@ -138,11 +148,13 @@ class _CaseInboxScreenState extends State<CaseInboxScreen> {
     final filtered = _getItemsForCurrentTab();
 
     final tabNeedsReview = context.tr('inbox.tab.needs_review');
-    final tabSentToNurse = "Sent to Nurse";
+    final tabSentToNurse = context.tr('inbox.tab.sent_to_nurse');
+    final tabRequestClose = context.tr('inbox.tab.request_close');
 
     final sectionTitle = switch (tab) {
       InboxTab.needsReview => context.tr('inbox.section.pending_review'),
-      InboxTab.sentToNurse => "Sent to Nurse",
+      InboxTab.sentToNurse => context.tr('inbox.section.sent_to_nurse'),
+      InboxTab.requestClose => context.tr('inbox.section.request_close'),
     };
 
     return Scaffold(
@@ -213,6 +225,14 @@ class _CaseInboxScreenState extends State<CaseInboxScreen> {
                     icon: Icons.send_outlined,
                     primary: cs.primary,
                     onTap: () => setState(() => tab = InboxTab.sentToNurse),
+                  ),
+                  const Gap(10),
+                  _Chip(
+                    selected: tab == InboxTab.requestClose,
+                    label: tabRequestClose,
+                    icon: Icons.assignment_turned_in_outlined,
+                    primary: cs.primary,
+                    onTap: () => setState(() => tab = InboxTab.requestClose),
                   ),
                 ],
               ),
@@ -344,10 +364,16 @@ class _CaseInboxScreenState extends State<CaseInboxScreen> {
           borderColor: cardBorder,
           isDark: isDark,
           onReview: () async {
+            final filterStatuses = tab == InboxTab.requestClose
+                ? const ['REQUEST_CLOSE']
+                : null;
             await Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (_) => CaseDetailScreen(caseId: c.rawCaseId),
+                builder: (_) => CaseDetailScreen(
+                  caseId: c.rawCaseId,
+                  filterStatuses: filterStatuses,
+                ),
               ),
             );
 

@@ -162,11 +162,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   String? _diabetesYears;
   final Set<String> _riskHistory = {};
   final Set<String> _complications = {};
-  String? _bpLevel;
-  String? _sugarLevel;
-  String? _tempLevel;
-  String? _heartRateLevel;
-  String? _respRateLevel;
    int _activeTab = 0;
   String? _sinbadSite;
   String? _sinbadIschemia;
@@ -206,15 +201,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   void _clearVitalsInfo() {
     _reviewed.remove('temperature');
     _reviewed.remove('blood_pressure');
+    _reviewed.remove('blood_pressure_systolic');
+    _reviewed.remove('blood_pressure_diastolic');
     _reviewed.remove('heart_rate');
     _reviewed.remove('respiratory_rate');
     _reviewed.remove('blood_sugar');
     _reviewed.remove('repiratory_rate');
-    _bpLevel = null;
-    _sugarLevel = null;
-    _tempLevel = null;
-    _heartRateLevel = null;
-    _respRateLevel = null;
   }
 
   void _resetCaseInputs() {
@@ -426,6 +418,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   final Uri _tasksListUri = Uri.parse("$_baseUrl/tasks_list");
   final Uri _taskDetailUri = Uri.parse("$_baseUrl/task_detail");
   final Uri _taskUpdateUri = Uri.parse("$_baseUrl/task_update");
+  final Uri _createAppointmentUri = Uri.parse("$_baseUrl/create_appointment");
+  final Uri _requestCloseUri = Uri.parse("$_baseUrl/request_close");
   final Uri _caseDetailUri = Uri.parse("$_baseUrl/case_detail");
   final Uri _patientListUri = Uri.parse("$_baseUrl/patients_list");
   final Uri _docsUri = Uri.parse("$_baseUrl/docs");
@@ -548,6 +542,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         final preservedVitals = {
           'temperature': _reviewed['temperature'],
           'blood_pressure': _reviewed['blood_pressure'],
+          'blood_pressure_systolic': _reviewed['blood_pressure_systolic'],
+          'blood_pressure_diastolic': _reviewed['blood_pressure_diastolic'],
           'blood_sugar': _reviewed['blood_sugar'],
           'heart_rate': _reviewed['heart_rate'],
           'respiratory_rate': _reviewed['respiratory_rate'],
@@ -622,6 +618,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         'vital_signs': {
           'temperature': _reviewed['temperature'],
           'blood_pressure': _reviewed['blood_pressure'],
+          'blood_pressure_systolic': _reviewed['blood_pressure_systolic'],
+          'blood_pressure_diastolic': _reviewed['blood_pressure_diastolic'],
           'blood_glucose': _reviewed['blood_sugar'],
           'heart_rate': _reviewed['heart_rate'],
           'respiratory_rate': _reviewed['respiratory_rate'],
@@ -852,6 +850,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       'vital_signs': {
         'temperature': _reviewed['temperature'],
         'blood_pressure': _reviewed['blood_pressure'],
+        'blood_pressure_systolic': _reviewed['blood_pressure_systolic'],
+        'blood_pressure_diastolic': _reviewed['blood_pressure_diastolic'],
         'blood_glucose': _reviewed['blood_sugar'],
         'heart_rate': _reviewed['heart_rate'],
         'respiratory_rate': _reviewed['respiratory_rate'],
@@ -1189,6 +1189,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 : <Map<String, dynamic>>[]);
         _selectedTaskPatient = {
           'case_id': (decoded['case_id'] ?? caseId).toString(),
+          'record_id': (decoded['record_id'] ?? decoded['current_record_id'] ?? '').toString(),
           'patient_id': (decoded['patient_id'] ?? '').toString(),
           'patient_name': (decoded['patient_name'] ?? '').toString(),
           'plan_id': (decoded['current_treatment']?['plan_id'] ?? decoded['plan_id'] ?? '').toString(),
@@ -1249,6 +1250,115 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       return false;
     } finally {
       if (mounted) setState(() => _caseDetailLoading = false);
+    }
+  }
+
+  Future<DateTime?> _pickAppointmentDateTime() async {
+    final now = DateTime.now();
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: now,
+      firstDate: now.subtract(const Duration(days: 1)),
+      lastDate: now.add(const Duration(days: 365 * 2)),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF2563EB),
+              onPrimary: Colors.white,
+              onSurface: Color(0xFF1E293B),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (pickedDate == null) return null;
+
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(now.add(const Duration(hours: 1))),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF2563EB),
+              onPrimary: Colors.white,
+              onSurface: Color(0xFF1E293B),
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (pickedTime == null) return null;
+
+    return DateTime(
+      pickedDate.year,
+      pickedDate.month,
+      pickedDate.day,
+      pickedTime.hour,
+      pickedTime.minute,
+    );
+  }
+
+  Future<bool> _createAppointment({
+    required String caseId,
+    required DateTime appointmentAt,
+  }) async {
+    try {
+      final payload = {
+        'case_id': caseId,
+        'appointment_at': appointmentAt.toIso8601String(),
+      };
+      debugPrint("Create appointment payload: ${jsonEncode(payload)}");
+      final resp = await http
+          .post(
+            _createAppointmentUri,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 30));
+      if (resp.statusCode != 200) {
+        throw Exception("create_appointment failed (${resp.statusCode}): ${resp.body}");
+      }
+      return true;
+    } catch (e) {
+      debugPrint("create_appointment error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Create appointment failed: $e"), backgroundColor: Colors.redAccent),
+        );
+      }
+      return false;
+    }
+  }
+
+  Future<bool> _requestClose({required String caseId}) async {
+    try {
+      final payload = {
+        'case_id': caseId,
+      };
+      debugPrint("Request close payload: ${jsonEncode(payload)}");
+      final resp = await http
+          .post(
+            _requestCloseUri,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 30));
+      if (resp.statusCode != 200) {
+        throw Exception("request_close failed (${resp.statusCode}): ${resp.body}");
+      }
+      return true;
+    } catch (e) {
+      debugPrint("request_close error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Request close failed: $e"), backgroundColor: Colors.redAccent),
+        );
+      }
+      return false;
     }
   }
 
@@ -1363,6 +1473,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     final vitals = {
       'temperature': _reviewed['temperature'],
       'blood_pressure': _reviewed['blood_pressure'],
+      'blood_pressure_systolic': _reviewed['blood_pressure_systolic'],
+      'blood_pressure_diastolic': _reviewed['blood_pressure_diastolic'],
       'heart_rate': _reviewed['heart_rate'],
       'respiratory_rate': _reviewed['respiratory_rate'],
       'blood_sugar': _reviewed['blood_sugar'],
@@ -1370,7 +1482,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
     final payload = {
       'patient_id': patientId,
-      'status': 'CREATION',
+      'status': 'Creation',
       if (_followUpFlow && _caseRefs['case_id'] != null) 'case_id': _caseRefs['case_id'],
       'vitals': vitals,
       'meta': {
@@ -1662,14 +1774,17 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     
     switch (p['urgency']) {
       case 'high_urgent':
+      case 'URGENT':
         urgencyColor = Colors.red;
         urgencyText = "HIGH";
         break;
       case 'medium':
+      case 'MEDIUM':
         urgencyColor = Colors.orange;
         urgencyText = "MEDIUM";
         break;
       case 'routine':
+      case 'ROUTINE':
       default:
         urgencyColor = const Color(0xFF0D9488);
         urgencyText = "ROUTINE";

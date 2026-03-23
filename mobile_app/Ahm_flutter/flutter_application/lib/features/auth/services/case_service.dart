@@ -9,6 +9,7 @@ class CaseService {
   static const String _apiBaseUrl = '$_baseUrl/api/v1';
 
   Future<Map<String, dynamic>> getCasesByStatus(String status) async {
+    final normalizedStatus = status.trim().toUpperCase();
     final uri = Uri.parse('$_baseUrl/cases_list');
 
     final response = await http.post(
@@ -16,7 +17,11 @@ class CaseService {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: jsonEncode({}),
+      body: jsonEncode({
+        'filter': [
+          if (normalizedStatus.isNotEmpty) normalizedStatus,
+        ],
+      }),
     );
 
     if (response.statusCode != 200) {
@@ -37,7 +42,6 @@ class CaseService {
         .where((e) => e is Map)
         .map((e) => Map<String, dynamic>.from(e as Map))
         .map(_mapCaseListItem)
-        .where((e) => (e['status'] ?? '').toString() == status)
         .toList();
 
     return {
@@ -48,7 +52,14 @@ class CaseService {
     };
   }
 
-  Future<Map<String, dynamic>> getCaseDetail(String caseId) async {
+  Future<Map<String, dynamic>> getCaseDetail(
+    String caseId, {
+    List<String>? filterStatuses,
+  }) async {
+    final normalizedFilters = (filterStatuses ?? const <String>[])
+        .map((status) => status.trim().toUpperCase())
+        .where((status) => status.isNotEmpty)
+        .toList();
     final uri = Uri.parse('$_baseUrl/case_detail');
 
     final response = await http.post(
@@ -58,6 +69,7 @@ class CaseService {
       },
       body: jsonEncode({
         'case_id': caseId,
+        if (normalizedFilters.isNotEmpty) 'filter': normalizedFilters,
       }),
     );
 
@@ -148,6 +160,29 @@ class CaseService {
     return _decodeStandardResponse(
       response,
       fallbackErrorPrefix: 'Failed to submit doctor review',
+    );
+  }
+
+  Future<Map<String, dynamic>> completeCase({
+    required String caseId,
+    DateTime? completedAt,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/complete_case');
+
+    final response = await http.post(
+      uri,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'case_id': caseId,
+        'completed_at': (completedAt ?? DateTime.now()).toIso8601String(),
+      }),
+    );
+
+    return _decodeStandardResponse(
+      response,
+      fallbackErrorPrefix: 'Failed to complete case',
     );
   }
 
@@ -327,6 +362,13 @@ class CaseService {
 
       final resolvedImageUrl =
           _extractImageUrl(r["image"]).isNotEmpty ? _extractImageUrl(r["image"]) : _extractImageUrl(r);
+      final isLatestRecord = r["record_id"]?.toString() ==
+          latestRecord["record_id"]?.toString();
+      final healingProgress = (r["current_healing_progress"] ??
+              r["healing_progress"] ??
+              (isLatestRecord ? caseMap["current_healing_progress"] : null) ??
+              "")
+          .toString();
 
       return {
         "image_id":
@@ -334,16 +376,16 @@ class CaseService {
                 .toString(),
         "record_id": (r["record_id"] ?? "").toString(),
         "analysis_id": (r["analysis_id"] ??
-                ((r["record_id"]?.toString() == latestRecord["record_id"]?.toString())
+                (isLatestRecord
                     ? caseMap["current_analysis_id"]
                     : ""))
             .toString(),
         "image_url": resolvedImageUrl,
         "visit_day_label": (r["record_id"] ?? "Visit").toString(),
-        "is_latest": (r["record_id"]?.toString() ==
-            (latestRecord["record_id"] ?? "").toString()),
-        "nurse_note": (r["healing_progress"] ?? "").toString(),
+        "is_latest": isLatestRecord,
+        "nurse_note": healingProgress,
         "wound_snapshot": {
+          "nurse_note": healingProgress,
           "wound_type": (rWound["wound_type"] ?? "").toString(),
           "location_primary": (rWound["location_primary"] ?? "").toString(),
           "location_detail": (rWound["location_detail"] ?? "").toString(),

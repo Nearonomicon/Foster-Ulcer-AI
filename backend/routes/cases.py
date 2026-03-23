@@ -1,5 +1,5 @@
 import json
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from fastapi import APIRouter, HTTPException
 from fastapi.encoders import jsonable_encoder
 from firebase_admin import firestore
@@ -33,7 +33,47 @@ from utils import _model_to_dict
 router = APIRouter()
 
 
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _normalize_datetime(value: object, *, fallback_to_now: bool = True) -> datetime | None:
+    if isinstance(value, datetime):
+        parsed = value
+    elif isinstance(value, str) and value.strip():
+        normalized = value.strip().replace("Z", "+00:00")
+        parsed = None
+        try:
+            parsed = datetime.fromisoformat(normalized)
+        except ValueError:
+            pass
+        if parsed is None:
+            for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+                try:
+                    parsed = datetime.strptime(normalized, fmt)
+                    break
+                except ValueError:
+                    continue
+        if parsed is None:
+            if fallback_to_now:
+                return _utc_now()
+            return None
+    else:
+        if fallback_to_now:
+            return _utc_now()
+        return None
+
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
 def _current_record_snapshot(record_data: dict) -> dict:
+    analysis = record_data.get("analysis") or {}
+    healing_progress = record_data.get("current_healing_progress")
+    if healing_progress is None and isinstance(analysis, dict):
+        healing_progress = analysis.get("healing_progress")
+
     return {
         "current_timestamps": record_data.get("timestamps"),
         "current_image": record_data.get("image"),
@@ -45,8 +85,11 @@ def _current_record_snapshot(record_data: dict) -> dict:
         "current_sinbad": record_data.get("sinbad"),
         "current_lab_results": record_data.get("lab_results"),
         "current_vascular": record_data.get("vascular"),
+        "current_gangrene_extent": record_data.get("gangrene_extent"),
         "current_analysis": record_data.get("analysis"),
         "current_treatment_plan": record_data.get("treatment_plan"),
+        "current_task_list": record_data.get("task_list"),
+        "current_healing_progress": healing_progress,
     }
 
 
@@ -81,6 +124,99 @@ def _is_all_null(value: object) -> bool:
     if isinstance(value, list):
         return all(_is_all_null(v) for v in value)
     return False
+
+
+def _normalize_plan_tasks_status(tasks: list[dict], status: str) -> list[dict]:
+    normalized_tasks = []
+    for task in tasks:
+        task_data = dict(task) if isinstance(task, dict) else {}
+        task_data["status"] = status
+        normalized_tasks.append(task_data)
+    return normalized_tasks
+
+
+def _update_case_record_plan_and_tasks_status(
+    *,
+    case_ref,
+    record_ref,
+    case_data: dict,
+    record_data: dict,
+    new_status: Status,
+    timestamp_field: str,
+    timestamp_value: datetime,
+):
+    current_plan_id = case_data.get("current_plan_id")
+    current_treatment_plan = case_data.get("current_treatment_plan") or record_data.get("treatment_plan") or {}
+    normalized_treatment_plan = dict(current_treatment_plan) if isinstance(current_treatment_plan, dict) else {}
+    normalized_tasks = _normalize_plan_tasks_status(
+        normalized_treatment_plan.get("plan_tasks") or record_data.get("task_list") or [],
+        new_status.value,
+    )
+    if normalized_treatment_plan:
+        normalized_treatment_plan["status"] = new_status.value
+        normalized_treatment_plan["plan_tasks"] = normalized_tasks
+
+    record_update = {
+        "status": new_status,
+        "record_updated_at": timestamp_value,
+        "timestamps": {
+            "updated_at": timestamp_value,
+            timestamp_field: timestamp_value,
+        },
+    }
+    if normalized_treatment_plan:
+        record_update["treatment_plan"] = normalized_treatment_plan
+        record_update["task_list"] = normalized_tasks
+
+    case_update = {
+        "status": new_status,
+        "current_record_id": record_data.get("record_id") or case_data.get("current_record_id"),
+        "case_updated_at": timestamp_value,
+    }
+
+    current_record_snapshot = _merge_sections(
+        record_data,
+        record_update,
+        [
+            "timestamps",
+            "image",
+            "vital_signs",
+            "wound_detail",
+            "ischemia",
+            "infection",
+            "neuropathy",
+            "sinbad",
+            "lab_results",
+            "vascular",
+            "gangrene_extent",
+            "analysis",
+            "treatment_plan",
+            "task_list",
+        ],
+    )
+    case_update.update(_current_record_snapshot(current_record_snapshot))
+
+    batch = db.batch()
+    batch.set(record_ref, record_update, merge=True)
+    batch.set(case_ref, case_update, merge=True)
+
+    if current_plan_id and normalized_treatment_plan:
+        plan_ref = record_ref.collection("plan_versions").document(current_plan_id)
+        batch.set(plan_ref, {
+            "status": new_status.value,
+            "updated_at": timestamp_value,
+        }, merge=True)
+        for idx, task in enumerate(normalized_tasks, start=1):
+            task_id = task.get("task_id") or f"TSK-{idx:04d}"
+            task_ref = plan_ref.collection("tasks").document(task_id)
+            batch.set(task_ref, {
+                "task_id": task_id,
+                "status": new_status.value,
+                "updated_at": timestamp_value,
+            }, merge=True)
+
+    batch.commit()
+    return current_plan_id
 
 
 @firestore.transactional
@@ -127,22 +263,27 @@ async def create_case(payload: CreateCaseRequest):
         vital_signs = VitalSigns(
             temperature=(payload.vitals.temperature if payload.vitals else None),
             blood_pressure=(payload.vitals.blood_pressure if payload.vitals else None),
+            blood_pressure_systolic=(
+                payload.vitals.blood_pressure_systolic if payload.vitals else None
+            ),
+            blood_pressure_diastolic=(
+                payload.vitals.blood_pressure_diastolic if payload.vitals else None
+            ),
             heart_rate=(payload.vitals.heart_rate if payload.vitals else None),
             respiratory_rate=(
                 payload.vitals.respiratory_rate
                 if payload.vitals and payload.vitals.respiratory_rate is not None
                 else None
             ),
-            blood_glucose=(payload.vitals.blood_sugar if payload.vitals else None),
+            blood_glucose=(
+                payload.vitals.blood_glucose
+                if payload.vitals and payload.vitals.blood_glucose is not None
+                else (payload.vitals.blood_sugar if payload.vitals else None)
+            ),
         )
 
         sent_at_raw = payload.meta.sent_at if payload.meta else None
-        created_at = datetime.utcnow()
-        if sent_at_raw:
-            try:
-                created_at = datetime.strptime(sent_at_raw, "%Y-%m-%d %H:%M:%S")
-            except ValueError:
-                created_at = datetime.utcnow()
+        created_at = _normalize_datetime(sent_at_raw, fallback_to_now=True)
 
         timestamps = Timestamps(
             created_at=created_at,
@@ -267,22 +408,27 @@ async def update_case(payload: UpdateCaseRequest):
         vital_signs = VitalSigns(
             temperature=(payload.vitals.temperature if payload.vitals else None),
             blood_pressure=(payload.vitals.blood_pressure if payload.vitals else None),
+            blood_pressure_systolic=(
+                payload.vitals.blood_pressure_systolic if payload.vitals else None
+            ),
+            blood_pressure_diastolic=(
+                payload.vitals.blood_pressure_diastolic if payload.vitals else None
+            ),
             heart_rate=(payload.vitals.heart_rate if payload.vitals else None),
             respiratory_rate=(
                 payload.vitals.respiratory_rate
                 if payload.vitals and payload.vitals.respiratory_rate is not None
                 else None
             ),
-            blood_glucose=(payload.vitals.blood_sugar if payload.vitals else None),
+            blood_glucose=(
+                payload.vitals.blood_glucose
+                if payload.vitals and payload.vitals.blood_glucose is not None
+                else (payload.vitals.blood_sugar if payload.vitals else None)
+            ),
         )
 
         sent_at_raw = payload.meta.sent_at if payload.meta else None
-        created_at = datetime.utcnow()
-        if sent_at_raw:
-            try:
-                created_at = datetime.strptime(sent_at_raw, "%Y-%m-%d %H:%M:%S")
-            except ValueError:
-                created_at = datetime.utcnow()
+        created_at = _normalize_datetime(sent_at_raw, fallback_to_now=True)
 
         timestamps = Timestamps(
             created_at=created_at,
@@ -392,7 +538,7 @@ async def update_case(payload: UpdateCaseRequest):
         new_plan_id = None
         duplicated_plan = None
         if latest_plan:
-            new_plan_id = f"PL-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+            new_plan_id = f"PL-{_utc_now().strftime('%Y%m%d%H%M%S')}"
             duplicated_plan = dict(latest_plan)
             duplicated_plan["plan_id"] = new_plan_id
             plan_tasks = duplicated_plan.get("plan_tasks")
@@ -416,12 +562,13 @@ async def update_case(payload: UpdateCaseRequest):
         batch.set(record_doc_ref, record_doc_data, merge=True)
 
         if duplicated_plan and new_plan_id:
+            plan_created_at = _utc_now()
             plan_ref = record_doc_ref.collection("plan_versions").document(new_plan_id)
             batch.set(plan_ref, {
                 "plan_id": new_plan_id,
                 "case_id": case_id,
                 "record_id": record_id,
-                "created_at": firestore.SERVER_TIMESTAMP,
+                "created_at": plan_created_at,
                 "status": duplicated_plan.get("status") or "DRAFT",
                 "plan_text": duplicated_plan.get("plan_text"),
                 "followup_days": duplicated_plan.get("followup_days"),
@@ -435,7 +582,7 @@ async def update_case(payload: UpdateCaseRequest):
                     "case_id": case_id,
                     "record_id": record_id,
                     "plan_id": new_plan_id,
-                    "created_at": firestore.SERVER_TIMESTAMP,
+                    "created_at": plan_created_at,
                     "task_text": task.get("task_text"),
                     "status": task.get("status"),
                     "task_due": task.get("task_due"),
@@ -462,6 +609,7 @@ async def list_cases(payload: dict):
         print(f"[cases_list] payload={payload}")
         limit = payload.get("limit", 50)
         patient_id = payload.get("patient_id")
+        status_filter = payload.get("filter")
 
         if not isinstance(limit, int):
             try:
@@ -474,10 +622,26 @@ async def list_cases(payload: dict):
         if limit > 200:
             limit = 200
 
+        normalized_status_filter = []
+        if isinstance(status_filter, list):
+            for value in status_filter:
+                if value is None:
+                    continue
+                status_value = str(value).strip().upper()
+                if status_value:
+                    normalized_status_filter.append(status_value)
+        if len(normalized_status_filter) > 10:
+            normalized_status_filter = normalized_status_filter[:10]
+
         query = db.collection("cases")
         if patient_id:
-            # Avoid composite index requirement by not ordering when filtering by patient_id
-            query = query.where(filter=FieldFilter("patient_id", "==", patient_id)).limit(limit)
+            query = query.where(filter=FieldFilter("patient_id", "==", patient_id))
+        if normalized_status_filter:
+            query = query.where(filter=FieldFilter("status", "in", normalized_status_filter))
+
+        if patient_id or normalized_status_filter:
+            # Avoid ordering here because filtered queries may require additional composite indexes.
+            query = query.limit(limit)
         else:
             query = query.order_by("case_updated_at", direction=firestore.Query.DESCENDING).limit(limit)
         docs = query.stream()
@@ -541,6 +705,7 @@ async def send_to_doctor(payload: WoundCaseRecordUpdate):
     try:
         payload_dict = _model_to_dict(payload)
         print("send-to-doctor received payload:", json.dumps(payload_dict, ensure_ascii=False))
+        operation_time = _utc_now()
 
         case_id = payload.case_id
         record_id = payload.record_id
@@ -550,8 +715,8 @@ async def send_to_doctor(payload: WoundCaseRecordUpdate):
         existing_record = record_ref.get()
         existing_record_data = existing_record.to_dict() if existing_record.exists else {}
 
-        analysis_id = f"AN-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
-        plan_id = f"PL-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+        analysis_id = f"AN-{operation_time.strftime('%Y%m%d%H%M%S')}"
+        plan_id = f"PL-{operation_time.strftime('%Y%m%d%H%M%S')}"
 
         analysis_ref = record_ref.collection("analysis_versions").document(analysis_id)
         plan_ref = record_ref.collection("plan_versions").document(plan_id)
@@ -580,9 +745,9 @@ async def send_to_doctor(payload: WoundCaseRecordUpdate):
             record_data["vital_signs"] = existing_record_data.get("vital_signs")
         if record_data.get("timestamps") is None:
             record_data["timestamps"] = {
-                "created_at": payload.record_created_at or firestore.SERVER_TIMESTAMP,
-                "updated_at": firestore.SERVER_TIMESTAMP,
-                "analyze_at": firestore.SERVER_TIMESTAMP,
+                "created_at": _normalize_datetime(payload.record_created_at, fallback_to_now=True),
+                "updated_at": operation_time,
+                "analyze_at": operation_time,
                 "doctor_review_at": None,
                 "plan_issued_at": None,
                 "treatment_active_at": None,
@@ -591,9 +756,9 @@ async def send_to_doctor(payload: WoundCaseRecordUpdate):
             }
         if record_data.get("image") is None:
             record_data.pop("image", None)
-        record_data["record_updated_at"] = firestore.SERVER_TIMESTAMP
-        record_data["timestamps"]["updated_at"] = firestore.SERVER_TIMESTAMP
-        record_data["timestamps"]["analyze_at"] = firestore.SERVER_TIMESTAMP
+        record_data["record_updated_at"] = operation_time
+        record_data["timestamps"]["updated_at"] = operation_time
+        record_data["timestamps"]["analyze_at"] = operation_time
 
         analysis_payload = payload_dict.get("analysis")
         analysis_data = {
@@ -602,7 +767,7 @@ async def send_to_doctor(payload: WoundCaseRecordUpdate):
             "record_id": record_id,
             "status": "DRAFT",
             "source": "AI",
-            "created_at": firestore.SERVER_TIMESTAMP,
+            "created_at": operation_time,
             "payload": analysis_payload,
         }
 
@@ -612,7 +777,7 @@ async def send_to_doctor(payload: WoundCaseRecordUpdate):
             "plan_id": plan_id,
             "case_id": case_id,
             "record_id": record_id,
-            "created_at": firestore.SERVER_TIMESTAMP,
+            "created_at": operation_time,
             "status": treatment_plan.get("status") or "DRAFT",
             "plan_text": treatment_plan.get("plan_text"),
             "followup_days": treatment_plan.get("followup_days"),
@@ -636,7 +801,7 @@ async def send_to_doctor(payload: WoundCaseRecordUpdate):
         case_update = {
             "status": Status.DOCTOR_REVIEW,
             "urgency": payload.urgency,
-            "case_updated_at": firestore.SERVER_TIMESTAMP,
+            "case_updated_at": operation_time,
             "current_record_id": record_id,
             "current_analysis_id": analysis_id,
             "current_plan_id": plan_id,
@@ -655,7 +820,7 @@ async def send_to_doctor(payload: WoundCaseRecordUpdate):
                 "case_id": case_id,
                 "record_id": record_id,
                 "plan_id": plan_id,
-                "created_at": firestore.SERVER_TIMESTAMP,
+                "created_at": operation_time,
                 "task_text": task.get("task_text"),
                 "status": task.get("status"),
                 "task_due": task.get("task_due"),
@@ -681,6 +846,7 @@ async def send_to_doctor(payload: WoundCaseRecordUpdate):
 @router.post("/doctor-review")
 async def doctor_review(payload: dict):
     try:
+        operation_time = _utc_now()
         incoming_analysis_id = payload.get("analysis_id")
         case_id = payload.get("case_id")
         record_id = payload.get("record_id")
@@ -710,6 +876,7 @@ async def doctor_review(payload: dict):
         record_snapshot = record_ref.get()
         if not record_snapshot.exists:
             raise HTTPException(status_code=404, detail="Record not found")
+        existing_record_data = record_snapshot.to_dict() or {}
 
         source_analysis_id = incoming_analysis_id or case_data.get("current_analysis_id")
         previous_sinbad = None
@@ -747,20 +914,20 @@ async def doctor_review(payload: dict):
         if signature_base64 is not None:
             review_payload["signature_base64"] = signature_base64
 
-        analysis_id = f"AN-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+        analysis_id = f"AN-{operation_time.strftime('%Y%m%d%H%M%S')}"
         plan_id = None
         normalized_treatment_plan = None
         normalized_tasks = []
         if isinstance(treatment_plan, dict):
-            plan_id = f"PL-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}"
+            plan_id = f"PL-{operation_time.strftime('%Y%m%d%H%M%S')}"
             normalized_treatment_plan = dict(treatment_plan)
             normalized_treatment_plan["plan_id"] = plan_id
-            if "status" not in normalized_treatment_plan or normalized_treatment_plan.get("status") is None:
-                normalized_treatment_plan["status"] = "SENT"
+            normalized_treatment_plan["status"] = "SENT"
             for idx, task in enumerate(normalized_treatment_plan.get("plan_tasks") or [], start=1):
                 task_data = dict(task) if isinstance(task, dict) else {}
                 if not task_data.get("task_id"):
                     task_data["task_id"] = f"TSK-{idx:04d}"
+                task_data["status"] = "SENT"
                 if "completed_at" not in task_data:
                     task_data["completed_at"] = None
                 normalized_tasks.append(task_data)
@@ -773,7 +940,7 @@ async def doctor_review(payload: dict):
             "record_id": record_id,
             "status": "SENT",
             "source": "Doctor",
-            "created_at": firestore.SERVER_TIMESTAMP,
+            "created_at": operation_time,
             "payload": review_payload,
         }
 
@@ -782,29 +949,57 @@ async def doctor_review(payload: dict):
         batch.set(analysis_ref, analysis_data, merge=True)
         record_update = {
             "analysis": doctor_analysis,
-            "status": Status.DOCTOR_REVIEW,
-            "record_updated_at": firestore.SERVER_TIMESTAMP,
+            "status": Status.PLAN_ISSUED,
+            "record_updated_at": operation_time,
             "timestamps": {
-                "updated_at": firestore.SERVER_TIMESTAMP,
-                "doctor_review_at": firestore.SERVER_TIMESTAMP,
+                "updated_at": operation_time,
+                "doctor_review_at": operation_time,
             },
         }
         case_update = {
-            "status": Status.DOCTOR_REVIEW,
+            "status": Status.PLAN_ISSUED,
             "current_record_id": record_id,
             "current_analysis_id": analysis_id,
             "current_analysis": doctor_analysis,
-            "case_updated_at": firestore.SERVER_TIMESTAMP,
+            "case_updated_at": operation_time,
         }
         if signature is not None:
             record_update["signature"] = signature
         if signature_base64 is not None:
             record_update["signature_base64"] = signature_base64
+        healing_progress = doctor_analysis.get("healing_progress") if isinstance(doctor_analysis, dict) else None
+        if healing_progress is not None:
+            record_update["current_healing_progress"] = healing_progress
         if normalized_treatment_plan is not None:
             record_update["treatment_plan"] = normalized_treatment_plan
             record_update["task_list"] = normalized_tasks
-            case_update["current_treatment_plan"] = normalized_treatment_plan
             case_update["current_plan_id"] = plan_id
+
+        current_record_snapshot = _merge_sections(
+            existing_record_data,
+            record_update,
+            [
+                "timestamps",
+                "image",
+                "vital_signs",
+                "wound_detail",
+                "ischemia",
+                "infection",
+                "neuropathy",
+                "sinbad",
+                "lab_results",
+                "vascular",
+                "gangrene_extent",
+                "analysis",
+                "treatment_plan",
+                "task_list",
+            ],
+        )
+        if record_update.get("current_healing_progress") is not None:
+            current_record_snapshot["current_healing_progress"] = record_update.get("current_healing_progress")
+        elif existing_record_data.get("current_healing_progress") is not None:
+            current_record_snapshot["current_healing_progress"] = existing_record_data.get("current_healing_progress")
+        case_update.update(_current_record_snapshot(current_record_snapshot))
 
         batch.set(record_ref, record_update, merge=True)
         batch.set(case_ref, case_update, merge=True)
@@ -814,7 +1009,7 @@ async def doctor_review(payload: dict):
                 "plan_id": plan_id,
                 "case_id": case_id,
                 "record_id": record_id,
-                "created_at": firestore.SERVER_TIMESTAMP,
+                "created_at": operation_time,
                 "status": normalized_treatment_plan.get("status") or "SENT",
                 "plan_text": normalized_treatment_plan.get("plan_text"),
                 "followup_days": normalized_treatment_plan.get("followup_days"),
@@ -828,7 +1023,7 @@ async def doctor_review(payload: dict):
                     "case_id": case_id,
                     "record_id": record_id,
                     "plan_id": plan_id,
-                    "created_at": firestore.SERVER_TIMESTAMP,
+                    "created_at": operation_time,
                     "task_text": task.get("task_text"),
                     "status": task.get("status"),
                     "task_due": task.get("task_due"),
@@ -845,6 +1040,160 @@ async def doctor_review(payload: dict):
             "record_id": record_id,
             "source": "Doctor",
             "sinbad_copied": previous_sinbad is not None,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/create_appointment")
+async def create_appointment(payload: dict):
+    try:
+        case_id = payload.get("case_id")
+        appointment_at = payload.get("appointment_at")
+
+        if not case_id:
+            raise HTTPException(status_code=400, detail="case_id is required")
+        if appointment_at is None:
+            raise HTTPException(status_code=400, detail="appointment_at is required")
+
+        appointment_dt = _normalize_datetime(appointment_at, fallback_to_now=False)
+        if appointment_dt is None:
+            raise HTTPException(status_code=400, detail="appointment_at must be a valid ISO datetime")
+
+        case_ref = db.collection("cases").document(case_id)
+        case_snapshot = case_ref.get()
+        if not case_snapshot.exists:
+            raise HTTPException(status_code=404, detail="Case not found")
+        case_data = case_snapshot.to_dict() or {}
+        record_id = case_data.get("current_record_id")
+        if not record_id:
+            raise HTTPException(status_code=404, detail="Current record not found for case")
+
+        record_ref = case_ref.collection("records").document(record_id)
+        record_snapshot = record_ref.get()
+        if not record_snapshot.exists:
+            raise HTTPException(status_code=404, detail="Record not found")
+        record_data = record_snapshot.to_dict() or {}
+
+        plan_id = _update_case_record_plan_and_tasks_status(
+            case_ref=case_ref,
+            record_ref=record_ref,
+            case_data=case_data,
+            record_data=record_data,
+            new_status=Status.APPOINTMENT,
+            timestamp_field="appointment_at",
+            timestamp_value=appointment_dt,
+        )
+
+        return {
+            "status": "success",
+            "message": "Appointment created",
+            "case_id": case_id,
+            "record_id": record_id,
+            "plan_id": plan_id,
+            "appointment_at": appointment_dt.isoformat(),
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/request_close")
+async def request_close(payload: dict):
+    try:
+        operation_time = _utc_now()
+        case_id = payload.get("case_id")
+
+        if not case_id:
+            raise HTTPException(status_code=400, detail="case_id is required")
+
+        case_ref = db.collection("cases").document(case_id)
+        case_snapshot = case_ref.get()
+        if not case_snapshot.exists:
+            raise HTTPException(status_code=404, detail="Case not found")
+        case_data = case_snapshot.to_dict() or {}
+        record_id = case_data.get("current_record_id")
+        if not record_id:
+            raise HTTPException(status_code=404, detail="Current record not found for case")
+
+        record_ref = case_ref.collection("records").document(record_id)
+        record_snapshot = record_ref.get()
+        if not record_snapshot.exists:
+            raise HTTPException(status_code=404, detail="Record not found")
+
+        batch = db.batch()
+        batch.set(case_ref, {
+            "status": Status.REQUEST_CLOSE,
+            "current_record_id": record_id,
+            "case_updated_at": operation_time,
+        }, merge=True)
+        batch.set(record_ref, {
+            "status": Status.REQUEST_CLOSE,
+            "record_updated_at": operation_time,
+            "timestamps": {
+                "updated_at": operation_time,
+            },
+        }, merge=True)
+        batch.commit()
+
+        return {
+            "status": "success",
+            "message": "Close request saved",
+            "case_id": case_id,
+            "record_id": record_id,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/complete_case")
+async def complete_case(payload: dict):
+    try:
+        case_id = payload.get("case_id")
+        completed_at = payload.get("completed_at")
+
+        if not case_id:
+            raise HTTPException(status_code=400, detail="case_id is required")
+
+        completed_dt = _normalize_datetime(completed_at, fallback_to_now=True)
+
+        case_ref = db.collection("cases").document(case_id)
+        case_snapshot = case_ref.get()
+        if not case_snapshot.exists:
+            raise HTTPException(status_code=404, detail="Case not found")
+        case_data = case_snapshot.to_dict() or {}
+        record_id = case_data.get("current_record_id")
+        if not record_id:
+            raise HTTPException(status_code=404, detail="Current record not found for case")
+
+        record_ref = case_ref.collection("records").document(record_id)
+        record_snapshot = record_ref.get()
+        if not record_snapshot.exists:
+            raise HTTPException(status_code=404, detail="Record not found")
+        record_data = record_snapshot.to_dict() or {}
+
+        plan_id = _update_case_record_plan_and_tasks_status(
+            case_ref=case_ref,
+            record_ref=record_ref,
+            case_data=case_data,
+            record_data=record_data,
+            new_status=Status.COMPLETED,
+            timestamp_field="completed_at",
+            timestamp_value=completed_dt,
+        )
+
+        return {
+            "status": "success",
+            "message": "Case completed",
+            "case_id": case_id,
+            "record_id": record_id,
+            "plan_id": plan_id,
+            "completed_at": completed_dt.isoformat(),
         }
     except HTTPException:
         raise

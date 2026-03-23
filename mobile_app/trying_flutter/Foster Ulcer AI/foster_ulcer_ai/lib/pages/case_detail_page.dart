@@ -21,7 +21,6 @@ extension _CaseDetailPage on _MainNavigationScreenState {
             : <String, dynamic>{};
     final currentWound = (c['current_wound_detail'] is Map) ? Map<String, dynamic>.from(c['current_wound_detail']) : <String, dynamic>{};
     final currentVitals = (c['current_vital_signs'] is Map) ? Map<String, dynamic>.from(c['current_vital_signs']) : <String, dynamic>{};
-    final currentHealing = fmt(c['current_healing_progress']);
     
     // Records & Timeline
     final records = _caseDetailRecords;
@@ -31,6 +30,11 @@ extension _CaseDetailPage on _MainNavigationScreenState {
 
     final activeRecord = records.isNotEmpty ? records[_caseDetailIndex] : null;
     final baselineRecord = records.isNotEmpty ? records.first : null;
+    final currentHealing = fmt(
+      activeRecord?['current_healing_progress'] ??
+          activeRecord?['healing_progress'] ??
+          c['current_healing_progress'],
+    );
 
     // Analysis & Scores (prefer active record analysis if present)
     final currentAnalysis = (c['current_analysis'] is Map) ? Map<String, dynamic>.from(c['current_analysis']) : <String, dynamic>{};
@@ -41,6 +45,7 @@ extension _CaseDetailPage on _MainNavigationScreenState {
     final activeClassifications = (activeAnalysis['classifications'] is Map)
         ? Map<String, dynamic>.from(activeAnalysis['classifications'])
         : <String, dynamic>{};
+    final activeDescription = activeAnalysis['description']?.toString();
     final classifications = activeClassifications.isNotEmpty ? activeClassifications : currentClassifications;
     final sinbadMap = (classifications['SINBAD'] is Map)
         ? Map<String, dynamic>.from(classifications['SINBAD'])
@@ -120,7 +125,7 @@ extension _CaseDetailPage on _MainNavigationScreenState {
                 ],
 
                 // --- VISUAL EVIDENCE (CAROUSEL) ---
-                _buildVisualEvidenceSection(records, activeImage, activeDate, hasInf, baselineRecord, activeRecord),
+                _buildVisualEvidenceSection(records, activeImage, activeDate, hasInf, baselineRecord, activeRecord, activeDescription),
                 const SizedBox(height: 24),
 
                 // --- CLINICAL SNAPSHOT ---
@@ -406,7 +411,7 @@ extension _CaseDetailPage on _MainNavigationScreenState {
               child: const Icon(LucideIcons.sparkles, color: Color(0xFFCCFBF1), size: 14),
             ),
             const SizedBox(width: 10),
-            const Text("AI TREND SUMMARY", style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFFCCFBF1), letterSpacing: 1)),
+            const Text("HEALING PROGRESS", style: TextStyle(fontSize: 10, fontWeight: FontWeight.w900, color: Color(0xFFCCFBF1), letterSpacing: 1)),
             const Spacer(),
             if (sinbad != null)
               Container(
@@ -422,7 +427,10 @@ extension _CaseDetailPage on _MainNavigationScreenState {
     );
   }
 
-  Widget _buildVisualEvidenceSection(List records, String? activeImage, String activeDate, bool hasInf, Map<String, dynamic>? baselineRecord, Map<String, dynamic>? activeRecord) {
+  Widget _buildVisualEvidenceSection(List records, String? activeImage, String activeDate, bool hasInf, Map<String, dynamic>? baselineRecord, Map<String, dynamic>? activeRecord, String? activeDescription) {
+    final descriptionText = (activeDescription == null || activeDescription.trim().isEmpty)
+        ? "No description provided."
+        : activeDescription.trim();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -586,6 +594,46 @@ extension _CaseDetailPage on _MainNavigationScreenState {
                       ),
                     ],
                   ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF0FDFA),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: const Color(0xFF99F6E4)),
+            boxShadow: [
+              BoxShadow(
+                color: const Color(0xFF0D9488).withOpacity(0.08),
+                blurRadius: 12,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "ANALYSIS DESCRIPTION",
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                  color: Color(0xFF0F766E),
+                  letterSpacing: 1,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                descriptionText,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Color(0xFF134E4A),
+                  height: 1.4,
                 ),
               ),
             ],
