@@ -42,6 +42,15 @@ extension _TasksPage on _MainNavigationScreenState {
       }
     }
 
+    DateTime? parseIso(String? raw) {
+      if (raw == null || raw.isEmpty) return null;
+      try {
+        return DateTime.parse(raw).toLocal();
+      } catch (_) {
+        return null;
+      }
+    }
+
     List<Map<String, dynamic>> planCases = [];
     if (_tasksItems.isNotEmpty) {
       planCases = _tasksItems.map((t) {
@@ -80,6 +89,41 @@ extension _TasksPage on _MainNavigationScreenState {
       final tasks = c['tasks'] as List<Map<String, dynamic>>;
       return tasks.any((t) => (t['status'] ?? '').toString().toLowerCase() == taskStatusFilter);
     }).toList();
+    filteredPlanCases.sort((a, b) {
+      final aName = (a['patient_name'] ?? '').toString().toLowerCase();
+      final bName = (b['patient_name'] ?? '').toString().toLowerCase();
+      final aCaseId = (a['case_id'] ?? '').toString().toLowerCase();
+      final bCaseId = (b['case_id'] ?? '').toString().toLowerCase();
+      final aTasks = a['tasks'] as List<Map<String, dynamic>>;
+      final bTasks = b['tasks'] as List<Map<String, dynamic>>;
+      final aDue = aTasks
+          .map((t) => parseIso(t['task_due']?.toString()))
+          .whereType<DateTime>()
+          .fold<DateTime?>(null, (prev, dt) => prev == null || dt.isBefore(prev) ? dt : prev);
+      final bDue = bTasks
+          .map((t) => parseIso(t['task_due']?.toString()))
+          .whereType<DateTime>()
+          .fold<DateTime?>(null, (prev, dt) => prev == null || dt.isBefore(prev) ? dt : prev);
+
+      switch (_tasksSortBy) {
+        case 'DUE_DESC':
+          if (aDue == null && bDue == null) return aName.compareTo(bName);
+          if (aDue == null) return 1;
+          if (bDue == null) return -1;
+          return bDue.compareTo(aDue);
+        case 'NAME_ASC':
+          final byName = aName.compareTo(bName);
+          return byName != 0 ? byName : aCaseId.compareTo(bCaseId);
+        case 'CASE_ASC':
+          return aCaseId.compareTo(bCaseId);
+        case 'DUE_ASC':
+        default:
+          if (aDue == null && bDue == null) return aName.compareTo(bName);
+          if (aDue == null) return 1;
+          if (bDue == null) return -1;
+          return aDue.compareTo(bDue);
+      }
+    });
 
     List<Map<String, dynamic>> allTasks = [];
     for (final c in filteredPlanCases) {
@@ -98,11 +142,30 @@ extension _TasksPage on _MainNavigationScreenState {
           .toList();
     }
     allTasks.sort((a, b) {
-      final ad = a['task_due']?.toString();
-      final bd = b['task_due']?.toString();
-      if (ad == null || ad.isEmpty) return 1;
-      if (bd == null || bd.isEmpty) return -1;
-      return DateTime.parse(ad).compareTo(DateTime.parse(bd));
+      final aName = (a['patient_name'] ?? '').toString().toLowerCase();
+      final bName = (b['patient_name'] ?? '').toString().toLowerCase();
+      final aCaseId = (a['case_id'] ?? '').toString().toLowerCase();
+      final bCaseId = (b['case_id'] ?? '').toString().toLowerCase();
+      final ad = parseIso(a['task_due']?.toString());
+      final bd = parseIso(b['task_due']?.toString());
+      switch (_tasksSortBy) {
+        case 'DUE_DESC':
+          if (ad == null && bd == null) return aName.compareTo(bName);
+          if (ad == null) return 1;
+          if (bd == null) return -1;
+          return bd.compareTo(ad);
+        case 'NAME_ASC':
+          final byName = aName.compareTo(bName);
+          return byName != 0 ? byName : aCaseId.compareTo(bCaseId);
+        case 'CASE_ASC':
+          return aCaseId.compareTo(bCaseId);
+        case 'DUE_ASC':
+        default:
+          if (ad == null && bd == null) return aName.compareTo(bName);
+          if (ad == null) return 1;
+          if (bd == null) return -1;
+          return ad.compareTo(bd);
+      }
     });
 
     return Column(
@@ -224,6 +287,13 @@ extension _TasksPage on _MainNavigationScreenState {
                     ),
                   ),
                 ],
+              ),
+              const SizedBox(height: 10),
+              _buildFilterDropdown(
+                label: "Sort By",
+                value: _tasksSortBy,
+                items: const ["DUE_ASC", "DUE_DESC", "NAME_ASC", "CASE_ASC"],
+                onChanged: (value) => setState(() => _tasksSortBy = value),
               ),
             ],
           ),
@@ -415,6 +485,21 @@ extension _TasksPage on _MainNavigationScreenState {
     required List<String> items,
     required ValueChanged<String> onChanged,
   }) {
+    String displayLabel(String raw) {
+      switch (raw) {
+        case 'DUE_ASC':
+          return 'Due: Soonest';
+        case 'DUE_DESC':
+          return 'Due: Latest';
+        case 'NAME_ASC':
+          return 'Patient Name';
+        case 'CASE_ASC':
+          return 'Case ID';
+        default:
+          return raw.replaceAll('_', ' ');
+      }
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
@@ -431,7 +516,7 @@ extension _TasksPage on _MainNavigationScreenState {
               .map((e) => DropdownMenuItem<String>(
                     value: e,
                     child: Text(
-                      "$label: $e",
+                      "$label: ${displayLabel(e)}",
                       style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
                     ),
                   ))

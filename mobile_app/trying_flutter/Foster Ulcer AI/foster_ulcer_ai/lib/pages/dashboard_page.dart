@@ -26,14 +26,14 @@ extension _DashboardPage on _MainNavigationScreenState {
           children: [
             Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(
-                  "Hello, Nurse",
+                  "Hello!",
                   style: GoogleFonts.plusJakartaSans(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
                     color: const Color(0xFF1E293B),
                   ),
                 ),
-                const Text("Raipur Rural Clinic • Unit 4", style: TextStyle(fontSize: 14, color: Colors.grey)),
+                const Text("ABC Clinic • Unit 4", style: TextStyle(fontSize: 14, color: Colors.grey)),
               ]),
               Row(
                 children: [

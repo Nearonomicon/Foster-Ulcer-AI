@@ -76,6 +76,24 @@ extension _AssessmentPage on _MainNavigationScreenState {
                 Theme(
                   data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
                   child: ExpansionTile(
+                    initiallyExpanded: false,
+                    tilePadding: const EdgeInsets.symmetric(horizontal: 4),
+                    childrenPadding: const EdgeInsets.only(bottom: 16),
+                    collapsedBackgroundColor: Colors.transparent,
+                    backgroundColor: Colors.transparent,
+                    title: const Text(
+                      "Voice Assessment",
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    trailing: const Icon(Icons.chevron_right, color: Colors.blueGrey),
+                    children: [
+                      _buildAssessmentVoiceCard(),
+                    ],
+                  ),
+                ),
+                Theme(
+                  data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                  child: ExpansionTile(
                     onExpansionChanged: (v) => setState(() => _fillinExpanded = v),
                     tilePadding: const EdgeInsets.symmetric(horizontal: 4),
                     title: Row(
@@ -320,6 +338,146 @@ extension _AssessmentPage on _MainNavigationScreenState {
         ),
         _buildFixedBottomButton("Submit Assessment", LucideIcons.circleCheck, _submitToAnalyzeWound),
       ],
+    );
+  }
+
+  Widget _buildAssessmentVoiceCard() {
+    final hasAudio = _assessmentAudioPath != null && _assessmentAudioPath!.isNotEmpty;
+    final fileName = hasAudio ? File(_assessmentAudioPath!).uri.pathSegments.last : null;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF0FDFA),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(
+                  _assessmentAudioRecording ? Icons.mic_off_rounded : LucideIcons.mic,
+                  size: 18,
+                  color: const Color(0xFF0D9488),
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      "Voice Assessment",
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Color(0xFF1E293B)),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      "Record, preview, then transcribe to prefill the form.",
+                      style: TextStyle(fontSize: 12, color: Colors.blueGrey),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          if (fileName != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFE2E8F0)),
+              ),
+                child: Row(
+                  children: [
+                  const Icon(LucideIcons.fileText, size: 16, color: Colors.blueGrey),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      fileName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF334155)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: _assessmentAudioTranscribing ? null : _toggleAssessmentRecording,
+                  icon: Icon(_assessmentAudioRecording ? Icons.stop_rounded : LucideIcons.mic, size: 16),
+                  label: Text(_assessmentAudioRecording ? "Stop Recording" : "Record"),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: _assessmentAudioRecording ? const Color(0xFFDC2626) : const Color(0xFF0D9488),
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(double.infinity, 44),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: hasAudio && !_assessmentAudioTranscribing ? _toggleAssessmentPlayback : null,
+                  icon: Icon(_assessmentAudioPlaying ? LucideIcons.pause : LucideIcons.play, size: 16),
+                  label: Text(_assessmentAudioPlaying ? "Stop Preview" : "Preview"),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF334155),
+                    minimumSize: const Size(double.infinity, 44),
+                    side: const BorderSide(color: Color(0xFFE2E8F0)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: hasAudio && !_assessmentAudioTranscribing && !_assessmentAudioRecording
+                  ? _transcribeAssessmentAudio
+                  : null,
+              icon: _assessmentAudioTranscribing
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Icon(LucideIcons.send, size: 16),
+              label: Text(_assessmentAudioTranscribing ? "Transcribing..." : "Send Transcribe"),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2563EB),
+                foregroundColor: Colors.white,
+                minimumSize: const Size(double.infinity, 44),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 

@@ -11,6 +11,7 @@ from google.genai import types
 from PIL import Image as PILImage, UnidentifiedImageError
 
 from prompts import (
+    ANALYZE_TRANSCRIBING_PROMPT,
     FILLIN_PROMPT_TEMPLATE,
     LAYER_1_VISION_EXTRACTION_PROMPT,
     LAYER_2_EVIDENCE_FUSION_PROMPT,
@@ -23,6 +24,81 @@ from services.notifications import create_doctor_healing_notification
 
 
 router = APIRouter()
+
+
+@router.post("/analyze-transcribe")
+async def analyze_transcribe(
+    case_id: str = Form(...),
+    record_id: str = Form(...),
+    audio: UploadFile = File(...),
+):
+    try:
+        print(
+            f"analyze-transcribe received: case_id={case_id}, record_id={record_id}, "
+            f"filename={audio.filename}, content_type={audio.content_type}"
+        )
+
+        audio_content = await audio.read()
+        if not audio_content:
+            raise HTTPException(status_code=400, detail="Audio file is empty")
+
+        content_type = audio.content_type or "audio/mpeg"
+        if not content_type.startswith("audio/"):
+            raise HTTPException(status_code=400, detail="Invalid audio file")
+
+        prompt = ANALYZE_TRANSCRIBING_PROMPT
+
+        async def call_gemini_text(contents):
+            max_wait_seconds = 60
+            delays = [10, 15, 30, 60]
+            waited = 0
+
+            for attempt in range(len(delays) + 1):
+                try:
+                    response = client.models.generate_content(
+                        model=genai_model,
+                        contents=contents,
+                        config=types.GenerateContentConfig(
+                            safety_settings=safety_config,
+                            temperature=0.1,
+                        ),
+                    )
+                    if not response.candidates:
+                        return {
+                            "blocked": True,
+                            "reason": str(getattr(response.prompt_feedback, "block_reason", "unknown")),
+                        }
+                    if not response.text:
+                        raise ValueError("Model returned empty response.")
+                    return response.text.strip()
+                except Exception as e:
+                    msg = str(e)
+                    if "RESOURCE_EXHAUSTED" not in msg and "429" not in msg:
+                        raise
+                    if attempt >= len(delays) or waited >= max_wait_seconds:
+                        raise
+                    delay = delays[attempt]
+                    if waited + delay > max_wait_seconds:
+                        delay = max_wait_seconds - waited
+                    waited += delay
+                    await asyncio.sleep(delay)
+            raise HTTPException(status_code=500, detail="Gemini retry exhausted")
+
+        audio_part = types.Part.from_bytes(data=audio_content, mime_type=content_type)
+        transcript = await call_gemini_text([prompt, audio_part])
+        if isinstance(transcript, dict) and transcript.get("blocked"):
+            return {"status": "blocked", "reason": transcript.get("reason")}
+
+        return {
+            "status": "success",
+            "case_id": case_id,
+            "record_id": record_id,
+            "transcript": transcript,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/analyze-fillin")

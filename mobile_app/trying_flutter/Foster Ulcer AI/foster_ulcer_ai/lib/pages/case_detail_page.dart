@@ -262,6 +262,7 @@ extension _CaseDetailPage on _MainNavigationScreenState {
     final dob = profile['dob']?.toString();
     final age = calcAge(dob);
     final diabetes = (profile['diabetes'] is Map) ? Map<String, dynamic>.from(profile['diabetes']) : <String, dynamic>{};
+    final photoUrl = (profile['photo_url'] ?? '').toString();
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -273,10 +274,28 @@ extension _CaseDetailPage on _MainNavigationScreenState {
       ),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: const Color(0xFFF0FDFA), borderRadius: BorderRadius.circular(20)),
-            child: const Icon(LucideIcons.user, color: Color(0xFF0D9488), size: 28),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(20),
+            child: Container(
+              width: 64,
+              height: 64,
+              color: const Color(0xFFF0FDFA),
+              child: photoUrl.isNotEmpty
+                  ? Image.network(
+                      photoUrl,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => const Icon(
+                        LucideIcons.user,
+                        color: Color(0xFF0D9488),
+                        size: 28,
+                      ),
+                    )
+                  : const Icon(
+                      LucideIcons.user,
+                      color: Color(0xFF0D9488),
+                      size: 28,
+                    ),
+            ),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -330,6 +349,20 @@ extension _CaseDetailPage on _MainNavigationScreenState {
 
   Widget _buildCurrentVitalsCard(Map<String, dynamic> vitals) {
     String fmt(dynamic v) => (v == null || v.toString().isEmpty) ? "-" : v.toString();
+    String withUnit(dynamic value, String unit) {
+      final text = fmt(value);
+      if (text == "-") return text;
+      final lower = text.toLowerCase();
+      if (lower.contains(unit.toLowerCase())) return text;
+      return "$text $unit";
+    }
+
+    final bp = withUnit(vitals['blood_pressure'], 'mmHg');
+    final temp = withUnit(vitals['temperature'], '°C');
+    final hr = withUnit(vitals['heart_rate'], 'bpm');
+    final rr = withUnit(vitals['respiratory_rate'], '/min');
+    final bg = withUnit(vitals['blood_glucose'] ?? vitals['blood_sugar'], 'mg/dL');
+
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -346,11 +379,11 @@ extension _CaseDetailPage on _MainNavigationScreenState {
             spacing: 12,
             runSpacing: 12,
             children: [
-              _vitalChip("BP", fmt(vitals['blood_pressure'])),
-              _vitalChip("TEMP", fmt(vitals['temperature'])),
-              _vitalChip("HR", fmt(vitals['heart_rate'])),
-              _vitalChip("RR", fmt(vitals['respiratory_rate'])),
-              _vitalChip("BG", fmt(vitals['blood_glucose'])),
+              _vitalChip(LucideIcons.heartPulse, "Blood Pressure", bp),
+              _vitalChip(LucideIcons.thermometer, "Temperature", temp),
+              _vitalChip(LucideIcons.heart, "Heart Rate", hr),
+              _vitalChip(LucideIcons.activity, "Respiratory Rate", rr),
+              _vitalChip(LucideIcons.droplets, "Blood Glucose", bg),
             ],
           ),
         ],
@@ -358,7 +391,7 @@ extension _CaseDetailPage on _MainNavigationScreenState {
     );
   }
 
-  Widget _vitalChip(String label, String value) {
+  Widget _vitalChip(IconData icon, String label, String value) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
       decoration: BoxDecoration(
@@ -369,7 +402,14 @@ extension _CaseDetailPage on _MainNavigationScreenState {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 12, color: Colors.blueGrey),
+              const SizedBox(width: 4),
+              Text(label, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.blueGrey)),
+            ],
+          ),
           const SizedBox(height: 2),
           Text(value, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: Color(0xFF1E293B))),
         ],
@@ -957,6 +997,12 @@ extension _CaseDetailPage on _MainNavigationScreenState {
     final status = plan['status']?.toString();
     final caseId = (c['case_id'] ?? '').toString();
     final taskIndex = tasks.isNotEmpty ? 0 : null;
+    final completedCount = tasks.where((task) {
+      final taskStatus = (task['status'] ?? '').toString().toLowerCase();
+      return taskStatus == 'completed';
+    }).length;
+    final totalCount = tasks.length;
+    final progress = totalCount == 0 ? 0.0 : (completedCount / totalCount).clamp(0.0, 1.0);
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -985,6 +1031,21 @@ extension _CaseDetailPage on _MainNavigationScreenState {
             const SizedBox(height: 8),
             _detailRow("Follow-up (days)", followup ?? "-"),
             _detailRow("Plan Status", status ?? "-"),
+            const SizedBox(height: 10),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(999),
+              child: LinearProgressIndicator(
+                value: progress,
+                minHeight: 8,
+                color: const Color(0xFF10B981),
+                backgroundColor: const Color(0xFFF1F5F9),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              "$completedCount of $totalCount Tasks Completed",
+              style: const TextStyle(fontSize: 10, color: Colors.blueGrey, letterSpacing: 1, fontWeight: FontWeight.bold),
+            ),
           ],
           if (caseId.isNotEmpty && taskIndex != null) ...[
             const SizedBox(height: 12),

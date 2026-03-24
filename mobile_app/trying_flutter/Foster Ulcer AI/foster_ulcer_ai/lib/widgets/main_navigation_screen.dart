@@ -1,11 +1,14 @@
 ﻿import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
+import 'dart:async';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_tailwind_colors/flutter_tailwind_colors.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:record/record.dart';
 import 'package:http/http.dart' as http;
 
 import 'package:foster_ulcer_ai/models/mock_patients.dart';
@@ -38,6 +41,17 @@ class MainNavigationScreen extends StatefulWidget {
 }
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
+  late final StreamSubscription<dynamic> _assessmentPlayerCompleteSub;
+
+  @override
+  void initState() {
+    super.initState();
+    _assessmentPlayerCompleteSub = _assessmentAudioPlayer.onPlayerComplete.listen((_) {
+      if (!mounted) return;
+      setState(() => _assessmentAudioPlaying = false);
+    });
+  }
+
   @override
   void dispose() {
     for (final c in _controllers.values) {
@@ -55,6 +69,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     _patientHistoryCtrl.dispose();
     _otherCompCtrl.dispose();
     _healingPageCtrl.dispose();
+    _assessmentPlayerCompleteSub.cancel();
+    _assessmentAudioPlayer.dispose();
+    _assessmentRecorder.dispose();
 
     super.dispose();
   }
@@ -238,6 +255,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     _showInflammatoryLabs = false;
     _showDeepInfectionIndicators = false;
     _showObjectiveIschemia = false;
+    _assessmentAudioPath = null;
+    _assessmentAudioRecording = false;
+    _assessmentAudioPlaying = false;
+    _assessmentAudioTranscribing = false;
   }
   List<Map<String, dynamic>> _caseItems = [];
   bool _casesLoading = false;
@@ -251,6 +272,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   String? _caseDetailError;
   int _caseDetailIndex = 0;
   final String _caseDetailTab = 'specs';
+  final AudioRecorder _assessmentRecorder = AudioRecorder();
+  final AudioPlayer _assessmentAudioPlayer = AudioPlayer();
+  String? _assessmentAudioPath;
+  bool _assessmentAudioRecording = false;
+  bool _assessmentAudioPlaying = false;
+  bool _assessmentAudioTranscribing = false;
   bool _caseDetailShowWoundDetails = false;
   final ScrollController _caseDetailTimelineCtrl = ScrollController();
   bool _tasksLoading = false;
@@ -281,9 +308,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   String _tasksSearchQuery = '';
   String _tasksTreatmentStatus = 'ALL';
   String _tasksTaskStatus = 'ALL';
+  String _tasksSortBy = 'DUE_ASC';
   String _casesSearchQuery = '';
   String _casesStatusFilter = 'ALL';
   String _casesUrgencyFilter = 'ALL';
+  String _casesSortBy = 'UPDATED_DESC';
   XFile? _taskEvidencePhotoTemp; // temp holder (optional)
   Map<String, dynamic>? _selectedTask;
   Map<String, dynamic>? _selectedTaskPatient;
@@ -435,6 +464,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   final Uri _loadDashboardUri = Uri.parse("$_baseUrl/load-dashboard");
   final Uri _nurseNotificationsUri = Uri.parse("$_baseUrl/nurse-notifications");
   final Uri _caseDetailUri = Uri.parse("$_baseUrl/case_detail");
+  final Uri _assessmentTranscribeUri = Uri.parse("$_baseUrl/analyze-transcribe");
   final Uri _patientListUri = Uri.parse("$_baseUrl/patients_list");
   final Uri _docsUri = Uri.parse("$_baseUrl/docs");
 
@@ -459,6 +489,190 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     return null;
   }
 
+  Map<String, dynamic> _flattenAssessmentPrefill(Map<String, dynamic> source) {
+    final out = <String, dynamic>{};
+
+    void copyIfPresent(String fromKey, String toKey) {
+      if (source.containsKey(fromKey) && source[fromKey] != null) {
+        out[toKey] = source[fromKey];
+      }
+    }
+
+    const flatKeys = [
+      'location_primary',
+      'location_detail',
+      'wound_type',
+      'shape',
+      'size_width_cm',
+      'size_length_cm',
+      'depth_category',
+      'bed_slough_pct',
+      'bed_necrotic_pct',
+      'edge_description',
+      'periwound_status',
+      'discharge_volume',
+      'discharge_type',
+      'odor_presence',
+      'pain_score',
+      'has_infection',
+      'skin_condition',
+      'ischemia_points',
+      'ischemia_pulse',
+      'ischemia_checklist',
+      'infection_checklist',
+      'erythema_extent',
+      'probe_to_bone_test',
+      'has_deep_abscess_or_fasciitis',
+      'neuropathy_points',
+      'sinbad_site',
+      'sinbad_ischemia',
+      'sinbad_neuropathy',
+      'sinbad_infection',
+      'sinbad_area',
+      'sinbad_depth',
+      'lab_wbc_count',
+      'lab_crp',
+      'lab_esr',
+      'lab_procalcitonin',
+      'vascular_abi_value',
+      'vascular_ankle_pressure_mmHg',
+      'vascular_toe_pressure_mmHg',
+      'vascular_tcpo2_mmHg',
+      'gangrene_extent',
+      'temperature',
+      'blood_pressure',
+      'blood_pressure_systolic',
+      'blood_pressure_diastolic',
+      'blood_sugar',
+      'blood_glucose',
+      'heart_rate',
+      'respiratory_rate',
+    ];
+    for (final key in flatKeys) {
+      copyIfPresent(key, key);
+    }
+
+    final woundDetail = source['wound_detail'] is Map ? Map<String, dynamic>.from(source['wound_detail']) : <String, dynamic>{};
+    if (woundDetail.isNotEmpty) {
+      out['location_primary'] = woundDetail['location_primary'] ?? out['location_primary'];
+      out['location_detail'] = woundDetail['location_detail'] ?? out['location_detail'];
+      out['wound_type'] = woundDetail['wound_type'] ?? out['wound_type'];
+      out['shape'] = woundDetail['shape'] ?? out['shape'];
+      out['depth_category'] = woundDetail['depth_category'] ?? out['depth_category'];
+      out['edge_description'] = woundDetail['edge_description'] ?? out['edge_description'];
+      out['periwound_status'] = woundDetail['periwound_status'] ?? out['periwound_status'];
+      out['odor_presence'] = woundDetail['odor_presence'] ?? out['odor_presence'];
+      out['pain_score'] = woundDetail['pain_score'] ?? out['pain_score'];
+      out['has_infection'] = woundDetail['has_infection'] ?? out['has_infection'];
+      out['skin_condition'] = woundDetail['skin_condition'] ?? out['skin_condition'];
+
+      final size = woundDetail['size'] is Map ? Map<String, dynamic>.from(woundDetail['size']) : <String, dynamic>{};
+      out['size_width_cm'] = size['width_cm'] ?? out['size_width_cm'];
+      out['size_length_cm'] = size['length_cm'] ?? out['size_length_cm'];
+
+      final bed = woundDetail['bed'] is Map ? Map<String, dynamic>.from(woundDetail['bed']) : <String, dynamic>{};
+      out['bed_slough_pct'] = bed['slough_pct'] ?? out['bed_slough_pct'];
+      out['bed_necrotic_pct'] = bed['necrotic_pct'] ?? out['bed_necrotic_pct'];
+
+      final discharge = woundDetail['discharge'] is Map ? Map<String, dynamic>.from(woundDetail['discharge']) : <String, dynamic>{};
+      out['discharge_volume'] = discharge['volume'] ?? out['discharge_volume'];
+      out['discharge_type'] = discharge['type'] ?? out['discharge_type'];
+    }
+
+    final ischemia = source['ischemia'] is Map ? Map<String, dynamic>.from(source['ischemia']) : <String, dynamic>{};
+    out['ischemia_points'] = ischemia['points'] ?? out['ischemia_points'];
+    out['ischemia_pulse'] = ischemia['pulse'] ?? out['ischemia_pulse'];
+    out['ischemia_checklist'] = ischemia['checklist'] ?? out['ischemia_checklist'];
+
+    final infection = source['infection'] is Map ? Map<String, dynamic>.from(source['infection']) : <String, dynamic>{};
+    out['infection_checklist'] = infection['checklist'] ?? out['infection_checklist'];
+    out['erythema_extent'] = infection['erythema_extent'] ?? out['erythema_extent'];
+    out['probe_to_bone_test'] = infection['probe_to_bone_test'] ?? out['probe_to_bone_test'];
+    out['has_deep_abscess_or_fasciitis'] = infection['has_deep_abscess_or_fasciitis'] ?? out['has_deep_abscess_or_fasciitis'];
+
+    final neuropathy = source['neuropathy'] is Map ? Map<String, dynamic>.from(source['neuropathy']) : <String, dynamic>{};
+    out['neuropathy_points'] = neuropathy['points'] ?? out['neuropathy_points'];
+
+    final sinbad = source['sinbad'] is Map ? Map<String, dynamic>.from(source['sinbad']) : <String, dynamic>{};
+    out['sinbad_site'] = sinbad['site'] ?? out['sinbad_site'];
+    out['sinbad_ischemia'] = sinbad['ischemia'] ?? out['sinbad_ischemia'];
+    out['sinbad_neuropathy'] = sinbad['neuropathy'] ?? out['sinbad_neuropathy'];
+    out['sinbad_infection'] = sinbad['infection'] ?? out['sinbad_infection'];
+    out['sinbad_area'] = sinbad['area'] ?? out['sinbad_area'];
+    out['sinbad_depth'] = sinbad['depth'] ?? out['sinbad_depth'];
+
+    final labs = source['lab_results'] is Map ? Map<String, dynamic>.from(source['lab_results']) : <String, dynamic>{};
+    out['lab_wbc_count'] = labs['wbc_count'] ?? out['lab_wbc_count'];
+    out['lab_crp'] = labs['crp'] ?? out['lab_crp'];
+    out['lab_esr'] = labs['esr'] ?? out['lab_esr'];
+    out['lab_procalcitonin'] = labs['procalcitonin'] ?? out['lab_procalcitonin'];
+
+    final vascular = source['vascular'] is Map ? Map<String, dynamic>.from(source['vascular']) : <String, dynamic>{};
+    out['vascular_abi_value'] = vascular['abi_value'] ?? out['vascular_abi_value'];
+    out['vascular_ankle_pressure_mmHg'] = vascular['ankle_pressure_mmHg'] ?? out['vascular_ankle_pressure_mmHg'];
+    out['vascular_toe_pressure_mmHg'] = vascular['toe_pressure_mmHg'] ?? out['vascular_toe_pressure_mmHg'];
+    out['vascular_tcpo2_mmHg'] = vascular['tcpo2_mmHg'] ?? out['vascular_tcpo2_mmHg'];
+
+    final vitals = source['vital_signs'] is Map ? Map<String, dynamic>.from(source['vital_signs']) : <String, dynamic>{};
+    out['temperature'] = vitals['temperature'] ?? out['temperature'];
+    out['blood_pressure'] = vitals['blood_pressure'] ?? out['blood_pressure'];
+    out['blood_pressure_systolic'] = vitals['blood_pressure_systolic'] ?? out['blood_pressure_systolic'];
+    out['blood_pressure_diastolic'] = vitals['blood_pressure_diastolic'] ?? out['blood_pressure_diastolic'];
+    out['blood_sugar'] = vitals['blood_sugar'] ?? vitals['blood_glucose'] ?? out['blood_sugar'];
+    out['heart_rate'] = vitals['heart_rate'] ?? out['heart_rate'];
+    out['respiratory_rate'] = vitals['respiratory_rate'] ?? out['respiratory_rate'];
+
+    if (source['gangrene_extent'] != null) {
+      out['gangrene_extent'] = source['gangrene_extent'];
+    }
+
+    out.removeWhere((key, value) => value == null);
+    return out;
+  }
+
+  Map<String, dynamic>? _extractAssessmentTranscription(dynamic payload) {
+    final parsed = _parseAnalysis(payload);
+    if (parsed == null) return null;
+    for (final key in ['transcript', 'transcription', 'analysis', 'data', 'result', 'prefill', 'reviewed', 'nurse_reviewed']) {
+      final nested = _parseAnalysis(parsed[key]);
+      if (nested != null) {
+        final flattened = _flattenAssessmentPrefill(nested);
+        if (flattened.isNotEmpty) return flattened;
+      }
+    }
+    final flattened = _flattenAssessmentPrefill(parsed);
+    return flattened.isEmpty ? null : flattened;
+  }
+
+  void _applyAssessmentTranscription(Map<String, dynamic> extracted) {
+    final preservedVitals = <String, dynamic>{
+      'temperature': _reviewed['temperature'],
+      'blood_pressure': _reviewed['blood_pressure'],
+      'blood_pressure_systolic': _reviewed['blood_pressure_systolic'],
+      'blood_pressure_diastolic': _reviewed['blood_pressure_diastolic'],
+      'blood_sugar': _reviewed['blood_sugar'],
+      'heart_rate': _reviewed['heart_rate'],
+      'respiratory_rate': _reviewed['respiratory_rate'],
+    }..removeWhere((key, value) => value == null || value.toString().isEmpty);
+
+    setState(() {
+      _reviewed
+        ..clear()
+        ..addAll(extracted)
+        ..addAll(preservedVitals);
+      _sinbadSite = _reviewed['sinbad_site'];
+      _sinbadIschemia = _reviewed['sinbad_ischemia'];
+      _sinbadNeuropathy = _reviewed['sinbad_neuropathy'];
+      _sinbadInfection = _reviewed['sinbad_infection'];
+      _sinbadArea = _reviewed['sinbad_area'];
+      _sinbadDepth = _reviewed['sinbad_depth'];
+      _fillinReviewed = true;
+      _fillinExpanded = true;
+    });
+    _applyPrefillControllersFromReviewed();
+    _maybeComputeSinbadAreaFromSize();
+  }
+
   String? _coerceEnum(String? v, List<String> options) {
     if (v == null) return null;
     if (options.contains(v)) return v;
@@ -479,6 +693,142 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int? _toInt(dynamic v) {
     if (v == null) return null;
     return int.tryParse(v.toString());
+  }
+
+  Future<void> _toggleAssessmentRecording() async {
+    if (_assessmentAudioTranscribing) return;
+    try {
+      if (_assessmentAudioRecording) {
+        final path = await _assessmentRecorder.stop();
+        if (!mounted) return;
+        setState(() {
+          _assessmentAudioRecording = false;
+          if (path != null && path.isNotEmpty) {
+            _assessmentAudioPath = path;
+          }
+        });
+        return;
+      }
+
+      final allowed = await _assessmentRecorder.hasPermission();
+      if (!allowed) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Microphone permission is required."), backgroundColor: Colors.orange),
+          );
+        }
+        return;
+      }
+
+      if (_assessmentAudioPlaying) {
+        await _assessmentAudioPlayer.stop();
+      }
+
+      final path = "${Directory.systemTemp.path}${Platform.pathSeparator}assessment_${DateTime.now().millisecondsSinceEpoch}.m4a";
+      await _assessmentRecorder.start(
+        const RecordConfig(
+          encoder: AudioEncoder.aacLc,
+          bitRate: 128000,
+          sampleRate: 44100,
+        ),
+        path: path,
+      );
+      if (!mounted) return;
+      setState(() {
+        _assessmentAudioRecording = true;
+        _assessmentAudioPlaying = false;
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Audio recording failed: $e"), backgroundColor: Colors.redAccent),
+        );
+      }
+    }
+  }
+
+  Future<void> _toggleAssessmentPlayback() async {
+    final path = _assessmentAudioPath;
+    if (path == null || path.isEmpty) return;
+    try {
+      if (_assessmentAudioPlaying) {
+        await _assessmentAudioPlayer.stop();
+        if (mounted) setState(() => _assessmentAudioPlaying = false);
+        return;
+      }
+      await _assessmentAudioPlayer.play(DeviceFileSource(path));
+      if (mounted) setState(() => _assessmentAudioPlaying = true);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Audio preview failed: $e"), backgroundColor: Colors.redAccent),
+        );
+      }
+    }
+  }
+
+  Future<void> _transcribeAssessmentAudio() async {
+    final path = _assessmentAudioPath;
+    if (path == null || path.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Record audio first."), backgroundColor: Colors.orange),
+        );
+      }
+      return;
+    }
+
+    if (_assessmentAudioRecording) {
+      await _toggleAssessmentRecording();
+    }
+
+    setState(() => _assessmentAudioTranscribing = true);
+    try {
+      final request = http.MultipartRequest('POST', _assessmentTranscribeUri);
+      if (_caseRefs['case_id'] != null) {
+        request.fields['case_id'] = _caseRefs['case_id'].toString();
+      }
+      if (_caseRefs['record_id'] != null) {
+        request.fields['record_id'] = _caseRefs['record_id'].toString();
+      }
+      if (_caseRefs['patient_id'] != null) {
+        request.fields['patient_id'] = _caseRefs['patient_id'].toString();
+      }
+      request.files.add(await http.MultipartFile.fromPath(
+        'audio',
+        path,
+        filename: File(path).uri.pathSegments.isNotEmpty ? File(path).uri.pathSegments.last : 'assessment_audio.m4a',
+      ));
+
+      final streamed = await request.send().timeout(const Duration(seconds: 90));
+      final response = await http.Response.fromStream(streamed);
+      if (response.statusCode != 200) {
+        throw Exception("analyze-transcribe failed (${response.statusCode}): ${response.body}");
+      }
+
+      final decoded = jsonDecode(response.body);
+      final extracted = _extractAssessmentTranscription(decoded);
+      if (extracted == null || extracted.isEmpty) {
+        throw Exception("No transcription fields returned.");
+      }
+
+      _applyAssessmentTranscription(extracted);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Assessment fields updated from transcription."), backgroundColor: Color(0xFF0D9488)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Transcription failed: $e"), backgroundColor: Colors.redAccent),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _assessmentAudioTranscribing = false);
+      }
+    }
   }
 
   Future<void> _pickImage(ImageSource source) async {
@@ -1508,6 +1858,49 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     }
   }
 
+  String _formatNotificationRelativeTime(dynamic raw) {
+    if (raw == null || raw.toString().isEmpty) return "";
+    try {
+      final dt = DateTime.parse(raw.toString()).toLocal();
+      final now = DateTime.now();
+      final diff = now.difference(dt);
+      if (diff.inMinutes < 1) return "Just now";
+      if (diff.inHours < 1) return "${diff.inMinutes} min ago";
+      if (diff.inDays < 1) return "${diff.inHours} h ago";
+      return "${diff.inDays} d ago";
+    } catch (_) {
+      return "";
+    }
+  }
+
+  IconData _notificationTypeIcon(String type) {
+    switch (type.toUpperCase()) {
+      case 'PLAN_ISSUED_TO_NURSE':
+      case 'PLAN_ISSUED':
+        return LucideIcons.briefcaseMedical;
+      case 'HEALING_ANALYSIS_READY':
+      case 'ANALYSIS_READY':
+        return LucideIcons.activity;
+      case 'APPOINTMENT':
+      case 'APPOINTMENT_CREATED':
+        return LucideIcons.calendarPlus;
+      case 'REQUEST_CLOSE':
+        return LucideIcons.triangleAlert;
+      default:
+        return LucideIcons.bellRing;
+    }
+  }
+
+  String _notificationTypeLabel(Map<String, dynamic> item) {
+    final type = (item['type'] ?? '').toString().trim();
+    if (type.isEmpty) return "Notification";
+    return type
+        .split('_')
+        .where((part) => part.isNotEmpty)
+        .map((part) => "${part[0]}${part.substring(1).toLowerCase()}")
+        .join(' ');
+  }
+
   Future<void> _openNotificationsPanel() async {
     await _fetchNurseNotifications();
     if (!mounted) return;
@@ -1554,40 +1947,153 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                           : ListView.separated(
                               padding: const EdgeInsets.all(20),
                               itemCount: _notificationsItems.length,
-                              separatorBuilder: (_, __) => const SizedBox(height: 12),
+                              separatorBuilder: (_, _) => const SizedBox(height: 12),
                               itemBuilder: (context, index) {
                                 final item = _notificationsItems[index];
                                 final title = (item['title'] ?? item['message'] ?? item['notification_text'] ?? 'Notification').toString();
-                                final body = (item['body'] ?? item['detail'] ?? item['description'] ?? '').toString();
-                                final when = _formatNotificationTime(
-                                  item['created_at'] ?? item['timestamp'] ?? item['sent_at'] ?? item['notification_at'],
-                                );
+                                final body = (item['message'] ?? item['body'] ?? item['detail'] ?? item['description'] ?? '').toString();
+                                final patientName = (item['patient_name'] ?? '').toString();
+                                final caseId = (item['case_id'] ?? '').toString();
+                                final urgency = (item['urgency'] ?? '').toString();
+                                final type = (item['type'] ?? '').toString();
+                                final notificationStatus = (item['status'] ?? '').toString().toUpperCase();
+                                final createdAt = item['created_at'] ?? item['timestamp'] ?? item['sent_at'] ?? item['notification_at'];
+                                final when = _formatNotificationRelativeTime(createdAt);
+                                final exactTime = _formatNotificationTime(createdAt);
+                                final urgencyLabel = _urgencyLabel(urgency);
+                                final urgencyColor = _urgencyColor(urgency);
+                                final typeLabel = _notificationTypeLabel(item);
                                 return Container(
-                                  padding: const EdgeInsets.all(14),
+                                  padding: const EdgeInsets.all(16),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFFF8FAFC),
-                                    borderRadius: BorderRadius.circular(16),
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(20),
                                     border: Border.all(color: const Color(0xFFE2E8F0)),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(0.03),
+                                        blurRadius: 10,
+                                        offset: const Offset(0, 4),
+                                      ),
+                                    ],
                                   ),
                                   child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
-                                      Text(
-                                        title,
-                                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Color(0xFF1E293B)),
+                                      Row(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Container(
+                                            width: 48,
+                                            height: 48,
+                                            decoration: BoxDecoration(
+                                              color: const Color(0xFFEFF6FF),
+                                              borderRadius: BorderRadius.circular(14),
+                                            ),
+                                            child: Icon(
+                                              _notificationTypeIcon(type),
+                                              size: 22,
+                                              color: Color(0xFF2563EB),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 12),
+                                          Expanded(
+                                            child: Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  title,
+                                                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF1E293B)),
+                                                ),
+                                                if (body.isNotEmpty) ...[
+                                                  const SizedBox(height: 4),
+                                                  Text(
+                                                    body,
+                                                    maxLines: 2,
+                                                    overflow: TextOverflow.ellipsis,
+                                                    style: const TextStyle(fontSize: 13, color: Colors.blueGrey, height: 1.35),
+                                                  ),
+                                                ],
+                                              ],
+                                            ),
+                                          ),
+                                          if (notificationStatus.isNotEmpty)
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                              decoration: BoxDecoration(
+                                                color: notificationStatus == 'UNREAD' ? const Color(0xFFDBEAFE) : const Color(0xFFF1F5F9),
+                                                borderRadius: BorderRadius.circular(999),
+                                              ),
+                                              child: Text(
+                                                notificationStatus,
+                                                style: TextStyle(
+                                                  fontSize: 11,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: notificationStatus == 'UNREAD' ? const Color(0xFF2563EB) : const Color(0xFF64748B),
+                                                ),
+                                              ),
+                                            ),
+                                        ],
                                       ),
-                                      if (body.isNotEmpty) ...[
-                                        const SizedBox(height: 6),
-                                        Text(
-                                          body,
-                                          style: const TextStyle(fontSize: 12, color: Colors.blueGrey, height: 1.35),
-                                        ),
-                                      ],
-                                      if (when.isNotEmpty) ...[
-                                        const SizedBox(height: 8),
-                                        Text(
-                                          when,
-                                          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Color(0xFF64748B)),
+                                      const SizedBox(height: 14),
+                                      Wrap(
+                                        spacing: 10,
+                                        runSpacing: 10,
+                                        children: [
+                                          if (patientName.isNotEmpty)
+                                            _buildNotificationMetaPill(
+                                              LucideIcons.user,
+                                              patientName,
+                                            ),
+                                          if (caseId.isNotEmpty)
+                                            _buildNotificationMetaPill(
+                                              LucideIcons.briefcaseMedical,
+                                              caseId,
+                                              onTap: () async {
+                                                Navigator.of(context).pop();
+                                                if (_currentStep != 'case_detail') {
+                                                  _previousStep = _currentStep;
+                                                  _previousTab = _activeTab;
+                                                }
+                                                final ok = await _fetchCaseDetail(caseId);
+                                                if (!ok || !mounted) return;
+                                                _navigateTo('case_detail', patient: item);
+                                              },
+                                            ),
+                                          if (type.isNotEmpty)
+                                            _buildNotificationMetaPill(
+                                              _notificationTypeIcon(type),
+                                              typeLabel,
+                                            ),
+                                          if (urgency.isNotEmpty)
+                                            _buildNotificationMetaPill(
+                                              LucideIcons.triangleAlert,
+                                              urgencyLabel,
+                                              bgColor: urgencyColor.withOpacity(0.12),
+                                              fgColor: urgencyColor,
+                                            ),
+                                        ],
+                                      ),
+                                      if (when.isNotEmpty || exactTime.isNotEmpty) ...[
+                                        const SizedBox(height: 14),
+                                        Row(
+                                          children: [
+                                            if (when.isNotEmpty)
+                                              Text(
+                                                when,
+                                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
+                                              ),
+                                            if (when.isNotEmpty && exactTime.isNotEmpty)
+                                              const Text(
+                                                "  •  ",
+                                                style: TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
+                                              ),
+                                            if (exactTime.isNotEmpty)
+                                              Text(
+                                                exactTime,
+                                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Color(0xFF94A3B8)),
+                                              ),
+                                          ],
                                         ),
                                       ],
                                     ],
@@ -1601,6 +2107,40 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildNotificationMetaPill(
+    IconData icon,
+    String text, {
+    Color bgColor = const Color(0xFFF1F5F9),
+    Color fgColor = const Color(0xFF334155),
+    VoidCallback? onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(999),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: bgColor,
+            borderRadius: BorderRadius.circular(999),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 14, color: fgColor),
+              const SizedBox(width: 8),
+              Text(
+                text,
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: fgColor),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

@@ -10,6 +10,15 @@ extension _CasesPage on _MainNavigationScreenState {
     final statusFilter = _casesStatusFilter.toLowerCase();
     final urgencyFilter = _casesUrgencyFilter.toLowerCase();
 
+    DateTime? parseIso(String? raw) {
+      if (raw == null || raw.isEmpty) return null;
+      try {
+        return DateTime.parse(raw).toLocal();
+      } catch (_) {
+        return null;
+      }
+    }
+
     final filtered = _caseItems.where((c) {
       final id = (c['case_id'] ?? c['id'] ?? '').toString().toLowerCase();
       final pid = (c['patient_id'] ?? '').toString().toLowerCase();
@@ -23,6 +32,33 @@ extension _CasesPage on _MainNavigationScreenState {
 
       return matchesSearch && matchesStatus && matchesUrgency;
     }).toList();
+    filtered.sort((a, b) {
+      final aName = (a['patient_name'] ?? a['name'] ?? '').toString().toLowerCase();
+      final bName = (b['patient_name'] ?? b['name'] ?? '').toString().toLowerCase();
+      final aCaseId = (a['case_id'] ?? a['id'] ?? '').toString().toLowerCase();
+      final bCaseId = (b['case_id'] ?? b['id'] ?? '').toString().toLowerCase();
+      final aUpdated = parseIso((a['case_updated_at'] ?? a['updated_at'] ?? '').toString());
+      final bUpdated = parseIso((b['case_updated_at'] ?? b['updated_at'] ?? '').toString());
+
+      switch (_casesSortBy) {
+        case 'UPDATED_ASC':
+          if (aUpdated == null && bUpdated == null) return aName.compareTo(bName);
+          if (aUpdated == null) return 1;
+          if (bUpdated == null) return -1;
+          return aUpdated.compareTo(bUpdated);
+        case 'NAME_ASC':
+          final byName = aName.compareTo(bName);
+          return byName != 0 ? byName : aCaseId.compareTo(bCaseId);
+        case 'CASE_ASC':
+          return aCaseId.compareTo(bCaseId);
+        case 'UPDATED_DESC':
+        default:
+          if (aUpdated == null && bUpdated == null) return aName.compareTo(bName);
+          if (aUpdated == null) return 1;
+          if (bUpdated == null) return -1;
+          return bUpdated.compareTo(aUpdated);
+      }
+    });
 
     return Column(
       children: [
@@ -103,6 +139,13 @@ extension _CasesPage on _MainNavigationScreenState {
                   ),
                 ),
               ],
+            ),
+            const SizedBox(height: 10),
+            _buildCasesFilterDropdown(
+              label: "Sort By",
+              value: _casesSortBy,
+              items: const ["UPDATED_DESC", "UPDATED_ASC", "NAME_ASC", "CASE_ASC"],
+              onChanged: (value) => setState(() => _casesSortBy = value),
             ),
           ]),
         ),
@@ -218,6 +261,21 @@ extension _CasesPage on _MainNavigationScreenState {
     required List<String> items,
     required ValueChanged<String> onChanged,
   }) {
+    String displayLabel(String raw) {
+      switch (raw) {
+        case 'UPDATED_DESC':
+          return 'Updated: Newest';
+        case 'UPDATED_ASC':
+          return 'Updated: Oldest';
+        case 'NAME_ASC':
+          return 'Patient Name';
+        case 'CASE_ASC':
+          return 'Case ID';
+        default:
+          return raw.replaceAll('_', ' ');
+      }
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
@@ -234,7 +292,7 @@ extension _CasesPage on _MainNavigationScreenState {
               .map((e) => DropdownMenuItem<String>(
                     value: e,
                     child: Text(
-                      "$label: $e",
+                      "$label: ${displayLabel(e)}",
                       style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
                     ),
                   ))

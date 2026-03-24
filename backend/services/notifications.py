@@ -103,3 +103,34 @@ def create_doctor_healing_notification(
     notification_ref = db.collection("all_doctor").document(notification_id)
     notification_ref.set(payload, merge=True)
     return notification_id
+
+
+def create_doctor_request_close_notification(
+    *,
+    case_id: str,
+    record_id: str,
+    patient_id: str | None = None,
+    patient_name: str | None = None,
+    urgency: str | None = None,
+) -> str:
+    notification_time = _utc_now()
+    notification_id = f"NTF-{notification_time.strftime('%Y%m%d%H%M%S%f')}"
+
+    payload: dict[str, Any] = {
+        "notification_id": notification_id,
+        "type": "REQUEST_CLOSE_TO_DOCTOR",
+        "case_id": case_id,
+        "record_id": record_id,
+        "patient_id": patient_id,
+        "patient_name": patient_name,
+        "urgency": urgency,
+        "status": "UNREAD",
+        "title": "Case close requested",
+        "message": f"Case {case_id} has been requested for close review.",
+        "created_at": notification_time,
+        "read_at": None,
+    }
+
+    notification_ref = db.collection("all_doctor").document(notification_id)
+    notification_ref.set(payload, merge=True)
+    return notification_id
