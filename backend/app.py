@@ -195,7 +195,8 @@ async def load_dashboard():
                 if not isinstance(task, dict):
                     continue
                 task_status = str(task.get("status") or "").upper()
-                if task_status in DONE_TASK_STATUSES:
+                completed_at = task.get("completed_at")
+                if task_status in DONE_TASK_STATUSES or completed_at not in (None, ""):
                     continue
 
                 due_date = _parse_dashboard_date(task.get("task_due"))

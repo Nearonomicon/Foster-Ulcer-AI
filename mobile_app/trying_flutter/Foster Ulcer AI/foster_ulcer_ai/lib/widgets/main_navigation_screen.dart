@@ -1907,14 +1907,14 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   Widget _buildPatientListTile(Map<String, dynamic> p, {VoidCallback? onTap}) {
     final urgencyColor = _urgencyColor(p['urgency']?.toString());
     final urgencyText = _urgencyLabel(p['urgency']?.toString());
-    final image = p['image'] ?? p['image_url'] ?? p['patient_photo_url'] ?? '';
+    final image = p['photo_url'] ?? p['patient_photo_url'] ?? p['image_url'] ?? p['image'] ?? '';
     final patientId = p['patient_id'] ?? p['patientId'];
-    final id = p['id'] ?? p['case_id'] ?? p['caseId'] ?? "-";
+    final caseId = p['case_id'] ?? p['caseId'] ?? p['id'] ?? "-";
     final name = p['name'] ??
         p['patient_name'] ??
         p['patient']?['patient_name'] ??
         (patientId != null ? "Patient $patientId" : "Unknown");
-    final title = (p['case_id'] ?? p['caseId']) != null ? id.toString() : name.toString();
+    final title = name.toString();
     final status = p['status']?.toString() ?? "unknown";
 
     String formatCaseUpdated(dynamic raw) {
@@ -1985,7 +1985,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                       ),
                       Text(
-                        "Patient: ${patientId ?? '-'}",
+                        "Case: ${caseId ?? '-'}",
                         style: const TextStyle(fontSize: 11, color: Colors.grey),
                       ),
                       const SizedBox(height: 2),

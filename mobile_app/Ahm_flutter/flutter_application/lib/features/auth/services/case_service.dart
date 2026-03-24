@@ -251,7 +251,9 @@ class CaseService {
 
     final timestamps = _asStringDynamicMap(raw['current_timestamps']);
 
-    final patientName = _guessPatientNameFromCase(raw);
+    final patientName = (raw['patient_name'] ?? '').toString().trim().isNotEmpty
+        ? (raw['patient_name'] ?? '').toString().trim()
+        : _guessPatientNameFromCase(raw);
     final status = (raw['status'] ?? '').toString();
     final urgency = _mapUrgencyValue((raw['urgency'] ?? '').toString());
 

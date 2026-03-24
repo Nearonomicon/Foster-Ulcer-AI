@@ -16,11 +16,29 @@ extension _TasksPage on _MainNavigationScreenState {
       if (iso == null || iso.isEmpty) return "No Time";
       try {
         final dt = DateTime.parse(iso).toLocal();
+        final yy = (dt.year).toString().padLeft(2, '0');
+        final mo = dt.month.toString().padLeft(2, '0');
+        final dd = dt.day.toString().padLeft(2, '0');
         final hh = dt.hour.toString().padLeft(2, '0');
         final mm = dt.minute.toString().padLeft(2, '0');
-        return "$hh:$mm";
+        return "$yy/$mo/$dd $hh:$mm";
       } catch (_) {
         return "No Time";
+      }
+    }
+
+    String fmtDueDayLabel(String? iso) {
+      if (iso == null || iso.isEmpty) return "No Due Date";
+      try {
+        final dt = DateTime.parse(iso).toLocal();
+        final now = DateTime.now();
+        final dueDate = DateTime(dt.year, dt.month, dt.day);
+        final todayDate = DateTime(now.year, now.month, now.day);
+        final diffDays = dueDate.difference(todayDate).inDays;
+        if (diffDays <= 0) return "Today";
+        return "Due in ${diffDays}d";
+      } catch (_) {
+        return "No Due Date";
       }
     }
 
@@ -37,6 +55,7 @@ extension _TasksPage on _MainNavigationScreenState {
           'case_id': (t['case_id'] ?? '').toString(),
           'patient_name': (t['patient_name'] ?? 'Patient').toString(),
           'patient_id': (t['patient_id'] ?? '').toString(),
+          'photo_url': (t['photo_url'] ?? t['patient_photo_url'] ?? '').toString(),
           'plan': plan,
           'tasks': tasks,
         };
@@ -103,7 +122,7 @@ extension _TasksPage on _MainNavigationScreenState {
             children: [
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(
-                  _tasksViewMode == 'plan' ? "Case Load" : "All Action Items",
+                  _tasksViewMode == 'plan' ? "Treatment Plan" : "All Action Items",
                   style: GoogleFonts.plusJakartaSans(fontSize: 22, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
                 ),
                 Text(
@@ -265,15 +284,27 @@ extension _TasksPage on _MainNavigationScreenState {
                                       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                                       child: Row(
                                         children: [
-                                          Container(
-                                            width: 36,
-                                            height: 36,
-                                            decoration: const BoxDecoration(color: Color(0xFFE0F2FE), shape: BoxShape.circle),
-                                            alignment: Alignment.center,
-                                            child: Text(
-                                              (c['patient_name'] as String).isNotEmpty ? (c['patient_name'] as String)[0] : "?",
-                                              style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1D4ED8)),
-                                            ),
+                                          ClipRRect(
+                                            borderRadius: BorderRadius.circular(12),
+                                            child: (c['photo_url']?.toString().isNotEmpty == true)
+                                                ? Image.network(
+                                                    c['photo_url'].toString(),
+                                                    width: 50,
+                                                    height: 50,
+                                                    fit: BoxFit.cover,
+                                                    errorBuilder: (context, error, stackTrace) => Container(
+                                                      width: 50,
+                                                      height: 50,
+                                                      color: const Color(0xFFE2E8F0),
+                                                      child: const Icon(Icons.broken_image, size: 18),
+                                                    ),
+                                                  )
+                                                : Container(
+                                                    width: 50,
+                                                    height: 50,
+                                                    color: const Color(0xFFE2E8F0),
+                                                    child: const Icon(Icons.person, size: 18),
+                                                  ),
                                           ),
                                           const SizedBox(width: 15),
                                           Expanded(
@@ -314,7 +345,7 @@ extension _TasksPage on _MainNavigationScreenState {
                               child: Column(
                                 children: tasks.map((t) {
                                   final text = t['task_text']?.toString() ?? "-";
-                                  final due = fmtTime(t['task_due']?.toString());
+                                  final due = fmtDueDayLabel(t['task_due']?.toString());
                                   return Container(
                                     margin: const EdgeInsets.only(top: 8),
                                     padding: const EdgeInsets.all(12),
@@ -342,7 +373,7 @@ extension _TasksPage on _MainNavigationScreenState {
                     itemBuilder: (context, i) {
                     final t = allTasks[i];
                     final dueRaw = t['task_due']?.toString();
-                    final due = fmtTime(dueRaw);
+                    final due = fmtDueDayLabel(dueRaw);
                     final isOverdue = dueRaw != null && dueRaw.isNotEmpty && DateTime.parse(dueRaw).isBefore(DateTime.now());
                     return Container(
                       margin: const EdgeInsets.only(bottom: 10),
@@ -367,7 +398,7 @@ extension _TasksPage on _MainNavigationScreenState {
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
                               Text(due, style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: isOverdue ? Colors.red : const Color(0xFF2563EB))),
-                              Text(dueRaw == null ? "DRAFT MODE" : "TODAY", style: const TextStyle(fontSize: 9, color: Colors.blueGrey)),
+                              Text(dueRaw == null ? "DRAFT MODE" : fmtTime(dueRaw), style: const TextStyle(fontSize: 9, color: Colors.blueGrey)),
                             ],
                           ),
                         ],
