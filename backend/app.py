@@ -1,14 +1,19 @@
 import json
+from datetime import date, datetime, timezone
+from typing import Any
+
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.responses import JSONResponse, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.encoders import jsonable_encoder
 from fastapi.middleware.cors import CORSMiddleware
+from firebase_admin import firestore
 
 from routes.patients import router as patients_router
 from routes.cases import router as cases_router
 from routes.analysis import router as analysis_router
 from routes.task import router as tasks_router
+from services.firebase import db
 
 
 app = FastAPI(title="Wound Care AI Analysis API")
@@ -20,6 +25,71 @@ app.add_middleware(
     allow_headers=["*"],
     allow_credentials=False,
 )
+
+
+ACTIVE_CASE_STATUSES = {
+    "CREATION",
+    "AI_PROCESSING",
+    "DOCTOR_REVIEW",
+    "PLAN_ISSUED",
+    "TREATMENT_ACTIVE",
+    "APPOINTMENT",
+}
+
+DONE_TASK_STATUSES = {"DONE", "COMPLETED", "CANCELLED"}
+
+
+def _parse_dashboard_datetime(value: Any) -> datetime | None:
+    if value is None:
+        return None
+    if isinstance(value, datetime):
+        parsed = value
+    elif hasattr(value, "ToDatetime"):
+        parsed = value.ToDatetime()
+    elif isinstance(value, str):
+        normalized = value.strip()
+        if not normalized:
+            return None
+        normalized = normalized.replace("Z", "+00:00")
+        parsed = None
+        for candidate in (normalized, normalized.replace(" ", "T")):
+            try:
+                parsed = datetime.fromisoformat(candidate)
+                break
+            except ValueError:
+                continue
+        if parsed is None:
+            return None
+    else:
+        return None
+
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _parse_dashboard_date(value: Any) -> date | None:
+    parsed = _parse_dashboard_datetime(value)
+    if parsed is not None:
+        return parsed.date()
+    if isinstance(value, str):
+        raw_value = value.strip()
+        if not raw_value:
+            return None
+        try:
+            return date.fromisoformat(raw_value[:10])
+        except ValueError:
+            return None
+    return None
+
+
+def _serialize_dashboard_datetime(value: Any) -> str:
+    parsed = _parse_dashboard_datetime(value)
+    if parsed is not None:
+        return parsed.isoformat()
+    if value is None:
+        return ""
+    return str(value)
 
 
 @app.middleware("http")
@@ -89,9 +159,104 @@ async def unhandled_exception_handler(request: Request, exc: Exception):
     return JSONResponse(status_code=500, content={"detail": "Internal Server Error"})
 
 
-@app.post("/load-dashboard")
+@app.get("/load-dashboard")
 async def load_dashboard():
-    return {"message": "CORS is working!"}
+    try:
+        today = datetime.now(timezone.utc).date()
+        cases_docs = db.collection("cases").order_by(
+            "case_updated_at", direction=firestore.Query.DESCENDING
+        ).stream()
+
+        cases = []
+        patient_ids: set[str] = set()
+        active_patient_ids: set[str] = set()
+        due_today_count = 0
+        upcoming_tasks = []
+
+        for doc in cases_docs:
+            case_data = doc.to_dict() or {}
+            case_id = case_data.get("case_id") or doc.id
+            patient_id = case_data.get("patient_id")
+            status = str(case_data.get("status") or "")
+
+            if patient_id:
+                patient_ids.add(patient_id)
+                if status in ACTIVE_CASE_STATUSES:
+                    active_patient_ids.add(patient_id)
+
+            current_treatment_plan = case_data.get("current_treatment_plan") or {}
+            plan_tasks = current_treatment_plan.get("plan_tasks") or []
+            if not isinstance(plan_tasks, list):
+                plan_tasks = []
+
+            cases.append((case_id, case_data))
+
+            for task in plan_tasks:
+                if not isinstance(task, dict):
+                    continue
+                task_status = str(task.get("status") or "").upper()
+                if task_status in DONE_TASK_STATUSES:
+                    continue
+
+                due_date = _parse_dashboard_date(task.get("task_due"))
+                if due_date is None:
+                    continue
+
+                if due_date == today:
+                    due_today_count += 1
+
+                if due_date < today:
+                    continue
+
+                upcoming_tasks.append(
+                    {
+                        "case_id": case_id,
+                        "patient_id": patient_id or "",
+                        "status": status,
+                        "urgency": case_data.get("urgency") or "",
+                        "case_updated_at": _serialize_dashboard_datetime(case_data.get("case_updated_at")),
+                        "due_date": due_date.isoformat(),
+                    }
+                )
+
+        patient_map: dict[str, dict[str, Any]] = {}
+        if patient_ids:
+            refs = [db.collection("patients").document(patient_id) for patient_id in patient_ids]
+            for snap in db.get_all(refs):
+                if snap.exists:
+                    patient_map[snap.id] = snap.to_dict() or {}
+
+        upcoming_tasks.sort(
+            key=lambda item: (
+                item.get("due_date") or "9999-12-31",
+                item.get("case_updated_at") or "",
+            )
+        )
+
+        upcoming_plan = []
+        for item in upcoming_tasks[:4]:
+            patient_data = patient_map.get(item["patient_id"], {})
+            upcoming_plan.append(
+                {
+                    "case_id": item["case_id"],
+                    "patient_id": item["patient_id"],
+                    "patient_name": patient_data.get("patient_name", ""),
+                    "status": item["status"],
+                    "urgency": item["urgency"],
+                    "case_updated_at": item["case_updated_at"],
+                    "due_date": item["due_date"],
+                    "patient_photo_url": patient_data.get("photo_url", ""),
+                }
+            )
+
+        return {
+            "status": "success",
+            "today_task_no": due_today_count,
+            "total_active_patient": len(active_patient_ids),
+            "upcoming_plan": upcoming_plan,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 app.include_router(patients_router)

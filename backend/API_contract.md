@@ -212,6 +212,307 @@ metadata/counters_{YYMM}
 metadata/counters_case_{YYMMDD}
 ```
 
+## Firestore Field Hierarchy
+
+### `patients/{patient_id}`
+
+Example:
+
+```json
+{
+  "nrc_id": "1234567890123",
+  "patient_name": "John Doe",
+  "phone_no": "0812345678",
+  "dob": "19/03/2001",
+  "gender": "female",
+  "height_cm": 160.0,
+  "weight_kg": 55.0,
+  "medical_history": "Diabetes mellitus",
+  "diabetes": {
+    "has_diabetes": "Yes",
+    "years": "1-5y",
+    "risk_history": ["Past Ulcer"],
+    "complications": ["Eyes (Retinopathy)"]
+  },
+  "status": "Active",
+  "created_at": "2026-03-23 14:00:00",
+  "synced_at": "timestamp",
+  "photo_url": "https://..."
+}
+```
+
+### `cases/{case_id}`
+
+Core fields:
+
+```json
+{
+  "case_id": "CS-260323-00001",
+  "patient_id": "PT-2603-00001",
+  "created_by_nurse": "NURSE-001",
+  "assigned_doctor": "DR-001",
+  "status": "PLAN_ISSUED",
+  "urgency": "MEDIUM",
+  "case_created_at": "2026-03-23T07:30:00+00:00",
+  "case_updated_at": "2026-03-23T09:00:00+00:00",
+  "current_record_id": "REC-00001",
+  "current_analysis_id": "AN-20260323090000",
+  "current_plan_id": "PL-20260323100000"
+}
+```
+
+Snapshot fields stored on the case:
+
+```json
+{
+  "current_timestamps": {},
+  "current_image": {},
+  "current_vital_signs": {},
+  "current_wound_detail": {},
+  "current_ischemia": {},
+  "current_infection": {},
+  "current_neuropathy": {},
+  "current_sinbad": {},
+  "current_lab_results": {},
+  "current_vascular": {},
+  "current_gangrene_extent": "none",
+  "current_analysis": {},
+  "current_treatment_plan": {},
+  "current_task_list": [],
+  "current_healing_progress": "..."
+}
+```
+
+### `cases/{case_id}/records/{record_id}`
+
+Example shape:
+
+```json
+{
+  "record_id": "REC-00001",
+  "case_id": "CS-260323-00001",
+  "patient_id": "PT-2603-00001",
+  "record_created_by": "NURSE-001",
+  "record_created_at": "2026-03-23T07:30:00+00:00",
+  "record_updated_at": "2026-03-23T09:00:00+00:00",
+  "created_by_nurse": "NURSE-001",
+  "assigned_doctor": "DR-001",
+  "status": "PLAN_ISSUED",
+  "urgency": "MEDIUM",
+  "timestamps": {
+    "created_at": "2026-03-23T07:30:00+00:00",
+    "updated_at": "2026-03-23T09:00:00+00:00",
+    "analyze_at": "2026-03-23T08:00:00+00:00",
+    "doctor_review_at": "2026-03-23T09:00:00+00:00",
+    "plan_issued_at": null,
+    "treatment_active_at": null,
+    "appointment_at": null,
+    "completed_at": null
+  },
+  "image": {
+    "image_folder_url": "https://..."
+  },
+  "vital_signs": {
+    "temperature": "37.0",
+    "blood_pressure": "120/80",
+    "blood_pressure_systolic": "120",
+    "blood_pressure_diastolic": "80",
+    "blood_glucose": "145",
+    "heart_rate": "76",
+    "respiratory_rate": "18"
+  },
+  "wound_detail": {
+    "location_primary": "toe",
+    "location_detail": "left great toe",
+    "wound_type": "ulcer",
+    "shape": "irregular",
+    "size": {
+      "width_cm": 2.4,
+      "length_cm": 3.1
+    },
+    "depth_category": "full_thickness",
+    "bed": {
+      "slough_pct": 40,
+      "necrotic_pct": 10
+    },
+    "edge_description": "irregular",
+    "periwound_status": "erythematous",
+    "discharge": {
+      "volume": "moderate",
+      "type": "seropurulent (cloudy yellow)"
+    },
+    "odor_presence": "faint",
+    "pain_score": 5,
+    "has_infection": true,
+    "skin_condition": "dry"
+  },
+  "ischemia": {
+    "points": [1],
+    "pulse": "yes",
+    "checklist": []
+  },
+  "infection": {
+    "checklist": ["Warmth (hotter than other foot)"],
+    "erythema_extent": "gt_0_5_cm",
+    "probe_to_bone_test": "negative",
+    "has_deep_abscess_or_fasciitis": false
+  },
+  "neuropathy": {
+    "points": [1]
+  },
+  "sinbad": {
+    "site": "Forefoot",
+    "ischemia": "No",
+    "neuropathy": "Yes",
+    "infection": "Yes",
+    "area": ">= 1 cm²",
+    "depth": "Skin only"
+  },
+  "lab_results": {
+    "wbc_count": "11000",
+    "crp": "15",
+    "esr": "25",
+    "procalcitonin": "0.2"
+  },
+  "vascular": {
+    "abi_value": "1.0",
+    "ankle_pressure_mmHg": "120",
+    "toe_pressure_mmHg": "90",
+    "tcpo2_mmHg": "55"
+  },
+  "gangrene_extent": "none",
+  "analysis": {},
+  "treatment_plan": {
+    "plan_id": "PL-20260323100000",
+    "plan_text": "Perform dressing change, offloading, and follow-up review.",
+    "followup_days": 7,
+    "status": "SENT",
+    "plan_tasks": [
+      {
+        "task_id": "TSK-0001",
+        "task_text": "Apply dressing",
+        "status": "SENT",
+        "task_due": "2026-03-24",
+        "completed_at": null,
+        "task_photo_url": null
+      }
+    ]
+  },
+  "task_list": [
+    {
+      "task_id": "TSK-0001",
+      "task_text": "Apply dressing",
+      "status": "SENT",
+      "task_due": "2026-03-24",
+      "completed_at": null,
+      "task_photo_url": null
+    }
+  ],
+  "current_healing_progress": "..."
+}
+```
+
+### `cases/{case_id}/records/{record_id}/analysis_versions/{analysis_id}`
+
+Example:
+
+```json
+{
+  "analysis_id": "AN-20260323100000",
+  "case_id": "CS-260323-00001",
+  "record_id": "REC-00001",
+  "status": "SENT",
+  "source": "Doctor",
+  "created_at": "timestamp",
+  "payload": {
+    "analysis": {},
+    "treatment_plan": {},
+    "signature": null,
+    "signature_base64": null
+  }
+}
+```
+
+Observed `source` values:
+
+- `AI`
+- `Doctor`
+- `AI_HEALING`
+
+Observed `status` values:
+
+- `DRAFT`
+- `SENT`
+
+### `cases/{case_id}/records/{record_id}/plan_versions/{plan_id}`
+
+Example:
+
+```json
+{
+  "plan_id": "PL-20260323100000",
+  "case_id": "CS-260323-00001",
+  "record_id": "REC-00001",
+  "created_at": "timestamp",
+  "updated_at": "timestamp",
+  "status": "SENT",
+  "plan_text": "Perform dressing change, offloading, and follow-up review.",
+  "followup_days": 7,
+  "source": "Doctor"
+}
+```
+
+### `cases/{case_id}/records/{record_id}/plan_versions/{plan_id}/tasks/{task_id}`
+
+Example:
+
+```json
+{
+  "task_id": "TSK-0001",
+  "case_id": "CS-260323-00001",
+  "record_id": "REC-00001",
+  "plan_id": "PL-20260323100000",
+  "created_at": "timestamp",
+  "updated_at": "timestamp",
+  "task_text": "Apply dressing",
+  "status": "SENT",
+  "task_due": "2026-03-24",
+  "completed_at": null,
+  "task_photo_url": null
+}
+```
+
+### `metadata/counters_{YYMM}`
+
+Used for patient numbering.
+
+```json
+{
+  "last_running_num": 15
+}
+```
+
+### `metadata/counters_case_{YYMMDD}`
+
+Used for case numbering.
+
+```json
+{
+  "last_running_num": 42
+}
+```
+
+### Status Propagation Rules
+
+- `case.status` is the high-level case lifecycle state.
+- `record.status` is the active state for the current record.
+- `current_treatment_plan.status` mirrors the active plan snapshot.
+- `current_task_list[*].status` mirrors the active task snapshot.
+- `/request_close` only changes case and record to `REQUEST_CLOSE`.
+- `/create_appointment` changes case, record, plan, and tasks to `APPOINTMENT`.
+- `/complete_case` changes case, record, plan, and tasks to `COMPLETED`.
+- `/doctor-review` changes case and record to `PLAN_ISSUED`, and forces plan/tasks to `SENT`.
+
 ## Endpoint Summary
 
 | Method | Path | Purpose |

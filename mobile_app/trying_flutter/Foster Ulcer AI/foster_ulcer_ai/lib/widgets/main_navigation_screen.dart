@@ -262,6 +262,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   bool _patientsLoading = false;
   String? _patientsError;
   bool _patientsFetchedOnce = false;
+  bool _dashboardLoading = false;
+  String? _dashboardError;
+  bool _dashboardFetchedOnce = false;
+  int? _dashboardTodayTaskNo;
+  int? _dashboardTotalActivePatient;
+  int? _dashboardTotalPatient;
+  List<Map<String, dynamic>> _dashboardUpcomingPlan = [];
     // =========================
   // Task Detail (NEW)
   // =========================
@@ -420,6 +427,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   final Uri _taskUpdateUri = Uri.parse("$_baseUrl/task_update");
   final Uri _createAppointmentUri = Uri.parse("$_baseUrl/create_appointment");
   final Uri _requestCloseUri = Uri.parse("$_baseUrl/request_close");
+  final Uri _loadDashboardUri = Uri.parse("$_baseUrl/load-dashboard");
   final Uri _caseDetailUri = Uri.parse("$_baseUrl/case_detail");
   final Uri _patientListUri = Uri.parse("$_baseUrl/patients_list");
   final Uri _docsUri = Uri.parse("$_baseUrl/docs");
@@ -1401,6 +1409,47 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     }
   }
 
+  Future<void> _fetchDashboard() async {
+    if (_dashboardLoading) return;
+    setState(() {
+      _dashboardLoading = true;
+      _dashboardError = null;
+      _dashboardFetchedOnce = true;
+    });
+    try {
+      final resp = await http.get(_loadDashboardUri).timeout(const Duration(seconds: 30));
+      if (resp.statusCode != 200) {
+        throw Exception("load-dashboard failed (${resp.statusCode}): ${resp.body}");
+      }
+      final decoded = jsonDecode(resp.body);
+      if (decoded is! Map) {
+        throw Exception("load-dashboard: unexpected response");
+      }
+      final upcoming = decoded['upcoming_plan'] is List
+          ? List<Map<String, dynamic>>.from(
+              (decoded['upcoming_plan'] as List)
+                  .whereType<Map>()
+                  .map((e) => Map<String, dynamic>.from(e)),
+            )
+          : <Map<String, dynamic>>[];
+      if (mounted) {
+        setState(() {
+          _dashboardTodayTaskNo = _toInt(decoded['today_task_no']);
+          _dashboardTotalActivePatient = _toInt(decoded['total_active_patient']);
+          _dashboardTotalPatient = _toInt(decoded['total_patient']);
+          _dashboardUpcomingPlan = upcoming;
+        });
+      }
+    } catch (e) {
+      debugPrint("load-dashboard error: $e");
+      if (mounted) {
+        setState(() => _dashboardError = "Failed to load dashboard: $e");
+      }
+    } finally {
+      if (mounted) setState(() => _dashboardLoading = false);
+    }
+  }
+
   void _prefillIntakeFromSelectedPatient(Map<String, dynamic> p) {
     String? formatDob(dynamic v) {
       if (v == null) return null;
@@ -1550,6 +1599,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       if (step == 'patient_search') {
         setState(() => _patientsFetchedOnce = false);
         _fetchPatientList();
+      }
+      if (step == 'dashboard' && _activeTab == 0) {
+        setState(() => _dashboardFetchedOnce = false);
+        _fetchDashboard();
       }
       if (step == 'tasks') {
         _fetchTasksList();
@@ -1745,19 +1798,19 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       case 'ANALYZING':
         return const Color(0xFFFFF7ED);
       case 'DOCTOR_REVIEW':
-        return const Color(0xFFE0E7FF);
       case 'DRAFT':
-        return const Color(0xFFFEF3C7);
+        return const Color(0xFFF1F5F9);
+      case 'PLAN_ISSUED':
       case 'SENT':
-        return const Color(0xFFDCFCE7);
+        return const Color(0xFFDBEAFE);
       case 'ACTIVE':
         return const Color(0xFFFCE7F3);
       case 'APPOINTMENT':
-        return const Color(0xFFFEF3C7);
+        return const Color(0xFFFFEDD5);
       case 'REQUEST_CLOSE':
         return const Color(0xFFFEE2E2);
       case 'COMPLETED':
-        return const Color(0xFFEDE9FE);
+        return const Color(0xFFDCFCE7);
       case 'PENDING':
         return const Color(0xFFE0F2FE);
       default:
@@ -1772,11 +1825,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       case 'ANALYZING':
         return const Color(0xFF9A3412);
       case 'DOCTOR_REVIEW':
-        return const Color(0xFF4338CA);
       case 'DRAFT':
-        return const Color(0xFFB45309);
+        return const Color(0xFF64748B);
+      case 'PLAN_ISSUED':
       case 'SENT':
-        return const Color(0xFF15803D);
+        return const Color(0xFF1D4ED8);
       case 'ACTIVE':
         return const Color(0xFFBE185D);
       case 'APPOINTMENT':
@@ -1784,7 +1837,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       case 'REQUEST_CLOSE':
         return const Color(0xFFB91C1C);
       case 'COMPLETED':
-        return const Color(0xFF6D28D9);
+        return const Color(0xFF15803D);
       case 'PENDING':
         return const Color(0xFF0369A1);
       default:
@@ -1993,6 +2046,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             _activeTab = index;
             _currentStep = 'dashboard';
           });
+          if (index == 0) {
+            setState(() => _dashboardFetchedOnce = false);
+            _fetchDashboard();
+          }
           if (index == 1) {
             setState(() => _tasksFetchedOnce = false);
             _fetchTasksList();

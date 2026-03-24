@@ -275,11 +275,11 @@ extension _TasksPage on _MainNavigationScreenState {
                                               style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1D4ED8)),
                                             ),
                                           ),
-                                          const SizedBox(width: 12),
+                                          const SizedBox(width: 1),
                                           Expanded(
                                             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                                               Text(c['patient_name'].toString(), style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
-                                              Text("ID: ${c['case_id']} • ${tasks.length} Tasks", style: const TextStyle(fontSize: 11, color: Colors.grey)),
+                                              Text("ID: ${c['case_id']} \n ${tasks.length} Tasks", style: const TextStyle(fontSize: 11, color: Colors.grey)),
                                             ]),
                                           ),
                                           Container(
