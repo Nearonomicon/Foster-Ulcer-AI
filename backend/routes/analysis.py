@@ -19,6 +19,7 @@ from prompts import (
 )
 from services.genai_client import client, genai_model, safety_config
 from services.firebase import upload_case_image_to_firebase, db
+from services.notifications import create_doctor_healing_notification
 
 
 router = APIRouter()
@@ -311,7 +312,11 @@ async def analyze_healing(payload: dict):
         if not case_id:
             raise HTTPException(status_code=400, detail="case_id is required")
 
-        records_query = db.collection("cases").document(case_id).collection("records").order_by(
+        case_ref = db.collection("cases").document(case_id)
+        case_snapshot = case_ref.get()
+        case_data = case_snapshot.to_dict() if case_snapshot.exists else {}
+
+        records_query = case_ref.collection("records").order_by(
             "record_created_at", direction=firestore.Query.ASCENDING
         )
         records_docs = records_query.stream()
@@ -390,6 +395,7 @@ Today is {date.today()}.
         if isinstance(result, dict) and result.get("blocked"):
             return {"status": "blocked", "reason": result.get("reason"), "records": records_json}
 
+        notification_id = None
         try:
             latest_record = records_json[-1]
             latest_record_id = latest_record.get("record_id")
@@ -419,7 +425,6 @@ Today is {date.today()}.
                     "payload": analysis_payload,
                 }, merge=True)
 
-            case_ref = db.collection("cases").document(case_id)
             case_ref.set({
                 "current_healing_progress": result,
                 "status": "DOCTOR_REVIEW",
@@ -427,10 +432,39 @@ Today is {date.today()}.
                 "current_analysis_id": analysis_id if latest_record_id else None,
                 "case_updated_at": firestore.SERVER_TIMESTAMP,
             }, merge=True)
+
+            notification_id = None
+            if latest_record_id:
+                try:
+                    patient_id = case_data.get("patient_id")
+                    patient_name = None
+                    if patient_id:
+                        patient_snapshot = db.collection("patients").document(patient_id).get()
+                        if patient_snapshot.exists:
+                            patient_profile = patient_snapshot.to_dict() or {}
+                            patient_name = patient_profile.get("patient_name")
+
+                    urgency_value = case_data.get("urgency")
+                    if hasattr(urgency_value, "value"):
+                        urgency_value = urgency_value.value
+
+                    notification_id = create_doctor_healing_notification(
+                        case_id=case_id,
+                        record_id=latest_record_id,
+                        patient_id=patient_id,
+                        patient_name=patient_name,
+                        urgency=urgency_value,
+                    )
+                except Exception as notification_error:
+                    print(f"analyze-healing warning: failed to create doctor notification: {notification_error}")
         except Exception as e:
             print(f"analyze-healing warning: failed to store healing_progress: {e}")
-
-        return {"status": "success", "analysis": result, "records": records_json}
+        return {
+            "status": "success",
+            "analysis": result,
+            "records": records_json,
+            "notification_id": notification_id,
+        }
 
     except HTTPException:
         raise

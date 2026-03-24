@@ -28,6 +28,8 @@ http://10.0.2.2:8080
 Most implemented endpoints are mounted directly at the root, for example:
 
 ```text
+GET /doctor-notifications
+GET /nurse-notifications
 POST /cases_list
 POST /doctor-review
 POST /complete_case
@@ -41,6 +43,50 @@ POST /complete_case
 ## Authentication
 
 No authentication or authorization is currently enforced by the backend.
+
+## Notifications
+
+Current backend behavior uses shared public notification feeds:
+
+- `all_doctor/{notification_id}` for doctor-facing notifications
+- `all_nurse/{notification_id}` for nurse-facing notifications
+
+Flow:
+
+- `POST /send-to-doctor` creates a notification in `all_doctor`
+- `POST /doctor-review` creates a notification in `all_nurse`
+
+Frontend read endpoints:
+
+- `GET /doctor-notifications`
+- `GET /nurse-notifications`
+
+These are currently shared queues, not per-user inboxes.
+
+Bell badge strategy:
+
+- frontend stores its own last-seen notification timestamp
+- frontend calls notification list API with `since=<ISO datetime>`
+- backend responds with `has_new`, `new_count`, and `latest_created_at`
+
+Notification delivery options:
+
+| Option | How it works | Pros | Cons | Fit for current design |
+|---|---|---|---|---|
+| API polling | Mobile app calls notification APIs periodically | Simple, uses current REST backend, easy to debug | Delayed updates, extra battery/network use, more backend load, weak for backgrounded app | Current implementation |
+| Firestore realtime listener | Mobile app listens directly to `all_doctor` or `all_nurse` | Near real-time, no polling loop, good while app is open | Requires Firebase client integration and careful security rules, weak for terminated app alerts | Good next step for live in-app bell updates |
+| FCM push | Backend sends push notifications to device tokens | Best for background/closed app alerts, native OS notifications, efficient delivery | Requires token management, more setup, should not be sole source of truth | Good add-on when true push is needed |
+| Firestore + FCM | Store notification in Firestore and also send FCM | Best overall design, reliable history plus instant alerting, app can recover missed pushes | More moving parts and implementation work | Recommended long term |
+| WebSocket / SSE | Mobile app keeps a live connection to backend | Real-time without polling | More infra complexity, weaker mobile background behavior, more connection handling work | Usually not worth it here |
+
+Current conclusion:
+
+| Question | Conclusion |
+|---|---|
+| What are we doing now? | API polling against `GET /doctor-notifications` and `GET /nurse-notifications` |
+| Why is it acceptable now? | It is the simplest option and matches the current shared broadcast model |
+| Main limitation | Bell state is based on client-side last-seen tracking, not server-side per-user unread state |
+| Recommended upgrade path | Firestore realtime for in-app updates, then add FCM if background push is needed |
 
 ## Standard Error Shape
 
@@ -703,6 +749,7 @@ Behavior:
 - creates `analysis_versions/{analysis_id}`
 - creates `plan_versions/{plan_id}`
 - creates plan task documents
+- creates a shared doctor notification in `all_doctor/{notification_id}`
 - updates case current snapshot
 
 Success response:
@@ -714,7 +761,8 @@ Success response:
   "case_id": "CS-260323-00001",
   "record_id": "REC-00001",
   "analysis_id": "AN-20260323090000",
-  "plan_id": "PL-20260323090000"
+  "plan_id": "PL-20260323090000",
+  "notification_id": "NTF-20260323090000123456"
 }
 ```
 
@@ -756,6 +804,7 @@ Behavior:
 - forces each plan task status to `SENT`
 - updates case and record status to `PLAN_ISSUED`
 - preserves previous `SINBAD` classification
+- creates a shared nurse notification in `all_nurse/{notification_id}`
 
 Success response:
 
@@ -768,7 +817,79 @@ Success response:
   "case_id": "CS-260323-00001",
   "record_id": "REC-00001",
   "source": "Doctor",
-  "sinbad_copied": true
+  "sinbad_copied": true,
+  "notification_id": "NTF-20260323100000123456"
+}
+```
+
+### `GET /doctor-notifications`
+
+Query params:
+
+- `limit` optional integer, default `50`, min `1`, max `200`
+
+Behavior:
+
+- reads from `all_doctor`
+- orders by `created_at` descending
+
+Success response:
+
+```json
+{
+  "status": "success",
+  "notifications": [
+    {
+      "notification_id": "NTF-20260323090000123456",
+      "type": "CASE_SENT_TO_DOCTOR",
+      "case_id": "CS-260323-00001",
+      "record_id": "REC-00001",
+      "patient_id": "PT-2603-00001",
+      "patient_name": "John Doe",
+      "urgency": "URGENT",
+      "status": "UNREAD",
+      "title": "New case for review",
+      "message": "Case CS-260323-00001 is ready for doctor review.",
+      "created_at": "2026-03-23T09:00:00.123456+00:00",
+      "read_at": null
+    }
+  ]
+}
+```
+
+### `GET /nurse-notifications`
+
+Query params:
+
+- `limit` optional integer, default `50`, min `1`, max `200`
+
+Behavior:
+
+- reads from `all_nurse`
+- orders by `created_at` descending
+
+Success response:
+
+```json
+{
+  "status": "success",
+  "notifications": [
+    {
+      "notification_id": "NTF-20260323100000123456",
+      "type": "PLAN_ISSUED_TO_NURSE",
+      "case_id": "CS-260323-00001",
+      "record_id": "REC-00001",
+      "patient_id": "PT-2603-00001",
+      "patient_name": "John Doe",
+      "urgency": "URGENT",
+      "created_by_nurse": "NURSE-001",
+      "status": "UNREAD",
+      "title": "Plan ready",
+      "message": "Doctor review is complete for case CS-260323-00001.",
+      "created_at": "2026-03-23T10:00:00.123456+00:00",
+      "read_at": null
+    }
+  ]
 }
 ```
 

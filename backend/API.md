@@ -62,7 +62,7 @@ This document summarizes the API as implemented in the backend source, primarily
 
 | Method | Path | Purpose |
 |---|---|---|
-| `POST` | `/load-dashboard` | Health/CORS check |
+| `GET` | `/load-dashboard` | Load dashboard summary |
 | `POST` | `/create-patient-profile` | Create a patient profile |
 | `GET` | `/patients_list` | List patients |
 | `PATCH` | `/patients/{patient_id}` | Partially update patient profile |
@@ -72,6 +72,8 @@ This document summarizes the API as implemented in the backend source, primarily
 | `POST` | `/case_detail` | Load one case, its records, and patient profile |
 | `POST` | `/send-to-doctor` | Finalize a record for doctor review and create analysis/plan versions |
 | `POST` | `/doctor-review` | Save doctor-edited analysis as a doctor-sourced analysis version |
+| `GET` | `/doctor-notifications` | List shared doctor notifications |
+| `GET` | `/nurse-notifications` | List shared nurse notifications |
 | `POST` | `/analyze-fillin` | Upload wound image and return structured fill-in output |
 | `POST` | `/analyze-wound` | Run layered AI wound analysis |
 | `POST` | `/analyze-healing` | Generate healing-progress summary from records |
@@ -81,11 +83,11 @@ This document summarizes the API as implemented in the backend source, primarily
 
 ## 5. Endpoint Specifications
 
-### 5.1 `POST /load-dashboard`
+### 5.1 `GET /load-dashboard`
 
 **Purpose**
 
-Returns a simple success message used as a connectivity/CORS check.
+Returns dashboard summary values and upcoming incomplete tasks.
 
 **Request body**
 
@@ -95,7 +97,18 @@ None.
 
 ```json
 {
-  "message": "CORS is working!"
+  "status": "success",
+  "today_task_no": 0,
+  "upcoming_plan": [
+    {
+      "patient_name": "John Doe",
+      "status": "TREATMENT_ACTIVE",
+      "urgency": "URGENT",
+      "case_updated_at": "2026-03-24T08:30:00+00:00",
+      "task_due": "2026-03-24",
+      "patient_photo_url": "https://..."
+    }
+  ]
 }
 ```
 
@@ -445,6 +458,7 @@ Other fields from `WoundCaseRecord` may also be supplied, including `urgency`, `
 - Creates `plan_versions/{plan_id}`
 - Builds tasks from `task_list` or `treatment_plan.plan_tasks`
 - Auto-generates `task_id` values as `TSK-0001`, `TSK-0002`, ... when missing
+- Creates a shared doctor notification in `all_doctor/{notification_id}`
 - Writes current snapshot back to the case and sets:
   - `status = DOCTOR_REVIEW`
   - `current_record_id`
@@ -460,7 +474,8 @@ Other fields from `WoundCaseRecord` may also be supplied, including `urgency`, `
   "case_id": "CS-260318-00001",
   "record_id": "REC-00002",
   "analysis_id": "AN-20260318120000",
-  "plan_id": "PL-20260318120000"
+  "plan_id": "PL-20260318120000",
+  "notification_id": "NTF-20260318120000123456"
 }
 ```
 
@@ -527,14 +542,15 @@ Any incoming `analysis_id`, `status`, `source`, or `created_at` values are not u
   - `records/{record_id}.task_list`
   - `cases/{case_id}.current_treatment_plan`
   - `cases/{case_id}.current_plan_id`
+- Creates a shared nurse notification in `all_nurse/{notification_id}`
 - Updates:
   - `records/{record_id}.analysis`
-  - `records/{record_id}.status = DOCTOR_REVIEW`
+  - `records/{record_id}.status = PLAN_ISSUED`
   - `records/{record_id}.timestamps.doctor_review_at`
   - `cases/{case_id}.current_analysis`
   - `cases/{case_id}.current_analysis_id`
   - `cases/{case_id}.current_record_id`
-  - `cases/{case_id}.status = DOCTOR_REVIEW`
+  - `cases/{case_id}.status = PLAN_ISSUED`
 
 **Response 200**
 
@@ -547,9 +563,109 @@ Any incoming `analysis_id`, `status`, `source`, or `created_at` values are not u
   "case_id": "CS-...",
   "record_id": "REC-...",
   "source": "Doctor",
-  "sinbad_copied": true
+  "sinbad_copied": true,
+  "notification_id": "NTF-20260318123000123456"
 }
 ```
+
+### 5.11 `GET /doctor-notifications`
+
+**Purpose**
+
+Returns the shared doctor notification feed from Firestore `all_doctor`.
+
+**Query params**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `limit` | integer | No | Default `50`, min `1`, max `200` |
+
+**Response 200**
+
+```json
+{
+  "status": "success",
+  "notifications": [
+    {
+      "notification_id": "NTF-20260318120000123456",
+      "type": "CASE_SENT_TO_DOCTOR",
+      "case_id": "CS-260318-00001",
+      "record_id": "REC-00002",
+      "patient_id": "PT-2603-00001",
+      "patient_name": "John Doe",
+      "urgency": "URGENT",
+      "status": "UNREAD",
+      "title": "New case for review",
+      "message": "Case CS-260318-00001 is ready for doctor review.",
+      "created_at": "2026-03-18T12:00:00.123456+00:00",
+      "read_at": null
+    }
+  ]
+}
+```
+
+### 5.12 `GET /nurse-notifications`
+
+**Purpose**
+
+Returns the shared nurse notification feed from Firestore `all_nurse`.
+
+**Query params**
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `limit` | integer | No | Default `50`, min `1`, max `200` |
+
+**Response 200**
+
+```json
+{
+  "status": "success",
+  "notifications": [
+    {
+      "notification_id": "NTF-20260318123000123456",
+      "type": "PLAN_ISSUED_TO_NURSE",
+      "case_id": "CS-260318-00001",
+      "record_id": "REC-00002",
+      "patient_id": "PT-2603-00001",
+      "patient_name": "John Doe",
+      "urgency": "URGENT",
+      "created_by_nurse": "NURSE-001",
+      "status": "UNREAD",
+      "title": "Plan ready",
+      "message": "Doctor review is complete for case CS-260318-00001.",
+      "created_at": "2026-03-18T12:30:00.123456+00:00",
+      "read_at": null
+    }
+  ]
+}
+```
+
+### Notification Flow
+
+- `POST /send-to-doctor` writes a shared doctor notification to `all_doctor`
+- `POST /doctor-review` writes a shared nurse notification to `all_nurse`
+- Both feeds are public shared queues for now, not user-specific inboxes
+- Frontend reads them with `GET /doctor-notifications` and `GET /nurse-notifications`
+
+### Notification Delivery Options
+
+| Option | How it works | Pros | Cons | Fit for current design |
+|---|---|---|---|---|
+| API polling | Mobile app calls notification APIs periodically | Simple, uses current REST backend, easy to debug | Delayed updates, extra battery/network use, more backend load, weak for backgrounded app | Current implementation |
+| Firestore realtime listener | Mobile app listens directly to `all_doctor` or `all_nurse` | Near real-time, no polling loop, good while app is open | Requires Firebase client integration and careful security rules, weak for terminated app alerts | Good next step for live in-app bell updates |
+| FCM push | Backend sends push notifications to device tokens | Best for background/closed app alerts, native OS notifications, efficient delivery | Requires token management, more setup, should not be sole source of truth | Good add-on when true push is needed |
+| Firestore + FCM | Store notification in Firestore and also send FCM | Best overall design, reliable history plus instant alerting, app can recover missed pushes | More moving parts and implementation work | Recommended long term |
+| WebSocket / SSE | Mobile app keeps a live connection to backend | Real-time without polling | More infra complexity, weaker mobile background behavior, more connection handling work | Usually not worth it here |
+
+### Current Conclusion
+
+| Question | Conclusion |
+|---|---|
+| What are we doing now? | API polling against `GET /doctor-notifications` and `GET /nurse-notifications` |
+| Why is it acceptable now? | It is the simplest option and matches the current shared broadcast model |
+| Main limitation | Bell state is based on client-side last-seen tracking, not server-side per-user unread state |
+| Recommended upgrade path | Firestore realtime for in-app updates, then add FCM if background push is needed |
 
 **Errors**
 
