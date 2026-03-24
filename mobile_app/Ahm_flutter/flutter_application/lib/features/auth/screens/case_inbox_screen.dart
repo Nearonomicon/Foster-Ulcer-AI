@@ -163,27 +163,6 @@ class _CaseInboxScreenState extends State<CaseInboxScreen> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    "9:41",
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                  ),
-                  Row(
-                    children: const [
-                      Icon(Icons.signal_cellular_alt, size: 18),
-                      SizedBox(width: 6),
-                      Icon(Icons.wifi, size: 18),
-                      SizedBox(width: 6),
-                      Icon(Icons.battery_full, size: 18),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            Padding(
               padding: const EdgeInsets.fromLTRB(18, 2, 18, 10),
               child: Row(
                 children: [

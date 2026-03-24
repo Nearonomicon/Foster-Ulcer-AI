@@ -186,6 +186,39 @@ class CaseService {
     );
   }
 
+  Future<List<Map<String, dynamic>>> listDoctorNotifications({
+    int limit = 50,
+  }) async {
+    final uri = Uri.parse('$_baseUrl/doctor-notifications?limit=$limit');
+
+    final response = await http.get(
+      uri,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode != 200) {
+      throw Exception(
+        'Failed to load notifications (${response.statusCode}): ${response.body}',
+      );
+    }
+
+    final decoded = jsonDecode(response.body);
+    if (decoded is! Map) {
+      throw Exception('Invalid response format for doctor-notifications');
+    }
+
+    final decodedMap = Map<String, dynamic>.from(decoded);
+    final notifications =
+        (decodedMap['notifications'] as List?) ?? const <dynamic>[];
+
+    return notifications
+        .where((item) => item is Map)
+        .map((item) => Map<String, dynamic>.from(item as Map))
+        .toList();
+  }
+
   Future<Map<String, dynamic>> saveTreatmentPlanDraft({
     required String caseId,
     required String doctorId,

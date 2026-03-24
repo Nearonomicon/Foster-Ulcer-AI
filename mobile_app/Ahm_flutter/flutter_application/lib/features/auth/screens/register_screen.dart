@@ -59,18 +59,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         onPressed: () => Navigator.pop(context),
                         icon: const Icon(Icons.arrow_back_ios_new, size: 18),
                       ),
-                      const Spacer(),
-                      const Text("9:41", style: TextStyle(fontWeight: FontWeight.w700)),
-                      const Spacer(),
-                      Row(
-                        children: const [
-                          Icon(Icons.signal_cellular_alt, size: 18),
-                          SizedBox(width: 6),
-                          Icon(Icons.wifi, size: 18),
-                          SizedBox(width: 6),
-                          Icon(Icons.battery_full, size: 18),
-                        ],
-                      ),
                     ],
                   ),
                 ),

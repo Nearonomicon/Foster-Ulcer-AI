@@ -27,6 +27,7 @@ from schemas import (
     CaseImage,
 )
 from services.firebase import db
+from services.notifications import create_doctor_review_notification, create_nurse_plan_issued_notification
 from utils import _model_to_dict
 
 
@@ -727,8 +728,12 @@ async def send_to_doctor(payload: WoundCaseRecordUpdate):
 
         case_ref = db.collection("cases").document(case_id)
         record_ref = case_ref.collection("records").document(record_id)
+        case_snapshot = case_ref.get()
+        case_data = case_snapshot.to_dict() if case_snapshot.exists else {}
         existing_record = record_ref.get()
         existing_record_data = existing_record.to_dict() if existing_record.exists else {}
+        assigned_doctor = payload.assigned_doctor or case_data.get("assigned_doctor")
+        patient_id = payload.patient_id or case_data.get("patient_id")
 
         analysis_id = f"AN-{operation_time.strftime('%Y%m%d%H%M%S')}"
         plan_id = f"PL-{operation_time.strftime('%Y%m%d%H%M%S')}"
@@ -844,6 +849,25 @@ async def send_to_doctor(payload: WoundCaseRecordUpdate):
 
         batch.commit()
 
+        notification_id = None
+        try:
+            patient_name = None
+            if patient_id:
+                patient_snapshot = db.collection("patients").document(patient_id).get()
+                if patient_snapshot.exists:
+                    patient_profile = patient_snapshot.to_dict() or {}
+                    patient_name = patient_profile.get("patient_name")
+
+            notification_id = create_doctor_review_notification(
+                case_id=case_id,
+                record_id=record_id,
+                patient_id=patient_id,
+                patient_name=patient_name,
+                urgency=payload.urgency.value if payload.urgency else None,
+            )
+        except Exception as notification_error:
+            print(f"Warning: failed to create doctor notification for case {case_id}: {notification_error}")
+
         return {
             "status": "success",
             "message": "Case sent for doctor review",
@@ -851,6 +875,7 @@ async def send_to_doctor(payload: WoundCaseRecordUpdate):
             "record_id": record_id,
             "analysis_id": analysis_id,
             "plan_id": plan_id,
+            "notification_id": notification_id,
         }
 
     except Exception as e:
@@ -1046,6 +1071,31 @@ async def doctor_review(payload: dict):
                 }, merge=True)
         batch.commit()
 
+        nurse_notification_id = None
+        try:
+            patient_id = case_data.get("patient_id") or existing_record_data.get("patient_id")
+            patient_name = None
+            if patient_id:
+                patient_snapshot = db.collection("patients").document(patient_id).get()
+                if patient_snapshot.exists:
+                    patient_profile = patient_snapshot.to_dict() or {}
+                    patient_name = patient_profile.get("patient_name")
+
+            urgency_value = case_data.get("urgency")
+            if hasattr(urgency_value, "value"):
+                urgency_value = urgency_value.value
+
+            nurse_notification_id = create_nurse_plan_issued_notification(
+                case_id=case_id,
+                record_id=record_id,
+                patient_id=patient_id,
+                patient_name=patient_name,
+                urgency=urgency_value,
+                created_by_nurse=case_data.get("created_by_nurse") or existing_record_data.get("created_by_nurse"),
+            )
+        except Exception as notification_error:
+            print(f"Warning: failed to create nurse notification for case {case_id}: {notification_error}")
+
         return {
             "status": "success",
             "message": "Doctor review saved",
@@ -1055,6 +1105,7 @@ async def doctor_review(payload: dict):
             "record_id": record_id,
             "source": "Doctor",
             "sinbad_copied": previous_sinbad is not None,
+            "notification_id": nurse_notification_id,
         }
     except HTTPException:
         raise

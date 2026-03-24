@@ -29,11 +29,21 @@ extension _CasesPage on _MainNavigationScreenState {
         Padding(
           padding: const EdgeInsets.all(24.0),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text(
-              "Patient Cases",
-              style: GoogleFonts.plusJakartaSans(fontSize: 24, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
+            Row(
+              children: [
+                Expanded(
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(
+                      "Patient Cases",
+                      style: GoogleFonts.plusJakartaSans(fontSize: 24, fontWeight: FontWeight.bold, color: const Color(0xFF1E293B)),
+                    ),
+                    const Text("Raipur Unit 4 progress", style: TextStyle(fontSize: 14, color: Colors.grey)),
+                  ]),
+                ),
+                const SizedBox(width: 12),
+                _buildNotificationButton(),
+              ],
             ),
-            const Text("Raipur Unit 4 progress", style: TextStyle(fontSize: 14, color: Colors.grey)),
             const SizedBox(height: 16),
             TextField(
               onChanged: (v) => setState(() => _casesSearchQuery = v),

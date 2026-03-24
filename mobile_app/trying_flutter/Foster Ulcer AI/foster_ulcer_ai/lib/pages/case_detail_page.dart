@@ -189,6 +189,8 @@ extension _CaseDetailPage on _MainNavigationScreenState {
                 ],
               ),
               const Spacer(),
+              _buildNotificationButton(),
+              const SizedBox(width: 8),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [

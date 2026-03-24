@@ -226,7 +226,7 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
           Positioned(
             top: 56,
-            right: 24,
+            left: 24,
             child: _LanguageChip(
               code: localeCtrl.code,
               isDark: isDark,

@@ -130,10 +130,7 @@ extension _TasksPage on _MainNavigationScreenState {
                   style: const TextStyle(fontSize: 13, color: Colors.grey),
                 ),
               ]),
-              Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                const Text("Today's Date", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.blueGrey, letterSpacing: 1)),
-                Text(fmtDateLong(today), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF334155))),
-              ]),
+              _buildNotificationButton(),
             ],
           ),
         ),

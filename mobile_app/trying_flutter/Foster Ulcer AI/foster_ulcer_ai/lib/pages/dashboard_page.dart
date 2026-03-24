@@ -21,10 +21,10 @@ extension _DashboardPage on _MainNavigationScreenState {
               padding: EdgeInsets.only(bottom: 16),
               child: LinearProgressIndicator(color: Color(0xFF0D9488), minHeight: 2),
             ),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(
                   "Hello, Nurse",
                   style: GoogleFonts.plusJakartaSans(
@@ -35,7 +35,13 @@ extension _DashboardPage on _MainNavigationScreenState {
                 ),
                 const Text("Raipur Rural Clinic • Unit 4", style: TextStyle(fontSize: 14, color: Colors.grey)),
               ]),
-              _buildProfileAvatar(),
+              Row(
+                children: [
+                  _buildNotificationButton(),
+                  const SizedBox(width: 12),
+                  _buildProfileAvatar(),
+                ],
+              ),
             ],
           ),
           const SizedBox(height: 24),

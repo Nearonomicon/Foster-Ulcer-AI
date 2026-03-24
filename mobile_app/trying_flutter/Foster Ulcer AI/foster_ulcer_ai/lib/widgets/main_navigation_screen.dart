@@ -269,6 +269,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int? _dashboardTotalActivePatient;
   int? _dashboardTotalPatient;
   List<Map<String, dynamic>> _dashboardUpcomingPlan = [];
+  bool _notificationsLoading = false;
+  List<Map<String, dynamic>> _notificationsItems = [];
     // =========================
   // Task Detail (NEW)
   // =========================
@@ -431,6 +433,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   final Uri _createAppointmentUri = Uri.parse("$_baseUrl/create_appointment");
   final Uri _requestCloseUri = Uri.parse("$_baseUrl/request_close");
   final Uri _loadDashboardUri = Uri.parse("$_baseUrl/load-dashboard");
+  final Uri _nurseNotificationsUri = Uri.parse("$_baseUrl/nurse-notifications");
   final Uri _caseDetailUri = Uri.parse("$_baseUrl/case_detail");
   final Uri _patientListUri = Uri.parse("$_baseUrl/patients_list");
   final Uri _docsUri = Uri.parse("$_baseUrl/docs");
@@ -1453,6 +1456,154 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     }
   }
 
+  Future<void> _fetchNurseNotifications({int limit = 50}) async {
+    if (_notificationsLoading) return;
+    setState(() => _notificationsLoading = true);
+    try {
+      final uri = _nurseNotificationsUri.replace(
+        queryParameters: {'limit': limit.toString()},
+      );
+      final resp = await http.get(uri).timeout(const Duration(seconds: 30));
+      if (resp.statusCode != 200) {
+        throw Exception("nurse-notifications failed (${resp.statusCode}): ${resp.body}");
+      }
+      final decoded = jsonDecode(resp.body);
+      if (decoded is! Map) {
+        throw Exception("nurse-notifications: unexpected response");
+      }
+      final items = decoded['notifications'] is List
+          ? List<Map<String, dynamic>>.from(
+              (decoded['notifications'] as List)
+                  .whereType<Map>()
+                  .map((e) => Map<String, dynamic>.from(e)),
+            )
+          : <Map<String, dynamic>>[];
+      if (mounted) {
+        setState(() => _notificationsItems = items);
+      }
+    } catch (e) {
+      debugPrint("nurse-notifications error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Failed to load notifications: $e"), backgroundColor: Colors.redAccent),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _notificationsLoading = false);
+    }
+  }
+
+  String _formatNotificationTime(dynamic raw) {
+    if (raw == null || raw.toString().isEmpty) return "";
+    try {
+      final dt = DateTime.parse(raw.toString()).toLocal();
+      final yy = (dt.year % 100).toString().padLeft(2, '0');
+      final mo = dt.month.toString().padLeft(2, '0');
+      final dd = dt.day.toString().padLeft(2, '0');
+      final hh = dt.hour.toString().padLeft(2, '0');
+      final mm = dt.minute.toString().padLeft(2, '0');
+      return "$yy$mo$dd $hh:$mm";
+    } catch (_) {
+      return raw.toString();
+    }
+  }
+
+  Future<void> _openNotificationsPanel() async {
+    await _fetchNurseNotifications();
+    if (!mounted) return;
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: SizedBox(
+            height: MediaQuery.of(context).size.height * 0.72,
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                  child: Row(
+                    children: [
+                      const Text(
+                        "Notifications",
+                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(LucideIcons.x, size: 18),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1, color: Color(0xFFE2E8F0)),
+                Expanded(
+                  child: _notificationsLoading
+                      ? const Center(child: CircularProgressIndicator(color: Color(0xFF0D9488)))
+                      : _notificationsItems.isEmpty
+                          ? const Center(
+                              child: Text(
+                                "No notifications.",
+                                style: TextStyle(fontSize: 13, color: Colors.blueGrey),
+                              ),
+                            )
+                          : ListView.separated(
+                              padding: const EdgeInsets.all(20),
+                              itemCount: _notificationsItems.length,
+                              separatorBuilder: (_, __) => const SizedBox(height: 12),
+                              itemBuilder: (context, index) {
+                                final item = _notificationsItems[index];
+                                final title = (item['title'] ?? item['message'] ?? item['notification_text'] ?? 'Notification').toString();
+                                final body = (item['body'] ?? item['detail'] ?? item['description'] ?? '').toString();
+                                final when = _formatNotificationTime(
+                                  item['created_at'] ?? item['timestamp'] ?? item['sent_at'] ?? item['notification_at'],
+                                );
+                                return Container(
+                                  padding: const EdgeInsets.all(14),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF8FAFC),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                                  ),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        title,
+                                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800, color: Color(0xFF1E293B)),
+                                      ),
+                                      if (body.isNotEmpty) ...[
+                                        const SizedBox(height: 6),
+                                        Text(
+                                          body,
+                                          style: const TextStyle(fontSize: 12, color: Colors.blueGrey, height: 1.35),
+                                        ),
+                                      ],
+                                      if (when.isNotEmpty) ...[
+                                        const SizedBox(height: 8),
+                                        Text(
+                                          when,
+                                          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Color(0xFF64748B)),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   void _prefillIntakeFromSelectedPatient(Map<String, dynamic> p) {
     String? formatDob(dynamic v) {
       if (v == null) return null;
@@ -1900,9 +2051,75 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           ],
         ),
       );
-  Widget _buildHeader(String title, {required VoidCallback onBack}) => Container(padding: const EdgeInsets.all(16), decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFFF1F5F9)))), child: Row(children: [IconButton(icon: const Icon(LucideIcons.arrowLeft), onPressed: onBack), const SizedBox(width: 8), Expanded(child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)))]));
+  Widget _buildHeader(String title, {required VoidCallback onBack}) => Container(
+        padding: const EdgeInsets.all(16),
+        decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: Color(0xFFF1F5F9)))),
+        child: Row(
+          children: [
+            IconButton(icon: const Icon(LucideIcons.arrowLeft), onPressed: onBack),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+            const SizedBox(width: 8),
+            _buildNotificationButton(),
+          ],
+        ),
+      );
   Widget _buildSectionTitle(IconData icon, String title) => Row(children: [Icon(icon, size: 20, color: const Color(0xFF0D9488)), const SizedBox(width: 10), Expanded(child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF0D9488))))]);
   Widget _buildFixedBottomButton(String label, IconData icon, VoidCallback onPressed) => Container(padding: const EdgeInsets.all(24), decoration: const BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: Color(0xFFF1F5F9)))), child: ElevatedButton.icon(onPressed: onPressed, icon: Icon(icon), label: Text(label, style: const TextStyle(fontWeight: FontWeight.bold)), style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0D9488), foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 60), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)))));
+  Widget _buildNotificationButton() => Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: _openNotificationsPanel,
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.96),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: const Color(0xFFE2E8F0)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Stack(
+              children: [
+                const Center(
+                  child: Icon(
+                    LucideIcons.bell,
+                    size: 18,
+                    color: Color(0xFF334155),
+                  ),
+                ),
+                if (_notificationsItems.isNotEmpty)
+                  Positioned(
+                    top: 8,
+                    right: 9,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFEF4444),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ),
+      );
 
   Widget _buildPatientListTile(Map<String, dynamic> p, {VoidCallback? onTap}) {
     final urgencyColor = _urgencyColor(p['urgency']?.toString());

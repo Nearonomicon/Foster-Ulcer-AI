@@ -376,7 +376,6 @@ class _AiAnalysisScreenState extends State<AiAnalysisScreen> {
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
-            SliverToBoxAdapter(child: _StatusBarMimic(isDark: isDark)),
             SliverToBoxAdapter(
               child: _TopBar(
                 border: border,
@@ -1123,42 +1122,6 @@ extension on _AiAnalysisScreenState {
 }
 
 /* ---------------- widgets ---------------- */
-
-class _StatusBarMimic extends StatelessWidget {
-  const _StatusBarMimic({required this.isDark});
-  final bool isDark;
-
-  @override
-  Widget build(BuildContext context) {
-    final fg = isDark ? Colors.white : const Color(0xFF0F172A);
-    return Container(
-      padding: const EdgeInsets.fromLTRB(18, 10, 18, 6),
-      color: Colors.transparent,
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            "9:41",
-            style: TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: 13,
-              color: fg,
-            ),
-          ),
-          Row(
-            children: [
-              Icon(Icons.signal_cellular_alt, size: 18, color: fg),
-              const SizedBox(width: 6),
-              Icon(Icons.wifi, size: 18, color: fg),
-              const SizedBox(width: 6),
-              Icon(Icons.battery_full, size: 18, color: fg),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
 
 class _TopBar extends StatelessWidget {
   const _TopBar({required this.border, required this.onBack});

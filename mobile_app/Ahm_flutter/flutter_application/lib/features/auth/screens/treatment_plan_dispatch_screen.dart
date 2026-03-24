@@ -468,7 +468,6 @@ class _TreatmentPlanDispatchScreenState
       body: SafeArea(
         child: CustomScrollView(
           slivers: [
-            SliverToBoxAdapter(child: _StatusBarMimic(isDark: isDark)),
             SliverToBoxAdapter(
               child: _TopBar(
                 isDark: isDark,
@@ -913,41 +912,6 @@ String _buildWoundSummary(Map<String, dynamic> nurse) {
 }
 
 /* ---------------- small widgets ---------------- */
-
-class _StatusBarMimic extends StatelessWidget {
-  const _StatusBarMimic({required this.isDark});
-  final bool isDark;
-
-  @override
-  Widget build(BuildContext context) {
-    final fg = isDark ? Colors.white : const Color(0xFF0F172A);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(22, 10, 22, 0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            "9:41",
-            style: TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: 13,
-              color: fg,
-            ),
-          ),
-          Row(
-            children: [
-              Icon(Icons.signal_cellular_alt, size: 18, color: fg),
-              const SizedBox(width: 6),
-              Icon(Icons.wifi, size: 18, color: fg),
-              const SizedBox(width: 6),
-              Icon(Icons.battery_full, size: 18, color: fg),
-            ],
-          )
-        ],
-      ),
-    );
-  }
-}
 
 class _TopBar extends StatelessWidget {
   const _TopBar({
