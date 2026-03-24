@@ -647,10 +647,25 @@ async def list_cases(payload: dict):
         docs = query.stream()
 
         cases = []
+        patient_ids = set()
         for doc in docs:
             data = doc.to_dict() or {}
             data["case_id"] = data.get("case_id") or doc.id
+            if data.get("patient_id"):
+                patient_ids.add(data["patient_id"])
             cases.append(data)
+
+        patient_map = {}
+        if patient_ids:
+            refs = [db.collection("patients").document(pid) for pid in patient_ids]
+            for snap in db.get_all(refs):
+                if snap.exists:
+                    patient_map[snap.id] = snap.to_dict() or {}
+
+        for case in cases:
+            patient_data = patient_map.get(case.get("patient_id"), {})
+            case["patient_name"] = patient_data.get("patient_name")
+            case["photo_url"] = patient_data.get("photo_url")
 
         print(f"[cases_list] returned_cases={len(cases)}")
         return {"status": "success", "cases": cases}

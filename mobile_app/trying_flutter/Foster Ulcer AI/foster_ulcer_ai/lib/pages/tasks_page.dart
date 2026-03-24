@@ -221,7 +221,7 @@ extension _TasksPage on _MainNavigationScreenState {
             },
             child: _tasksViewMode == 'plan'
                 ? ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                    padding: const EdgeInsets.fromLTRB(32, 8, 24, 8),
                     physics: const AlwaysScrollableScrollPhysics(),
                     itemCount: filteredPlanCases.length,
                     itemBuilder: (context, i) {
@@ -275,7 +275,7 @@ extension _TasksPage on _MainNavigationScreenState {
                                               style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1D4ED8)),
                                             ),
                                           ),
-                                          const SizedBox(width: 1),
+                                          const SizedBox(width: 15),
                                           Expanded(
                                             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                                               Text(c['patient_name'].toString(), style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
@@ -290,7 +290,7 @@ extension _TasksPage on _MainNavigationScreenState {
                                             ),
                                             child: Text(
                                               status,
-                                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: _statusFgColor(status)),
+                                              style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: _statusFgColor(status)),
                                             ),
                                           ),
                                         ],
@@ -298,7 +298,7 @@ extension _TasksPage on _MainNavigationScreenState {
                                     ),
                                   ),
                                 ),
-                                const SizedBox(width: 8),
+                                const SizedBox(width: 2),
                                 IconButton(
                                   icon: Icon(isExpanded ? LucideIcons.chevronUp : LucideIcons.chevronDown, size: 18, color: Colors.blueGrey),
                                   onPressed: () {
@@ -336,7 +336,7 @@ extension _TasksPage on _MainNavigationScreenState {
                   },
                 )
                 : ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+                    padding: const EdgeInsets.fromLTRB(32, 8, 24, 8),
                     physics: const AlwaysScrollableScrollPhysics(),
                     itemCount: allTasks.length,
                     itemBuilder: (context, i) {

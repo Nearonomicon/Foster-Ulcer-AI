@@ -5,15 +5,25 @@ extension _CasesPage on _MainNavigationScreenState {
     if (!_casesFetchedOnce && !_casesLoading) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _fetchCasesList());
     }
-    final q = _patientSearchQuery.trim().toLowerCase();
-    final filtered = q.isEmpty
-        ? _caseItems
-        : _caseItems.where((c) {
-            final id = (c['case_id'] ?? c['id'] ?? '').toString().toLowerCase();
-            final pid = (c['patient_id'] ?? '').toString().toLowerCase();
-            final status = (c['status'] ?? '').toString().toLowerCase();
-            return id.contains(q) || pid.contains(q) || status.contains(q);
-          }).toList();
+
+    final q = _casesSearchQuery.trim().toLowerCase();
+    final statusFilter = _casesStatusFilter.toLowerCase();
+    final urgencyFilter = _casesUrgencyFilter.toLowerCase();
+
+    final filtered = _caseItems.where((c) {
+      final id = (c['case_id'] ?? c['id'] ?? '').toString().toLowerCase();
+      final pid = (c['patient_id'] ?? '').toString().toLowerCase();
+      final patientName = (c['patient_name'] ?? c['name'] ?? '').toString().toLowerCase();
+      final status = (c['status'] ?? '').toString().toLowerCase();
+      final urgency = (c['urgency'] ?? '').toString().toLowerCase();
+
+      final matchesSearch = q.isEmpty || id.contains(q) || pid.contains(q) || patientName.contains(q) || status.contains(q);
+      final matchesStatus = statusFilter == 'all' || status == statusFilter;
+      final matchesUrgency = urgencyFilter == 'all' || urgency == urgencyFilter;
+
+      return matchesSearch && matchesStatus && matchesUrgency;
+    }).toList();
+
     return Column(
       children: [
         Padding(
@@ -25,26 +35,66 @@ extension _CasesPage on _MainNavigationScreenState {
             ),
             const Text("Raipur Unit 4 progress", style: TextStyle(fontSize: 14, color: Colors.grey)),
             const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF8FAFC),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFF1F5F9)),
+            TextField(
+              onChanged: (v) => setState(() => _casesSearchQuery = v),
+              decoration: InputDecoration(
+                hintText: "Search by Case ID, Patient ID, Patient Name, Status",
+                prefixIcon: const Icon(LucideIcons.search, size: 18, color: Colors.blueGrey),
+                suffixIcon: _casesSearchQuery.isEmpty
+                    ? null
+                    : IconButton(
+                        icon: const Icon(LucideIcons.x, size: 16, color: Colors.blueGrey),
+                        onPressed: () => setState(() => _casesSearchQuery = ''),
+                      ),
+                filled: true,
+                fillColor: Colors.white,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(color: Color(0xFF0D9488), width: 1.2),
+                ),
               ),
-              child: Row(
-                children: [
-                  Icon(LucideIcons.search, color: TWColors.slate.shade400, size: 18),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: TextField(
-                      controller: _patientSearchCtrl,
-                      decoration: const InputDecoration(hintText: "Search by Case ID, Patient ID, Status", border: InputBorder.none),
-                      onChanged: (v) => setState(() => _patientSearchQuery = v),
-                    ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildCasesFilterDropdown(
+                    label: "Status",
+                    value: _casesStatusFilter,
+                    items: const [
+                      "ALL",
+                      "CREATION",
+                      "ANALYZING",
+                      "DOCTOR_REVIEW",
+                      "DRAFT",
+                      "PLAN_ISSUED",
+                      "SENT",
+                      "APPOINTMENT",
+                      "REQUEST_CLOSE",
+                      "COMPLETED",
+                    ],
+                    onChanged: (value) => setState(() => _casesStatusFilter = value),
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildCasesFilterDropdown(
+                    label: "Urgency",
+                    value: _casesUrgencyFilter,
+                    items: const ["ALL", "URGENT", "MEDIUM", "ROUTINE"],
+                    onChanged: (value) => setState(() => _casesUrgencyFilter = value),
+                  ),
+                ),
+              ],
             ),
           ]),
         ),
@@ -68,22 +118,39 @@ extension _CasesPage on _MainNavigationScreenState {
                     children: const [Center(child: Padding(padding: EdgeInsets.only(top: 80), child: Text("No cases found.")))],
                   );
                 }
+                if (filtered.isEmpty) {
+                  return ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    children: const [Center(child: Padding(padding: EdgeInsets.only(top: 80), child: Text("No cases match the current filters.")))],
+                  );
+                }
                 return ListView.builder(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   physics: const AlwaysScrollableScrollPhysics(),
                   itemCount: filtered.length,
-                  itemBuilder: (context, index) => _buildPatientListTile(
-                    filtered[index],
-                    onTap: () async {
-                      final caseId = filtered[index]['case_id'] ?? filtered[index]['id'];
-                      if (caseId == null) return;
-                      _previousStep = 'dashboard';
-                      _previousTab = _activeTab;
-                      final ok = await _fetchCaseDetail(caseId.toString());
-                      if (!ok || !mounted) return;
-                      _navigateTo('case_detail', patient: filtered[index]);
-                    },
-                  ),
+                  itemBuilder: (context, index) {
+                    final item = filtered[index];
+                    final currentImage = item['current_image'] is Map
+                        ? Map<String, dynamic>.from(item['current_image'])
+                        : <String, dynamic>{};
+                    final displayItem = Map<String, dynamic>.from(item);
+                    final currentImageUrl = currentImage['image_folder_url']?.toString();
+                    if (currentImageUrl != null && currentImageUrl.isNotEmpty) {
+                      displayItem['image_url'] = currentImageUrl;
+                    }
+                    return _buildPatientListTile(
+                      displayItem,
+                      onTap: () async {
+                        final caseId = item['case_id'] ?? item['id'];
+                        if (caseId == null) return;
+                        _previousStep = 'dashboard';
+                        _previousTab = _activeTab;
+                        final ok = await _fetchCaseDetail(caseId.toString());
+                        if (!ok || !mounted) return;
+                        _navigateTo('case_detail', patient: item);
+                      },
+                    );
+                  },
                 );
               },
             ),
@@ -134,6 +201,42 @@ extension _CasesPage on _MainNavigationScreenState {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _buildCasesFilterDropdown({
+    required String label,
+    required String value,
+    required List<String> items,
+    required ValueChanged<String> onChanged,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: DropdownButtonHideUnderline(
+        child: DropdownButton<String>(
+          value: value,
+          isExpanded: true,
+          icon: const Icon(LucideIcons.chevronDown, size: 16, color: Colors.blueGrey),
+          items: items
+              .map((e) => DropdownMenuItem<String>(
+                    value: e,
+                    child: Text(
+                      "$label: $e",
+                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
+                    ),
+                  ))
+              .toList(),
+          onChanged: (v) {
+            if (v == null) return;
+            onChanged(v);
+          },
+        ),
+      ),
     );
   }
 }

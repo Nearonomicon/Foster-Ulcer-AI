@@ -279,6 +279,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   String _tasksSearchQuery = '';
   String _tasksTreatmentStatus = 'ALL';
   String _tasksTaskStatus = 'ALL';
+  String _casesSearchQuery = '';
+  String _casesStatusFilter = 'ALL';
+  String _casesUrgencyFilter = 'ALL';
   XFile? _taskEvidencePhotoTemp; // temp holder (optional)
   Map<String, dynamic>? _selectedTask;
   Map<String, dynamic>? _selectedTaskPatient;
@@ -411,8 +414,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
-  static const String _baseUrl = "http://10.0.2.2:8080";
-  // static const String _baseUrl = "https://foster-ulcer-ai-backend-429230748709.asia-southeast3.run.app";
+  // static const String _baseUrl = "http://10.0.2.2:8080";
+  static const String _baseUrl = "https://foster-ulcer-ai-backend-429230748709.asia-southeast3.run.app";
   final Uri _fillinUri = Uri.parse("$_baseUrl/analyze-fillin");
   final Uri _analyzeWoundUri = Uri.parse("$_baseUrl/analyze-wound");
   final Uri _analyzeHealingUri = Uri.parse("$_baseUrl/analyze-healing");

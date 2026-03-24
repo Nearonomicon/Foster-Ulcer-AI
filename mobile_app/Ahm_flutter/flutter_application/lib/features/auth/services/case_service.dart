@@ -4,8 +4,8 @@ import 'package:http/http.dart' as http;
 
 class CaseService {
   static const String _baseUrl =
-  "http://10.0.2.2:8080"; // for local testing 
-      // 'https://foster-ulcer-ai-backend-429230748709.asia-southeast3.run.app';
+  // "http://10.0.2.2:8080"; // for local testing 
+      'https://foster-ulcer-ai-backend-429230748709.asia-southeast3.run.app';
   static const String _apiBaseUrl = '$_baseUrl/api/v1';
 
   Future<Map<String, dynamic>> getCasesByStatus(String status) async {

@@ -42,13 +42,16 @@ async def list_tasks(payload: dict | None = None):
             if data.get("patient_id"):
                 patient_ids.add(data["patient_id"])
         #for each patient_id map list of patient_name
-        patient_name_map = {}
+        patient_info_map = {}
         if patient_ids:
             refs = [db.collection("patients").document(pid) for pid in patient_ids]
             for snap in db.get_all(refs):
                 if snap.exists:
                     pdata = snap.to_dict() or {}
-                    patient_name_map[snap.id] = pdata.get("patient_name")
+                    patient_info_map[snap.id] = {
+                        "patient_name": pdata.get("patient_name"),
+                        "photo_url": pdata.get("photo_url"),
+                    }
         #For each case get the information of current_treatment_plan 
         tasks = []
         for case in cases:
@@ -57,11 +60,12 @@ async def list_tasks(payload: dict | None = None):
             if not isinstance(task_list, list) or not task_list:
                 continue
             patient_id = case.get("patient_id")
-            patient_name = patient_name_map.get(patient_id)
+            patient_info = patient_info_map.get(patient_id, {})
             tasks.append({
                 "case_id": case.get("case_id"),
                 "patient_id": patient_id,
-                "patient_name": patient_name,
+                "patient_name": patient_info.get("patient_name"),
+                "photo_url": patient_info.get("photo_url"),
                 "current_record_id": case.get("current_record_id"),
                 "current_plan_id": case.get("current_plan_id"),
                 "current_treatment": current_treatment,
