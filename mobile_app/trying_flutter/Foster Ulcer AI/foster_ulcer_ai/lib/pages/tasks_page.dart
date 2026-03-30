@@ -1,6 +1,12 @@
 part of '../widgets/main_navigation_screen.dart';
 
 extension _TasksPage on _MainNavigationScreenState {
+  static const List<String> _treatmentStatusOptions = [
+    'DRAFT',
+    'ACTIVE',
+    'COMPLETED',
+  ];
+
   Widget _buildTasksTab() {
     if (!_tasksFetchedOnce && !_tasksLoading) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _fetchTasksList());
@@ -73,7 +79,7 @@ extension _TasksPage on _MainNavigationScreenState {
 
     final today = DateTime.now();
     final searchQuery = _tasksSearchQuery.trim().toLowerCase();
-    final treatmentFilter = _tasksTreatmentStatus.toLowerCase();
+    final treatmentFilters = _tasksTreatmentStatuses.map((status) => status.toLowerCase()).toSet();
     final taskStatusFilter = _tasksTaskStatus.toLowerCase();
     final filteredPlanCases = planCases.where((c) {
       final plan = c['plan'] as Map<String, dynamic>;
@@ -81,7 +87,7 @@ extension _TasksPage on _MainNavigationScreenState {
       final caseId = (c['case_id'] ?? '').toString().toLowerCase();
       final patientName = (c['patient_name'] ?? '').toString().toLowerCase();
       final matchesSearch = searchQuery.isEmpty || patientName.contains(searchQuery) || caseId.contains(searchQuery);
-      final matchesTreatment = treatmentFilter == 'all' || status == treatmentFilter;
+      final matchesTreatment = treatmentFilters.contains(status);
 
       if (!matchesSearch || !matchesTreatment) return false;
 
@@ -270,11 +276,15 @@ extension _TasksPage on _MainNavigationScreenState {
               Row(
                 children: [
                   Expanded(
-                    child: _buildFilterDropdown(
+                    child: _buildTreatmentStatusMultiSelect(
                       label: "Treatment Status",
-                      value: _tasksTreatmentStatus,
-                      items: const ["ALL", "DRAFT", "ACTIVE", "COMPLETED"],
-                      onChanged: (value) => setState(() => _tasksTreatmentStatus = value),
+                      selectedItems: _tasksTreatmentStatuses,
+                      items: _treatmentStatusOptions,
+                      onChanged: (values) => setState(() {
+                        _tasksTreatmentStatuses
+                          ..clear()
+                          ..addAll(values);
+                      }),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -412,6 +422,7 @@ extension _TasksPage on _MainNavigationScreenState {
                               child: Column(
                                 children: tasks.map((t) {
                                   final text = t['task_text']?.toString() ?? "-";
+                                  final taskStatus = (t['status'] ?? 'PENDING').toString();
                                   final due = fmtDueDayLabel(t['task_due']?.toString());
                                   return Container(
                                     margin: const EdgeInsets.only(top: 8),
@@ -420,7 +431,27 @@ extension _TasksPage on _MainNavigationScreenState {
                                     child: Row(
                                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                       children: [
-                                        Expanded(child: Text(text, style: const TextStyle(fontSize: 12, color: Color(0xFF334155)))),
+                                        Expanded(
+                                          child: Row(
+                                            children: [
+                                              Container(
+                                                width: 8,
+                                                height: 8,
+                                                decoration: BoxDecoration(
+                                                  color: _statusFgColor(taskStatus),
+                                                  shape: BoxShape.circle,
+                                                ),
+                                              ),
+                                              const SizedBox(width: 8),
+                                              Expanded(
+                                                child: Text(
+                                                  text,
+                                                  style: const TextStyle(fontSize: 12, color: Color(0xFF334155)),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
                                         Text(due, style: const TextStyle(fontSize: 10, color: Colors.blueGrey, fontWeight: FontWeight.bold)),
                                       ],
                                     ),
@@ -525,6 +556,162 @@ extension _TasksPage on _MainNavigationScreenState {
             if (v == null) return;
             onChanged(v);
           },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTreatmentStatusMultiSelect({
+    required String label,
+    required Set<String> selectedItems,
+    required List<String> items,
+    required ValueChanged<Set<String>> onChanged,
+  }) {
+    String displayLabel(String raw) => raw.replaceAll('_', ' ');
+
+    final selectedCount = selectedItems.length;
+    final summary = selectedCount == 0
+        ? 'None selected'
+        : selectedCount <= 2
+        ? items.where(selectedItems.contains).map(displayLabel).join(', ')
+        : '$selectedCount selected';
+
+    Future<void> openSelector() async {
+      final workingSelection = Set<String>.from(selectedItems);
+
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.white,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (context) {
+          return SafeArea(
+            child: StatefulBuilder(
+              builder: (context, setModalState) {
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Select $label',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF1E293B),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          TextButton(
+                            onPressed: () => setModalState(() {
+                              workingSelection
+                                ..clear()
+                                ..addAll(items);
+                            }),
+                            child: const Text('Select all'),
+                          ),
+                          TextButton(
+                            onPressed: () => setModalState(workingSelection.clear),
+                            child: const Text('Clear'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Flexible(
+                        child: SingleChildScrollView(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: items
+                                .map(
+                                  (item) => CheckboxListTile(
+                                    value: workingSelection.contains(item),
+                                    contentPadding: EdgeInsets.zero,
+                                    activeColor: const Color(0xFF0D9488),
+                                    controlAffinity: ListTileControlAffinity.leading,
+                                    title: Text(
+                                      displayLabel(item),
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFF334155),
+                                      ),
+                                    ),
+                                    onChanged: (checked) {
+                                      setModalState(() {
+                                        if (checked ?? false) {
+                                          workingSelection.add(item);
+                                        } else {
+                                          workingSelection.remove(item);
+                                        }
+                                      });
+                                    },
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            onChanged(workingSelection);
+                            Navigator.of(context).pop();
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF0D9488),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text('Apply'),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          );
+        },
+      );
+    }
+
+    return InkWell(
+      onTap: openSelector,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                '$label: $summary',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF334155),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(LucideIcons.chevronDown, size: 16, color: Colors.blueGrey),
+          ],
         ),
       ),
     );

@@ -1,1 +1,3 @@
 backend/.env
+backend/firestore.rules
+backend/storage.rules

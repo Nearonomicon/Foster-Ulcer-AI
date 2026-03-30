@@ -1,13 +1,23 @@
 part of '../widgets/main_navigation_screen.dart';
 
 extension _CasesPage on _MainNavigationScreenState {
+  static const List<String> _caseStatusOptions = [
+    'CREATION',
+    'ANALYZING',
+    'DOCTOR_REVIEW',
+    'PLAN_ISSUED',
+    'APPOINTMENT',
+    'REQUEST_CLOSE',
+    'COMPLETED',
+  ];
+
   Widget _buildCasesTab() {
     if (!_casesFetchedOnce && !_casesLoading) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _fetchCasesList());
     }
 
     final q = _casesSearchQuery.trim().toLowerCase();
-    final statusFilter = _casesStatusFilter.toLowerCase();
+    final selectedStatuses = _casesStatusFilters.map((status) => status.toLowerCase()).toSet();
     final urgencyFilter = _casesUrgencyFilter.toLowerCase();
 
     DateTime? parseIso(String? raw) {
@@ -27,7 +37,7 @@ extension _CasesPage on _MainNavigationScreenState {
       final urgency = (c['urgency'] ?? '').toString().toLowerCase();
 
       final matchesSearch = q.isEmpty || id.contains(q) || pid.contains(q) || patientName.contains(q) || status.contains(q);
-      final matchesStatus = statusFilter == 'all' || status == statusFilter;
+      final matchesStatus = selectedStatuses.contains(status);
       final matchesUrgency = urgencyFilter == 'all' || urgency == urgencyFilter;
 
       return matchesSearch && matchesStatus && matchesUrgency;
@@ -113,20 +123,15 @@ extension _CasesPage on _MainNavigationScreenState {
             Row(
               children: [
                 Expanded(
-                  child: _buildCasesFilterDropdown(
+                  child: _buildCasesStatusMultiSelect(
                     label: "Status",
-                    value: _casesStatusFilter,
-                    items: const [
-                      "ALL",
-                      "CREATION",
-                      "ANALYZING",
-                      "DOCTOR_REVIEW",
-                      "PLAN_ISSUED",
-                      "APPOINTMENT",
-                      "REQUEST_CLOSE",
-                      "COMPLETED",
-                    ],
-                    onChanged: (value) => setState(() => _casesStatusFilter = value),
+                    selectedItems: _casesStatusFilters,
+                    items: _caseStatusOptions,
+                    onChanged: (values) => setState(() {
+                      _casesStatusFilters
+                        ..clear()
+                        ..addAll(values);
+                    }),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -301,6 +306,162 @@ extension _CasesPage on _MainNavigationScreenState {
             if (v == null) return;
             onChanged(v);
           },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCasesStatusMultiSelect({
+    required String label,
+    required Set<String> selectedItems,
+    required List<String> items,
+    required ValueChanged<Set<String>> onChanged,
+  }) {
+    String displayLabel(String raw) => raw.replaceAll('_', ' ');
+
+    final selectedCount = selectedItems.length;
+    final summary = selectedCount == 0
+        ? 'None selected'
+        : selectedCount <= 2
+        ? items.where(selectedItems.contains).map(displayLabel).join(', ')
+        : '$selectedCount selected';
+
+    Future<void> openSelector() async {
+      final workingSelection = Set<String>.from(selectedItems);
+
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.white,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        builder: (context) {
+          return SafeArea(
+            child: StatefulBuilder(
+              builder: (context, setModalState) {
+                return Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Select $label',
+                        style: GoogleFonts.plusJakartaSans(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: const Color(0xFF1E293B),
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          TextButton(
+                            onPressed: () => setModalState(() {
+                              workingSelection
+                                ..clear()
+                                ..addAll(items);
+                            }),
+                            child: const Text('Select all'),
+                          ),
+                          TextButton(
+                            onPressed: () => setModalState(workingSelection.clear),
+                            child: const Text('Clear'),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Flexible(
+                        child: SingleChildScrollView(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: items
+                                .map(
+                                  (item) => CheckboxListTile(
+                                    value: workingSelection.contains(item),
+                                    contentPadding: EdgeInsets.zero,
+                                    activeColor: const Color(0xFF0D9488),
+                                    controlAffinity: ListTileControlAffinity.leading,
+                                    title: Text(
+                                      displayLabel(item),
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w600,
+                                        color: Color(0xFF334155),
+                                      ),
+                                    ),
+                                    onChanged: (checked) {
+                                      setModalState(() {
+                                        if (checked ?? false) {
+                                          workingSelection.add(item);
+                                        } else {
+                                          workingSelection.remove(item);
+                                        }
+                                      });
+                                    },
+                                  ),
+                                )
+                                .toList(),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            onChanged(workingSelection);
+                            Navigator.of(context).pop();
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF0D9488),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text('Apply'),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+          );
+        },
+      );
+    }
+
+    return InkWell(
+      onTap: openSelector,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                '$label: $summary',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: Color(0xFF334155),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Icon(LucideIcons.chevronDown, size: 16, color: Colors.blueGrey),
+          ],
         ),
       ),
     );

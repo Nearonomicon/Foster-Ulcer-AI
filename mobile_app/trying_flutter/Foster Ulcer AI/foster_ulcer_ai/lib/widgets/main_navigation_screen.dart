@@ -306,11 +306,21 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   String _tasksViewMode = 'plan';
   final String _tasksStatusQuery = '';
   String _tasksSearchQuery = '';
-  String _tasksTreatmentStatus = 'ALL';
+  static const Set<String> _defaultTasksTreatmentStatuses = {
+    'DRAFT',
+    'ACTIVE',
+  };
+  final Set<String> _tasksTreatmentStatuses = {..._defaultTasksTreatmentStatuses};
   String _tasksTaskStatus = 'ALL';
   String _tasksSortBy = 'DUE_ASC';
   String _casesSearchQuery = '';
-  String _casesStatusFilter = 'ALL';
+  static const Set<String> _defaultCasesStatusFilters = {
+    'CREATION',
+    'ANALYZING',
+    'PLAN_ISSUED',
+    'APPOINTMENT',
+  };
+  final Set<String> _casesStatusFilters = {..._defaultCasesStatusFilters};
   String _casesUrgencyFilter = 'ALL';
   String _casesSortBy = 'UPDATED_DESC';
   XFile? _taskEvidencePhotoTemp; // temp holder (optional)
@@ -2346,6 +2356,15 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   bool _shouldShowNav() => ['dashboard', 'tasks', 'cases'].contains(_currentStep);
 
+  void _resetCasesPageFilters() {
+    _casesSearchQuery = '';
+    _casesStatusFilters
+      ..clear()
+      ..addAll(_defaultCasesStatusFilters);
+    _casesUrgencyFilter = 'ALL';
+    _casesSortBy = 'UPDATED_DESC';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -2805,6 +2824,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           setState(() {
             _activeTab = index;
             _currentStep = 'dashboard';
+            if (index == 2) {
+              _resetCasesPageFilters();
+            }
           });
           if (index == 0) {
             setState(() => _dashboardFetchedOnce = false);

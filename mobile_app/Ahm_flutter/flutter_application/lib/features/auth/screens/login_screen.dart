@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 import 'package:provider/provider.dart';
 
-import 'package:flutter_application/core/theme/app_theme.dart';
 import 'package:flutter_application/features/auth/screens/register_screen.dart';
 import 'package:flutter_application/features/auth/screens/case_inbox_screen.dart';
+import 'package:flutter_application/features/auth/widgets/auth_common.dart';
 
 import 'package:flutter_application/shared/locale_controller.dart';
 import 'package:flutter_application/shared/app_localizations.dart';
@@ -41,12 +41,12 @@ class _LoginScreenState extends State<LoginScreen> {
           Positioned(
             top: -96,
             right: -96,
-            child: _GlowBlob(color: cs.primary.withOpacity(0.06)),
+            child: AuthGlowBlob(color: cs.primary.withOpacity(0.06)),
           ),
           Positioned(
             bottom: -96,
             left: -96,
-            child: _GlowBlob(color: cs.primary.withOpacity(0.06)),
+            child: AuthGlowBlob(color: cs.primary.withOpacity(0.06)),
           ),
           SafeArea(
             child: SingleChildScrollView(
@@ -60,7 +60,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     width: 380,
                     child: Column(
                       children: [
-                        _LabeledField(
+                        AuthLabeledField(
                           label: context.tr('login.clinical_id'),
                           child: TextField(
                             controller: clinicalIdCtrl,
@@ -75,7 +75,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                         const Gap(16),
-                        _LabeledField(
+                        AuthLabeledField(
                           label: context.tr('login.password'),
                           child: TextField(
                             controller: passwordCtrl,
@@ -207,16 +207,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                         const Gap(30),
-                        Container(
-                          width: 120,
-                          height: 6,
-                          decoration: BoxDecoration(
-                            color: isDark
-                                ? Colors.white.withOpacity(0.18)
-                                : Colors.black.withOpacity(0.14),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                        ),
+                        const AuthBottomIndicator(),
                       ],
                     ),
                   ),
@@ -229,7 +220,6 @@ class _LoginScreenState extends State<LoginScreen> {
             left: 24,
             child: _LanguageChip(
               code: localeCtrl.code,
-              isDark: isDark,
               onSelect: (locale) =>
                   context.read<LocaleController>().setLocale(locale),
             ),
@@ -243,12 +233,10 @@ class _LoginScreenState extends State<LoginScreen> {
 class _LanguageChip extends StatelessWidget {
   const _LanguageChip({
     required this.code,
-    required this.isDark,
     required this.onSelect,
   });
 
   final String code;
-  final bool isDark;
   final ValueChanged<Locale> onSelect;
 
   @override
@@ -282,26 +270,6 @@ class _LanguageChip extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _GlowBlob extends StatelessWidget {
-  const _GlowBlob({required this.color});
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 260,
-      height: 260,
-      decoration: BoxDecoration(
-        color: color,
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(color: color, blurRadius: 70, spreadRadius: 10),
-        ],
       ),
     );
   }
@@ -347,30 +315,6 @@ class _HeaderLogo extends StatelessWidget {
             ],
           ),
         ),
-      ],
-    );
-  }
-}
-
-class _LabeledField extends StatelessWidget {
-  const _LabeledField({required this.label, required this.child});
-  final String label;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 11,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-        const Gap(8),
-        child,
       ],
     );
   }

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 
+import 'package:flutter_application/features/auth/widgets/auth_common.dart';
 import 'package:flutter_application/shared/app_localizations.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -44,8 +45,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
     return Scaffold(
       body: Stack(
         children: [
-          Positioned(top: -96, right: -96, child: _GlowBlob(color: cs.primary.withOpacity(0.06))),
-          Positioned(bottom: -96, left: -96, child: _GlowBlob(color: cs.primary.withOpacity(0.06))),
+          Positioned(
+            top: -96,
+            right: -96,
+            child: AuthGlowBlob(color: cs.primary.withOpacity(0.06)),
+          ),
+          Positioned(
+            bottom: -96,
+            left: -96,
+            child: AuthGlowBlob(color: cs.primary.withOpacity(0.06)),
+          ),
 
           SafeArea(
             child: Column(
@@ -86,8 +95,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             ),
                             const Gap(18),
 
-                            _LabeledField(
+                            AuthLabeledField(
                               label: context.tr('register.full_name.label'),
+                              withInsetLabel: true,
                               child: TextField(
                                 controller: fullNameCtrl,
                                 decoration: InputDecoration(
@@ -102,8 +112,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             ),
                             const Gap(14),
 
-                            _LabeledField(
+                            AuthLabeledField(
                               label: context.tr('register.license.label'),
+                              withInsetLabel: true,
                               child: TextField(
                                 controller: licenseCtrl,
                                 decoration: InputDecoration(
@@ -118,8 +129,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             ),
                             const Gap(14),
 
-                            _LabeledField(
+                            AuthLabeledField(
                               label: context.tr('register.specialty.label'),
+                              withInsetLabel: true,
                               child: DropdownButtonFormField<String>(
                                 value: specialty.isEmpty ? null : specialty,
                                 items: specialtyItems,
@@ -136,8 +148,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             ),
                             const Gap(14),
 
-                            _LabeledField(
+                            AuthLabeledField(
                               label: context.tr('register.hospital.label'),
+                              withInsetLabel: true,
                               child: TextField(
                                 controller: hospitalCtrl,
                                 decoration: InputDecoration(
@@ -259,16 +272,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             const Gap(22),
 
                             // iOS home indicator
-                            Container(
-                              width: 120,
-                              height: 6,
-                              decoration: BoxDecoration(
-                                color: isDark
-                                    ? Colors.white.withOpacity(0.18)
-                                    : Colors.black.withOpacity(0.14),
-                                borderRadius: BorderRadius.circular(999),
-                              ),
-                            ),
+                            const AuthBottomIndicator(),
                           ],
                         ),
                       ),
@@ -401,53 +405,3 @@ class _AvatarPicker extends StatelessWidget {
   }
 }
 
-class _GlowBlob extends StatelessWidget {
-  const _GlowBlob({required this.color});
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 260,
-      height: 260,
-      decoration: BoxDecoration(
-        color: color,
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(color: color, blurRadius: 70, spreadRadius: 10),
-        ],
-      ),
-    );
-  }
-}
-
-class _LabeledField extends StatelessWidget {
-  const _LabeledField({required this.label, required this.child});
-  final String label;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 6),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              letterSpacing: 1.1,
-              fontWeight: FontWeight.w900,
-              color: isDark ? Colors.white54 : Colors.black45,
-            ),
-          ),
-        ),
-        const Gap(8),
-        child,
-      ],
-    );
-  }
-}

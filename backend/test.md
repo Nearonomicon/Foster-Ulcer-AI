@@ -53,6 +53,52 @@ Extra flow:
 
 - Create follow-up record with `/update_cases`
 - Filter inbox by status using `/cases_list`
+- Patch patient profile with `PATCH /patients/{patient_id}`
+- Check shared notifications with `/doctor-notifications` and `/nurse-notifications`
+- Check dashboard aggregation with `GET /load-dashboard`
+- Optionally test `/analyze-transcribe`
+- Run a small negative-path matrix for 400/404 validation
+
+## Test Case Matrix
+
+| Test ID | Endpoint | Scenario | Type | Expected Result |
+| --- | --- | --- | --- | --- |
+| TC-001 | `POST /create-patient-profile` | Create patient profile with valid payload | Positive | Returns `status=success` and `patient_id` |
+| TC-002 | `GET /patients_list` | List patients after creation | Positive | New patient appears in result |
+| TC-003 | `PATCH /patients/{patient_id}` | Patch patient profile fields | Positive | Returns `status=success` and updated fields |
+| TC-004 | `POST /create-case` | Create initial case for patient | Positive | Returns `case_id` and first `record_id` |
+| TC-005 | `POST /cases_list` | List cases without filters | Positive | New case appears in result |
+| TC-006 | `POST /cases_list` | Filter cases by `CREATION` status | Positive | Case appears while still in `CREATION` |
+| TC-007 | `POST /cases_list` | Filter cases by `patient_id` | Positive | Only matching patient's case is returned |
+| TC-008 | `POST /case_detail` | Load case detail by `case_id` | Positive | Returns case, records, and patient profile |
+| TC-009 | `POST /analyze-fillin` | Upload wound image and get fill-in output | Positive | Returns `status=success`, `image_url`, and `analysis` |
+| TC-010 | `POST /analyze-wound` | Run wound analysis with image and payload | Positive | Returns `status=success` or `blocked` |
+| TC-011 | `POST /analyze-transcribe` | Transcribe audio note | Optional Positive | Returns `status=success` or `blocked` |
+| TC-012 | `POST /send-to-doctor` | Save reviewed record and draft plan | Positive | Returns `analysis_id`, `plan_id`, case moves to `DOCTOR_REVIEW` |
+| TC-013 | `GET /doctor-notifications` | Verify doctor notification after send-to-doctor | Positive | Matching case notification exists |
+| TC-014 | `POST /doctor-review` | Finalize doctor review and issue plan | Positive | Returns new `analysis_id`, `plan_id`, case moves to `PLAN_ISSUED` |
+| TC-015 | `GET /nurse-notifications` | Verify nurse notification after doctor-review | Positive | Matching case notification exists |
+| TC-016 | `POST /case_detail` | Verify case snapshot after doctor review | Positive | Plan and tasks are `SENT` |
+| TC-017 | `POST /tasks_list` | List current treatment plans | Positive | Case appears in task list |
+| TC-018 | `POST /task_detail` | Get task detail by index | Positive | Selected task is returned |
+| TC-019 | `POST /task_detail` | Get full task list without index | Positive | `plan_tasks` is returned |
+| TC-020 | `POST /task_update` | Update task status/details | Positive | Updated task id is returned and reflected in case |
+| TC-021 | `GET /load-dashboard` | Check dashboard aggregates | Positive | Returns `today_task_no`, `total_active_patient`, `upcoming_plan` |
+| TC-022 | `POST /create_appointment` | Move case to appointment state | Positive | Case, record, plan, and tasks become `APPOINTMENT` |
+| TC-023 | `POST /cases_list` | Filter cases by `APPOINTMENT` | Positive | Case appears in result |
+| TC-024 | `POST /request_close` | Request close for current case | Positive | Case and record become `REQUEST_CLOSE` |
+| TC-025 | `GET /doctor-notifications` | Verify doctor notification after request close | Positive | Matching close-request notification exists |
+| TC-026 | `POST /cases_list` | Filter cases by `REQUEST_CLOSE` | Positive | Case appears in result |
+| TC-027 | `POST /complete_case` | Complete the case | Positive | Case, record, plan, and tasks become `COMPLETED` |
+| TC-028 | `POST /cases_list` | Filter cases by `COMPLETED` | Positive | Case appears in result |
+| TC-029 | `POST /update_cases` | Create follow-up record | Optional Positive | New `record_id` is created and current record moves |
+| TC-030 | `POST /analyze-healing` | Run healing analysis | Optional Positive | Returns healing summary and may update current healing snapshot |
+| TC-031 | `POST /case_detail` | Missing `case_id` validation | Negative | Returns `400` |
+| TC-032 | `POST /task_update` | Wrong `plan_id` validation | Negative | Returns `400` |
+| TC-033 | `POST /create_appointment` | Invalid datetime validation | Negative | Returns `400` |
+| TC-034 | `POST /request_close` | Missing `case_id` validation | Negative | Returns `400` |
+| TC-035 | `POST /complete_case` | Missing `case_id` validation | Negative | Returns `400` |
+| TC-036 | `POST /update_cases` | Mismatched `patient_id` validation | Negative | Returns `400` |
 
 ## Variables To Save During Testing
 
@@ -64,8 +110,9 @@ Save these values as you go:
 - `analysis_id`
 - `plan_id`
 - `task_id`
+- `notification_id`
 
-## 1. Create Patient Profile
+## TC-001 Create Patient Profile
 
 Endpoint:
 
@@ -106,7 +153,7 @@ Expected:
 - response contains `patient_id`
 - status is `success`
 
-## 2. List Patients
+## TC-002 List Patients
 
 Endpoint:
 
@@ -118,7 +165,7 @@ Expected:
 
 - new patient appears in `patients`
 
-## 3. Create Case
+## TC-004 Create Case
 
 Endpoint:
 
@@ -157,7 +204,7 @@ Expected:
 - response contains first `record_id`
 - case status is `CREATION`
 
-## 4. List Cases
+## TC-005 List Cases
 
 Endpoint:
 
@@ -178,7 +225,7 @@ Expected:
 
 - new case appears in `cases`
 
-## 5. Filter Cases By Status
+## TC-006 Filter Cases By Status
 
 Endpoint:
 
@@ -199,7 +246,7 @@ Expected:
 
 - new case appears when it is still in `CREATION`
 
-## 6. Load Case Detail
+## TC-008 Load Case Detail
 
 Endpoint:
 
@@ -222,7 +269,7 @@ Expected:
 - `records` includes `REC-00001`
 - `patient_profile.patient_id` matches
 
-## 7. Upload Image And Get Fill-In
+## TC-009 Upload Image And Get Fill-In
 
 Endpoint:
 
@@ -242,7 +289,7 @@ Expected:
 - response contains `image_url`
 - response contains `analysis`
 
-## 8. Run AI Wound Analysis
+## TC-010 Run AI Wound Analysis
 
 Endpoint:
 
@@ -346,7 +393,7 @@ Expected:
 - response status is `success`
 - response contains `analysis` as JSON string
 
-## 9. Send To Doctor
+## TC-012 Send To Doctor
 
 Endpoint:
 
@@ -471,7 +518,7 @@ Expected:
 - response contains `plan_id`
 - case becomes `DOCTOR_REVIEW`
 
-## 10. Doctor Review And Issue Plan
+## TC-014 Doctor Review And Issue Plan
 
 Endpoint:
 
@@ -525,7 +572,7 @@ Expected:
 - plan status becomes `SENT`
 - all task statuses become `SENT`
 
-## 11. Check Case Detail After Doctor Review
+## TC-016 Check Case Detail After Doctor Review
 
 Call `/case_detail` again.
 
@@ -540,7 +587,7 @@ Save first task id from:
 
 - `case.current_task_list[0].task_id`
 
-## 12. List Tasks
+## TC-017 List Tasks
 
 Endpoint:
 
@@ -561,7 +608,7 @@ Expected:
 
 - case appears in `current_treatment_plan`
 
-## 13. Get Task Detail
+## TC-018 Get Task Detail
 
 Endpoint:
 
@@ -583,7 +630,7 @@ Expected:
 
 - task detail is returned
 
-## 14. Update Task
+## TC-020 Update Task
 
 Endpoint:
 
@@ -628,7 +675,7 @@ Expected:
 - response contains `updated_task_ids`
 - current treatment plan reflects updated task
 
-## 15. Create Appointment
+## TC-022 Create Appointment
 
 Endpoint:
 
@@ -653,7 +700,7 @@ Expected:
 - current plan status becomes `APPOINTMENT`
 - current tasks become `APPOINTMENT`
 
-## 16. Filter Appointment Cases
+## TC-023 Filter Appointment Cases
 
 Endpoint:
 
@@ -674,7 +721,7 @@ Expected:
 
 - test case appears in result
 
-## 17. Request Close
+## TC-024 Request Close
 
 Endpoint:
 
@@ -697,7 +744,7 @@ Expected:
 - current record status becomes `REQUEST_CLOSE`
 - plan and tasks should remain unchanged
 
-## 18. Filter Request Close Cases
+## TC-026 Filter Request Close Cases
 
 Endpoint:
 
@@ -718,7 +765,7 @@ Expected:
 
 - test case appears in result
 
-## 19. Complete Case
+## TC-027 Complete Case
 
 Endpoint:
 
@@ -744,7 +791,7 @@ Expected:
 - tasks become `COMPLETED`
 - `timestamps.completed_at` is written
 
-## 20. Filter Completed Cases
+## TC-028 Filter Completed Cases
 
 Endpoint:
 
@@ -765,7 +812,7 @@ Expected:
 
 - test case appears in result
 
-## 21. Create Follow-Up Record
+## TC-029 Create Follow-Up Record
 
 This is an optional secondary test after the first lifecycle is proven.
 
@@ -807,7 +854,7 @@ Expected:
 - latest treatment plan may be duplicated into a new `plan_id`
 - `current_record_id` moves to the new record
 
-## 22. Analyze Healing
+## TC-030 Analyze Healing
 
 Endpoint:
 
@@ -856,3 +903,260 @@ Expected:
 - `/create_appointment`, `/request_close`, and `/complete_case` use the case’s `current_record_id`
 - some timestamps outside `routes/cases.py` still rely on Firestore server timestamps
 - if Firestore composite indexes are missing, some filtered queries may require index creation
+
+## Missing Coverage Added
+
+The original flow was missing several current routes and several negative-path checks. These cases should also be treated as required coverage.
+
+### TC-003 Update Patient Profile
+
+Endpoint:
+
+```http
+PATCH /patients/{patient_id}
+Content-Type: application/json
+```
+
+Body:
+
+```json
+{
+  "phone_no": "0899999999",
+  "weight_kg": 56
+}
+```
+
+Expected:
+
+- response status is `success`
+- `updated_fields` contains the patched keys
+- later `/patients_list` reflects the update
+
+### TC-007 Filter Cases By Patient
+
+Endpoint:
+
+```http
+POST /cases_list
+Content-Type: application/json
+```
+
+Body:
+
+```json
+{
+  "patient_id": "{{patient_id}}"
+}
+```
+
+Expected:
+
+- the test case is returned
+- every returned case belongs to `{{patient_id}}`
+
+### TC-013 and TC-025 Check Doctor Notifications
+
+Run this immediately after `/send-to-doctor`.
+
+Endpoint:
+
+```http
+GET /doctor-notifications?limit=50
+```
+
+Expected:
+
+- a notification exists for `{{case_id}}`
+- the notification `record_id` matches `{{record_id}}`
+
+Run this again after `/request_close`.
+
+Expected:
+
+- another doctor-facing notification exists for the same case
+
+### TC-015 Check Nurse Notifications
+
+Run this immediately after `/doctor-review`.
+
+Endpoint:
+
+```http
+GET /nurse-notifications?limit=50
+```
+
+Expected:
+
+- a notification exists for `{{case_id}}`
+- the notification `record_id` matches `{{record_id}}`
+
+### TC-021 Check Dashboard
+
+Endpoint:
+
+```http
+GET /load-dashboard
+```
+
+Expected:
+
+- response contains `today_task_no`
+- response contains `total_active_patient`
+- response contains `upcoming_plan`
+- after a plan is issued, the test case may appear in `upcoming_plan`
+
+### TC-019 Task Detail Without Index
+
+Endpoint:
+
+```http
+POST /task_detail
+Content-Type: application/json
+```
+
+Body:
+
+```json
+{
+  "case_id": "{{case_id}}"
+}
+```
+
+Expected:
+
+- response includes `plan_tasks`
+- full current task list is returned when `task_index` is omitted
+
+### TC-011 Optional Audio Transcription
+
+Endpoint:
+
+```http
+POST /analyze-transcribe
+Content-Type: multipart/form-data
+```
+
+Form fields:
+
+- `case_id` = `{{case_id}}`
+- `record_id` = `{{record_id}}`
+- `audio` = attach test audio file
+
+Expected:
+
+- response is either:
+  - `success` with `transcript`
+  - `blocked` with a model block reason
+
+### TC-031 to TC-036 Negative-Path Matrix
+
+These checks cover route guards that the original guide did not verify.
+
+1. `POST /case_detail` with empty body
+
+Expected:
+
+- `400`
+- detail mentions `case_id is required`
+
+2. `POST /task_update` with wrong `plan_id`
+
+Expected:
+
+- `400`
+- detail mentions plan mismatch
+
+3. `POST /create_appointment` with invalid datetime
+
+Body:
+
+```json
+{
+  "case_id": "{{case_id}}",
+  "appointment_at": "not-a-date"
+}
+```
+
+Expected:
+
+- `400`
+- detail mentions invalid ISO datetime
+
+4. `POST /request_close` with empty body
+
+Expected:
+
+- `400`
+- detail mentions `case_id is required`
+
+5. `POST /complete_case` with empty body
+
+Expected:
+
+- `400`
+- detail mentions `case_id is required`
+
+6. `POST /update_cases` with mismatched `patient_id`
+
+Expected:
+
+- `400`
+- detail mentions `patient_id does not match case`
+
+## Route Coverage Checklist
+
+The guide should be considered complete only if all current routes are accounted for:
+
+- `GET /load-dashboard`
+- `POST /create-patient-profile`
+- `GET /patients_list`
+- `PATCH /patients/{patient_id}`
+- `POST /create-case`
+- `POST /update_cases`
+- `POST /cases_list`
+- `POST /case_detail`
+- `POST /analyze-transcribe`
+- `POST /analyze-fillin`
+- `POST /analyze-wound`
+- `POST /analyze-healing`
+- `POST /send-to-doctor`
+- `POST /doctor-review`
+- `GET /doctor-notifications`
+- `GET /nurse-notifications`
+- `POST /tasks_list`
+- `POST /task_detail`
+- `POST /task_update`
+- `POST /create_appointment`
+- `POST /request_close`
+- `POST /complete_case`
+
+## Test Script
+
+An executable smoke test script has been added:
+
+- `api_test_runner.py`
+
+Example:
+
+```bash
+venv\Scripts\python.exe api_test_runner.py --base-url http://127.0.0.1:8080
+```
+
+With optional files:
+
+```bash
+venv\Scripts\python.exe api_test_runner.py --base-url http://127.0.0.1:8080 --image sample.jpg --audio sample.mp3 --run-followup --run-healing
+```
+
+What it covers:
+
+- patient create, list, patch
+- case create, list, patient filter, detail
+- optional image and audio AI endpoints
+- send-to-doctor and doctor-review
+- doctor and nurse notifications
+- task list, task detail, task update
+- dashboard
+- appointment, request close, complete
+- optional follow-up and healing
+- selected negative-path validation checks
