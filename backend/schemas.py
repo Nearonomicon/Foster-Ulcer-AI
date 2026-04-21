@@ -28,6 +28,11 @@ class Urgency(str, Enum):
     ROUTINE = "ROUTINE"
 
 
+class NotificationUserRole(str, Enum):
+    DOCTOR = "DOCTOR"
+    NURSE = "NURSE"
+
+
 class LocationPrimary(str, Enum):
     TOE = "toe"
     SOLE = "sole"
@@ -304,6 +309,7 @@ class TaskItem(BaseModel):
     task_text: str
     status: str = "PENDING"
     task_due: Optional[str] = None
+    source: Optional[str] = None
 
 
 class TreatmentPlan(BaseModel):
@@ -391,6 +397,18 @@ class UpdateCaseRequest(BaseModel):
     assigned_doctor: Optional[str] = None
     vitals: Optional[CreateCaseVitals] = None
     meta: Optional[CreateCaseMeta] = None
+
+
+class NotificationDeviceRegistrationRequest(BaseModel):
+    user_id: str = Field(min_length=1)
+    role: NotificationUserRole
+    fcm_token: str = Field(min_length=1)
+    platform: Optional[str] = None
+    device_id: Optional[str] = None
+
+
+class NotificationDeviceUnregisterRequest(BaseModel):
+    fcm_token: str = Field(min_length=1)
 
 
 class WoundCaseRecord(BaseModel):

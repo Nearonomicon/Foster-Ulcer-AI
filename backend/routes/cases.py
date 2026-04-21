@@ -93,7 +93,6 @@ def _current_record_snapshot(record_data: dict) -> dict:
         "current_gangrene_extent": record_data.get("gangrene_extent"),
         "current_analysis": record_data.get("analysis"),
         "current_treatment_plan": record_data.get("treatment_plan"),
-        "current_task_list": record_data.get("task_list"),
         "current_healing_progress": healing_progress,
     }
 
@@ -140,6 +139,12 @@ def _normalize_plan_tasks_status(tasks: list[dict], status: str) -> list[dict]:
     return normalized_tasks
 
 
+def _get_plan_tasks(treatment_plan: dict | None, fallback_tasks: list | None = None) -> list:
+    if isinstance(treatment_plan, dict) and isinstance(treatment_plan.get("plan_tasks"), list):
+        return treatment_plan.get("plan_tasks") or []
+    return fallback_tasks or []
+
+
 def _update_case_record_plan_and_tasks_status(
     *,
     case_ref,
@@ -154,7 +159,7 @@ def _update_case_record_plan_and_tasks_status(
     current_treatment_plan = case_data.get("current_treatment_plan") or record_data.get("treatment_plan") or {}
     normalized_treatment_plan = dict(current_treatment_plan) if isinstance(current_treatment_plan, dict) else {}
     normalized_tasks = _normalize_plan_tasks_status(
-        normalized_treatment_plan.get("plan_tasks") or record_data.get("task_list") or [],
+        _get_plan_tasks(normalized_treatment_plan, record_data.get("task_list") or []),
         new_status.value,
     )
     if normalized_treatment_plan:
@@ -171,7 +176,7 @@ def _update_case_record_plan_and_tasks_status(
     }
     if normalized_treatment_plan:
         record_update["treatment_plan"] = normalized_treatment_plan
-        record_update["task_list"] = normalized_tasks
+        record_update["task_list"] = firestore.DELETE_FIELD
 
     case_update = {
         "status": new_status,
@@ -196,10 +201,10 @@ def _update_case_record_plan_and_tasks_status(
             "gangrene_extent",
             "analysis",
             "treatment_plan",
-            "task_list",
         ],
     )
     case_update.update(_current_record_snapshot(current_record_snapshot))
+    case_update["current_task_list"] = firestore.DELETE_FIELD
 
     batch = db.batch()
     batch.set(record_ref, record_update, merge=True)
@@ -532,7 +537,6 @@ async def update_case(payload: UpdateCaseRequest):
                 "vascular",
                 "gangrene_extent",
                 "treatment_plan",
-                "task_list",
                 "analysis",
             ],
         )
@@ -552,6 +556,7 @@ async def update_case(payload: UpdateCaseRequest):
                     dict(task) if isinstance(task, dict) else {} for task in plan_tasks
                 ]
             record_doc_data["treatment_plan"] = duplicated_plan
+        record_doc_data["task_list"] = firestore.DELETE_FIELD
 
         batch = db.batch()
         case_update = {
@@ -563,6 +568,7 @@ async def update_case(payload: UpdateCaseRequest):
             "current_plan_id": new_plan_id,
         }
         case_update.update(_current_record_snapshot(record_doc_data))
+        case_update["current_task_list"] = firestore.DELETE_FIELD
         batch.set(case_ref, case_update, merge=True)
         batch.set(record_doc_ref, record_doc_data, merge=True)
 
@@ -593,6 +599,7 @@ async def update_case(payload: UpdateCaseRequest):
                     "task_due": task.get("task_due"),
                     "completed_at": task.get("completed_at"),
                     "task_photo_url": task.get("task_photo_url"),
+                    "source": task.get("source"),
                 }, merge=True)
         batch.commit()
 
@@ -760,7 +767,6 @@ async def send_to_doctor(payload: WoundCaseRecordUpdate):
                 "vascular",
                 "gangrene_extent",
                 "treatment_plan",
-                "task_list",
                 "analysis",
                 "image",
             ],
@@ -807,7 +813,7 @@ async def send_to_doctor(payload: WoundCaseRecordUpdate):
             "followup_days": treatment_plan.get("followup_days"),
         }
 
-        tasks = payload_dict.get("task_list") or treatment_plan.get("plan_tasks") or []
+        tasks = _get_plan_tasks(treatment_plan, payload_dict.get("task_list") or [])
         enriched_tasks = []
         for idx, task in enumerate(tasks, start=1):
             task = dict(task) if isinstance(task, dict) else {}
@@ -815,11 +821,14 @@ async def send_to_doctor(payload: WoundCaseRecordUpdate):
                 task["task_id"] = f"TSK-{idx:04d}"
             if "completed_at" not in task:
                 task["completed_at"] = None
+            if not str(task.get("source") or "").strip():
+                task["source"] = "AI"
             enriched_tasks.append(task)
         treatment_plan["plan_tasks"] = enriched_tasks
         tasks = enriched_tasks
 
         record_data["treatment_plan"] = treatment_plan
+        record_data["task_list"] = firestore.DELETE_FIELD
 
         batch = db.batch()
         case_update = {
@@ -831,6 +840,7 @@ async def send_to_doctor(payload: WoundCaseRecordUpdate):
             "current_plan_id": plan_id,
         }
         case_update.update(_current_record_snapshot(record_data))
+        case_update["current_task_list"] = firestore.DELETE_FIELD
         batch.set(case_ref, case_update, merge=True)
         batch.set(record_ref, record_data, merge=True)
         batch.set(analysis_ref, analysis_data, merge=True)
@@ -849,6 +859,7 @@ async def send_to_doctor(payload: WoundCaseRecordUpdate):
                 "status": task.get("status"),
                 "task_due": task.get("task_due"),
                 "completed_at": task.get("completed_at"),
+                "source": task.get("source"),
             }, merge=True)
 
         batch.commit()
@@ -868,6 +879,7 @@ async def send_to_doctor(payload: WoundCaseRecordUpdate):
                 patient_id=patient_id,
                 patient_name=patient_name,
                 urgency=payload.urgency.value if payload.urgency else None,
+                assigned_doctor=payload.assigned_doctor or case_data.get("assigned_doctor"),
             )
         except Exception as notification_error:
             print(f"Warning: failed to create doctor notification for case {case_id}: {notification_error}")
@@ -974,6 +986,8 @@ async def doctor_review(payload: dict):
                 task_data["status"] = "SENT"
                 if "completed_at" not in task_data:
                     task_data["completed_at"] = None
+                if not str(task_data.get("source") or "").strip():
+                    task_data["source"] = "Doctor"
                 normalized_tasks.append(task_data)
             normalized_treatment_plan["plan_tasks"] = normalized_tasks
             review_payload["treatment_plan"] = normalized_treatment_plan
@@ -1016,7 +1030,7 @@ async def doctor_review(payload: dict):
             record_update["current_healing_progress"] = healing_progress
         if normalized_treatment_plan is not None:
             record_update["treatment_plan"] = normalized_treatment_plan
-            record_update["task_list"] = normalized_tasks
+            record_update["task_list"] = firestore.DELETE_FIELD
             case_update["current_plan_id"] = plan_id
 
         current_record_snapshot = _merge_sections(
@@ -1036,7 +1050,6 @@ async def doctor_review(payload: dict):
                 "gangrene_extent",
                 "analysis",
                 "treatment_plan",
-                "task_list",
             ],
         )
         if record_update.get("current_healing_progress") is not None:
@@ -1044,6 +1057,7 @@ async def doctor_review(payload: dict):
         elif existing_record_data.get("current_healing_progress") is not None:
             current_record_snapshot["current_healing_progress"] = existing_record_data.get("current_healing_progress")
         case_update.update(_current_record_snapshot(current_record_snapshot))
+        case_update["current_task_list"] = firestore.DELETE_FIELD
 
         batch.set(record_ref, record_update, merge=True)
         batch.set(case_ref, case_update, merge=True)
@@ -1072,6 +1086,7 @@ async def doctor_review(payload: dict):
                     "status": task.get("status"),
                     "task_due": task.get("task_due"),
                     "completed_at": task.get("completed_at"),
+                    "source": task.get("source"),
                 }, merge=True)
         batch.commit()
 
@@ -1229,6 +1244,7 @@ async def request_close(payload: dict):
                 patient_id=patient_id,
                 patient_name=patient_name,
                 urgency=urgency_value,
+                assigned_doctor=case_data.get("assigned_doctor"),
             )
         except Exception as notification_error:
             print(f"Warning: failed to create doctor request-close notification for case {case_id}: {notification_error}")

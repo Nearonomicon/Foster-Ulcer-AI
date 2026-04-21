@@ -2,7 +2,12 @@ from fastapi import APIRouter, HTTPException
 from fastapi.encoders import jsonable_encoder
 from firebase_admin import firestore
 
+from schemas import (
+    NotificationDeviceRegistrationRequest,
+    NotificationDeviceUnregisterRequest,
+)
 from services.firebase import db
+from services.notifications import register_device_token, unregister_device_token
 
 
 router = APIRouter()
@@ -29,6 +34,38 @@ def _list_notifications(collection_name: str, limit: int) -> list[dict]:
         data["notification_id"] = data.get("notification_id") or doc.id
         notifications.append(data)
     return notifications
+
+
+@router.post("/notification-devices/register")
+async def register_notification_device(payload: NotificationDeviceRegistrationRequest):
+    try:
+        device_token_id = register_device_token(
+            user_id=payload.user_id.strip(),
+            role=payload.role.value,
+            fcm_token=payload.fcm_token.strip(),
+            platform=payload.platform,
+            device_id=payload.device_id,
+        )
+        return {
+            "status": "success",
+            "message": "Notification device registered",
+            "device_token_id": device_token_id,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/notification-devices/unregister")
+async def unregister_notification_device(payload: NotificationDeviceUnregisterRequest):
+    try:
+        device_token_id = unregister_device_token(fcm_token=payload.fcm_token.strip())
+        return {
+            "status": "success",
+            "message": "Notification device unregistered",
+            "device_token_id": device_token_id,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/doctor-notifications")

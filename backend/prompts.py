@@ -1320,6 +1320,7 @@ Skin:
 - fragile skin / delicate skin => "fragile"
 
 SINBAD mapping:
+- prioritize using the SINBAD from given input if available and do not override.
 - heel, ankle, hindfoot, midfoot => "Midfoot/Hindfoot"
 - toe, forefoot, metatarsal head => "Forefoot"
 - infection present => "Yes"

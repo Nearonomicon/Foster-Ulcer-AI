@@ -530,6 +530,7 @@ Today is {date.today()}.
                         patient_id=patient_id,
                         patient_name=patient_name,
                         urgency=urgency_value,
+                        assigned_doctor=case_data.get("assigned_doctor"),
                     )
                 except Exception as notification_error:
                     print(f"analyze-healing warning: failed to create doctor notification: {notification_error}")

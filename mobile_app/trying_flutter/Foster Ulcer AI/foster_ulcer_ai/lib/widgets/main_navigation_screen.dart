@@ -501,8 +501,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
-  // static const String _baseUrl = "http://10.0.2.2:8080";
-  static const String _baseUrl = "https://foster-ulcer-ai-backend-429230748709.asia-southeast3.run.app";
+  static const String _baseUrl = "http://10.0.2.2:8080";
+  // static const String _baseUrl = "https://foster-ulcer-ai-backend-429230748709.asia-southeast3.run.app";
   final Uri _fillinUri = Uri.parse("$_baseUrl/analyze-fillin");
   final Uri _analyzeWoundUri = Uri.parse("$_baseUrl/analyze-wound");
   final Uri _analyzeHealingUri = Uri.parse("$_baseUrl/analyze-healing");
@@ -1146,7 +1146,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   Future<void> _uploadAndAnalyzeFillin(XFile imageFile) async {
     setState(() {
       _analysisTitle = "GEMINI CLOUD";
-      _analysisMessage = "Analyzing...";
+      _analysisMessage = "Analyzing wound";
       _isAnalyzing = true;
     });
     try {
@@ -1369,13 +1369,22 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 "Follow-up flow enabled. Preparing /analyze-healing with case_id=${caseId ?? 'null'}",
               );
               if (caseId != null && caseId.isNotEmpty) {
+                if (mounted) {
+                  setState(() {
+                    _analysisTitle = "GEMINI CLOUD";
+                    _analysisMessage = "Comparing current wound with previous records";
+                    _isAnalyzing = true;
+                  });
+                }
+                debugPrint("Waiting 1 minute before /analyze-healing.");
+                await Future.delayed(const Duration(minutes: 1));
                 final resp = await http
                     .post(
                       _analyzeHealingUri,
                       headers: {'Content-Type': 'application/json'},
                       body: jsonEncode({'case_id': caseId}),
                     )
-                    .timeout(const Duration(seconds: 30));
+                    .timeout(const Duration(minutes: 3));
                 if (resp.statusCode != 200) {
                   debugPrint("Analyze-healing failed (${resp.statusCode}): ${resp.body}");
                 } else {
@@ -2648,9 +2657,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     _caseRefs
       ..clear()
       ..addAll({
-        if (patientId != null) 'patient_id': patientId,
-        if (caseId != null) 'case_id': caseId,
-        if (recordId != null) 'record_id': recordId,
+        'patient_id': ?patientId,
+        'case_id': ?caseId,
+        'record_id': ?recordId,
       });
     _navigateTo('vital_check_page');
   }

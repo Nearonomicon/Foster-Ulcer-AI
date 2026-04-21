@@ -7,7 +7,7 @@ from google.genai import types
 load_dotenv()
 my_key = os.getenv("GEMINI_API_KEY")
 
-genai_model = "gemini-2.0-flash"
+genai_model = "gemini-2.5-flash"
 client = genai.Client(api_key=my_key)
 
 safety_config = [

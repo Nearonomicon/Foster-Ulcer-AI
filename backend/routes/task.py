@@ -148,7 +148,7 @@ async def task_update(
         if not isinstance(updates_payload, list) or not updates_payload:
             raise HTTPException(status_code=400, detail="updates must be a non-empty list")
 
-        allowed_fields = {"status", "task_due", "completed_at", "task_photo_url", "task_text"}
+        allowed_fields = {"status", "task_due", "completed_at", "task_photo_url", "task_text", "source"}
 
         case_ref = db.collection("cases").document(case_id)
         case_snapshot = case_ref.get()
@@ -217,12 +217,20 @@ async def task_update(
         batch = db.batch()
         batch.set(case_ref, {
             "current_treatment_plan": current_treatment,
+            "current_task_list": firestore.DELETE_FIELD,
             "case_updated_at": firestore.SERVER_TIMESTAMP,
         }, merge=True)
 
         current_record_id = case_data.get("current_record_id")
         if not current_plan_id or not current_record_id:
             raise HTTPException(status_code=404, detail="Current plan/record not found for case")
+
+        record_ref = case_ref.collection("records").document(current_record_id)
+        batch.set(record_ref, {
+            "treatment_plan": current_treatment,
+            "task_list": firestore.DELETE_FIELD,
+            "record_updated_at": firestore.SERVER_TIMESTAMP,
+        }, merge=True)
 
         plan_ref = case_ref.collection("records").document(current_record_id).collection("plan_versions").document(current_plan_id)
         for task_id, update_fields in updates_by_id.items():
