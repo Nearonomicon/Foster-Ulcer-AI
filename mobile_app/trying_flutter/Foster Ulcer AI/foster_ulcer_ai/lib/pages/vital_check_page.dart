@@ -170,6 +170,8 @@ extension _VitalCheckPage on _MainNavigationScreenState {
     required String bindKey,
     ValueChanged<String>? onChanged,
   }) {
+    final initialValue = _reviewed[bindKey]?.toString().trim() ?? '';
+    final controller = _ctrl(bindKey, initial: initialValue);
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
@@ -195,24 +197,35 @@ extension _VitalCheckPage on _MainNavigationScreenState {
             ],
           ),
           const SizedBox(height: 12),
-          TextFormField(
-            controller: _ctrl(bindKey, initial: _reviewed[bindKey]?.toString() ?? ''),
-            keyboardType: keyboardType,
-            onChanged: (value) {
-              _reviewed[bindKey] = value.trim();
-              onChanged?.call(value);
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: controller,
+            builder: (context, value, _) {
+              final isPrefilled = initialValue.isNotEmpty && !_editedPrefillFields.contains(bindKey);
+              return TextFormField(
+                controller: controller,
+                keyboardType: keyboardType,
+                onChanged: (text) {
+                  _editedPrefillFields.add(bindKey);
+                  _reviewed[bindKey] = text.trim();
+                  onChanged?.call(text);
+                },
+                style: TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                  color: isPrefilled ? const Color(0xFFCBD5E1) : const Color(0xFF0F172A),
+                ),
+                decoration: InputDecoration(
+                  hintText: hint,
+                  suffixText: unit,
+                  filled: true,
+                  fillColor: const Color(0xFFF8FAFC),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide.none,
+                  ),
+                ),
+              );
             },
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-            decoration: InputDecoration(
-              hintText: hint,
-              suffixText: unit,
-              filled: true,
-              fillColor: const Color(0xFFF8FAFC),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide.none,
-              ),
-            ),
           ),
         ],
       ),

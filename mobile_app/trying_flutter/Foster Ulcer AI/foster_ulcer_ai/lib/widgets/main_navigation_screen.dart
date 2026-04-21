@@ -2,16 +2,19 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:lucide_icons_flutter/lucide_icons.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_tailwind_colors/flutter_tailwind_colors.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:camera/camera.dart' as cam;
 import 'package:record/record.dart';
 import 'package:http/http.dart' as http;
 
 import 'package:foster_ulcer_ai/models/mock_patients.dart';
+import 'package:foster_ulcer_ai/services/notification_service.dart';
 
 
 part '../pages/dashboard_page.dart';
@@ -42,6 +45,8 @@ class MainNavigationScreen extends StatefulWidget {
 
 class _MainNavigationScreenState extends State<MainNavigationScreen> {
   late final StreamSubscription<dynamic> _assessmentPlayerCompleteSub;
+  StreamSubscription<AppPushNotification>? _pushForegroundSub;
+  StreamSubscription<AppPushNotification>? _pushOpenedSub;
 
   @override
   void initState() {
@@ -50,6 +55,16 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       if (!mounted) return;
       setState(() => _assessmentAudioPlaying = false);
     });
+    _pushForegroundSub = PushNotificationService.instance.foregroundMessages.listen(_handleForegroundPushNotification);
+    _pushOpenedSub = PushNotificationService.instance.openedMessages.listen(_handleOpenedPushNotification);
+    unawaited(PushNotificationService.instance.attachTokenSync(_syncNotificationToken));
+    final pendingPush = PushNotificationService.instance.takePendingOpenedMessage();
+    if (pendingPush != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(_handleOpenedPushNotification(pendingPush));
+      });
+    }
   }
 
   @override
@@ -70,8 +85,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     _otherCompCtrl.dispose();
     _healingPageCtrl.dispose();
     _assessmentPlayerCompleteSub.cancel();
+    _pushForegroundSub?.cancel();
+    _pushOpenedSub?.cancel();
     _assessmentAudioPlayer.dispose();
     _assessmentRecorder.dispose();
+    _woundCameraController?.dispose();
 
     super.dispose();
   }
@@ -123,6 +141,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   String _responseMode = 'fillin';
   final Map<String, TextEditingController> _controllers = {};
+  final Set<String> _editedPrefillFields = {};
   TextEditingController _ctrl(String key, {String initial = ""}) {
     return _controllers.putIfAbsent(key, () => TextEditingController(text: initial));
   }
@@ -224,6 +243,22 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     _reviewed.remove('respiratory_rate');
     _reviewed.remove('blood_sugar');
     _reviewed.remove('repiratory_rate');
+    for (final key in const [
+      'temperature',
+      'blood_pressure',
+      'blood_pressure_systolic',
+      'blood_pressure_diastolic',
+      'heart_rate',
+      'respiratory_rate',
+      'blood_sugar',
+      'repiratory_rate',
+    ]) {
+      final controller = _controllers[key];
+      if (controller != null) {
+        controller.clear();
+      }
+      _editedPrefillFields.remove(key);
+    }
   }
 
   void _resetCaseInputs() {
@@ -234,6 +269,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     _healingResponseText = null;
     _capturedImage = null;
     _capturedImageBytes = null;
+    _clearVitalsInfo();
   }
 
   void _resetAssessmentInputs() {
@@ -324,6 +360,16 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   String _casesUrgencyFilter = 'ALL';
   String _casesSortBy = 'UPDATED_DESC';
   XFile? _taskEvidencePhotoTemp; // temp holder (optional)
+  cam.CameraController? _woundCameraController;
+  bool _woundCameraInitializing = false;
+  String? _woundCameraError;
+  bool _woundFrameProcessing = false;
+  bool _woundCaptureBlocked = true;
+  double _woundBrightnessScore = 0;
+  double _woundMotionScore = 0;
+  String _woundGuidanceMessage = 'Center the wound inside the guide';
+  Uint8List? _woundPreviousLumaSample;
+  int _woundStableFrameCount = 0;
   Map<String, dynamic>? _selectedTask;
   Map<String, dynamic>? _selectedTaskPatient;
   final Map<String, bool> _tasksExpandedByCase = {};
@@ -473,6 +519,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   final Uri _requestCloseUri = Uri.parse("$_baseUrl/request_close");
   final Uri _loadDashboardUri = Uri.parse("$_baseUrl/load-dashboard");
   final Uri _nurseNotificationsUri = Uri.parse("$_baseUrl/nurse-notifications");
+  final Uri _registerDeviceTokenUri = Uri.parse("$_baseUrl/device-notifications/register");
   final Uri _caseDetailUri = Uri.parse("$_baseUrl/case_detail");
   final Uri _assessmentTranscribeUri = Uri.parse("$_baseUrl/analyze-transcribe");
   final Uri _patientListUri = Uri.parse("$_baseUrl/patients_list");
@@ -867,7 +914,212 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       }
     } catch (e) {
       debugPrint("Error picking image: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Unable to open camera: $e"), backgroundColor: Colors.redAccent),
+        );
+      }
     }
+  }
+
+  Future<void> _initWoundCamera() async {
+    if (_woundCameraInitializing || _woundCameraController?.value.isInitialized == true) return;
+    _woundCameraInitializing = true;
+    _woundCameraError = null;
+    try {
+      final cameras = await cam.availableCameras();
+      final cam.CameraDescription? selected = cameras.cast<cam.CameraDescription?>().firstWhere(
+            (camera) => camera?.lensDirection == cam.CameraLensDirection.back,
+            orElse: () => cameras.isNotEmpty ? cameras.first : null,
+          );
+      if (selected == null) {
+        throw Exception("No camera available on this device.");
+      }
+
+      final previousController = _woundCameraController;
+      final controller = cam.CameraController(
+        selected,
+        cam.ResolutionPreset.high,
+        enableAudio: false,
+        imageFormatGroup: cam.ImageFormatGroup.jpeg,
+      );
+      await controller.initialize();
+      await controller.startImageStream(_analyzeWoundPreviewFrame);
+      await previousController?.dispose();
+
+      if (!mounted) {
+        await controller.stopImageStream();
+        await controller.dispose();
+        return;
+      }
+      setState(() {
+        _woundCameraController = controller;
+        _woundCameraError = null;
+        _woundCaptureBlocked = true;
+        _woundBrightnessScore = 0;
+        _woundMotionScore = 0;
+        _woundGuidanceMessage = 'Center the wound inside the guide';
+        _woundPreviousLumaSample = null;
+        _woundStableFrameCount = 0;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _woundCameraError = e.toString());
+    } finally {
+      _woundCameraInitializing = false;
+    }
+  }
+
+  Future<void> _disposeWoundCamera() async {
+    final controller = _woundCameraController;
+    _woundCameraController = null;
+    _woundFrameProcessing = false;
+    _woundCaptureBlocked = true;
+    _woundBrightnessScore = 0;
+    _woundMotionScore = 0;
+    _woundGuidanceMessage = 'Center the wound inside the guide';
+    _woundPreviousLumaSample = null;
+    _woundStableFrameCount = 0;
+    if (controller != null) {
+      if (controller.value.isStreamingImages) {
+        await controller.stopImageStream();
+      }
+      await controller.dispose();
+    }
+  }
+
+  Future<void> _captureWoundPhoto() async {
+    final controller = _woundCameraController;
+    if (controller == null || !controller.value.isInitialized) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Camera is not ready yet."), backgroundColor: Colors.orange),
+        );
+      }
+      return;
+    }
+    if (_woundCaptureBlocked) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(_woundGuidanceMessage), backgroundColor: Colors.orange),
+        );
+      }
+      return;
+    }
+
+    try {
+      if (controller.value.isStreamingImages) {
+        await controller.stopImageStream();
+      }
+      final image = await controller.takePicture();
+      final bytes = await image.readAsBytes();
+      if (!mounted) return;
+      setState(() {
+        _capturedImage = image;
+        _capturedImageBytes = bytes;
+      });
+      await _uploadAndAnalyzeFillin(image);
+    } catch (e) {
+      debugPrint("Error capturing wound photo: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Unable to capture image: $e"), backgroundColor: Colors.redAccent),
+        );
+      }
+    } finally {
+      if (mounted &&
+          _currentStep == 'camera' &&
+          _woundCameraController == controller &&
+          controller.value.isInitialized &&
+          !controller.value.isStreamingImages) {
+        try {
+          await controller.startImageStream(_analyzeWoundPreviewFrame);
+        } catch (_) {
+          // If restart fails, the retry path on the camera page remains available.
+        }
+      }
+    }
+  }
+
+  Future<void> _analyzeWoundPreviewFrame(cam.CameraImage image) async {
+    if (_woundFrameProcessing || !mounted) return;
+    _woundFrameProcessing = true;
+    try {
+      final sample = _sampleLumaPlane(image);
+      if (sample.isEmpty) return;
+
+      double sum = 0;
+      for (final value in sample) {
+        sum += value;
+      }
+      final brightness = sum / sample.length;
+
+      double motion = 0;
+      final previous = _woundPreviousLumaSample;
+      if (previous != null && previous.length == sample.length) {
+        double diffSum = 0;
+        for (var i = 0; i < sample.length; i++) {
+          diffSum += (sample[i] - previous[i]).abs();
+        }
+        motion = diffSum / sample.length;
+      }
+      _woundPreviousLumaSample = sample;
+
+      final tooDark = brightness < 55;
+      final tooBright = brightness > 210;
+      final tooShaky = motion > 22;
+      final isGoodFrame = !tooDark && !tooBright && !tooShaky;
+      final stableFrames = isGoodFrame ? math.min(_woundStableFrameCount + 1, 10) : 0;
+
+      String guidance;
+      if (tooDark) {
+        guidance = 'Increase lighting before capture';
+      } else if (tooBright) {
+        guidance = 'Reduce glare or move away from direct light';
+      } else if (tooShaky) {
+        guidance = 'Hold steady for a moment';
+      } else if (stableFrames < 3) {
+        guidance = 'Hold steady, almost ready';
+      } else {
+        guidance = 'Capture ready';
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _woundBrightnessScore = brightness;
+        _woundMotionScore = motion;
+        _woundStableFrameCount = stableFrames;
+        _woundGuidanceMessage = guidance;
+        _woundCaptureBlocked = tooDark || tooBright || tooShaky || stableFrames < 3;
+      });
+    } catch (_) {
+      // Keep the camera usable even if preview analysis fails on some devices.
+    } finally {
+      _woundFrameProcessing = false;
+    }
+  }
+
+  Uint8List _sampleLumaPlane(cam.CameraImage image) {
+    if (image.planes.isEmpty) return Uint8List(0);
+    final bytes = image.planes.first.bytes;
+    final width = image.width;
+    final height = image.height;
+    if (width <= 0 || height <= 0) return Uint8List(0);
+
+    const targetGrid = 12;
+    final stepX = math.max(1, width ~/ targetGrid);
+    final stepY = math.max(1, height ~/ targetGrid);
+    final samples = <int>[];
+
+    for (var y = stepY ~/ 2; y < height; y += stepY) {
+      for (var x = stepX ~/ 2; x < width; x += stepX) {
+        final index = y * width + x;
+        if (index >= 0 && index < bytes.length) {
+          samples.add(bytes[index]);
+        }
+      }
+    }
+    return Uint8List.fromList(samples);
   }
 
   // Picker for patient profile photo
@@ -883,6 +1135,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       }
     } catch (e) {
       debugPrint("Error picking patient photo: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Unable to capture patient image: $e"), backgroundColor: Colors.redAccent),
+        );
+      }
     }
   }
 
@@ -1312,14 +1569,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   Future<void> _savePatientProfile() async {
     final phone = _patientPhoneCtrl.text.trim();
-    if (phone.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Phone number is required."), backgroundColor: Colors.orange),
-        );
-      }
-      return;
-    }
     if (_hasDiabetes == "Yes" && (_diabetesYears == null || _diabetesYears!.isEmpty)) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1816,6 +2065,57 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     }
   }
 
+  Future<void> _syncNotificationToken(String token) async {
+    try {
+      final resp = await http
+          .post(
+            _registerDeviceTokenUri,
+            headers: const {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'device_token': token,
+              'platform': Platform.operatingSystem,
+              'role': 'nurse',
+              // Replace this fallback once the app has authenticated nurse ids.
+              'user_id': 'default-nurse',
+            }),
+          )
+          .timeout(const Duration(seconds: 30));
+      if (resp.statusCode < 200 || resp.statusCode >= 300) {
+        debugPrint('device-notifications/register failed (${resp.statusCode}): ${resp.body}');
+      }
+    } catch (error) {
+      debugPrint('device-notifications/register error: $error');
+    }
+  }
+
+  Future<void> _handleForegroundPushNotification(AppPushNotification message) async {
+    await _fetchNurseNotifications();
+    if (!mounted) return;
+    final text = message.body.isNotEmpty ? message.body : message.title;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(text),
+        action: SnackBarAction(
+          label: 'Open',
+          onPressed: () => unawaited(_openNotificationsPanel()),
+        ),
+        backgroundColor: const Color(0xFF0D9488),
+      ),
+    );
+  }
+
+  Future<void> _handleOpenedPushNotification(AppPushNotification message) async {
+    debugPrint(
+      'push opened: type=${message.type} case=${message.caseId} task=${message.taskId} patient=${message.patientId}',
+    );
+    await _fetchNurseNotifications();
+    if (!mounted) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(_openNotificationsPanel());
+    });
+  }
+
   Future<void> _fetchNurseNotifications({int limit = 50}) async {
     if (_notificationsLoading) return;
     setState(() => _notificationsLoading = true);
@@ -2288,6 +2588,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       _currentStep = step;
       if (step != 'camera') {
         _emergencyBypassProfile = false;
+        _disposeWoundCamera();
       }
       if (step == 'assessment') {
         _sinbadSite = _reviewed['sinbad_site'];

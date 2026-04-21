@@ -9,30 +9,23 @@ This document describes the backend API contract currently implemented in:
 - `backend/routes/cases.py`
 - `backend/routes/analysis.py`
 - `backend/routes/task.py`
+- `backend/routes/notifications.py`
 - `backend/schemas.py`
 
-It also reflects the active Flutter integration found mainly in:
-
-- `mobile_app/Ahm_flutter/flutter_application/lib/features/auth/services/case_service.dart`
-
-This is an implementation-based contract, not a generated OpenAPI spec.
+It is implementation-based and structured to follow the delivery template style.
 
 ## Base URL
 
-Backend local base URL:
+Local backend:
 
 ```text
 http://10.0.2.2:8080
 ```
 
-Most implemented endpoints are mounted directly at the root, for example:
+Alternative local machine URL:
 
 ```text
-GET /doctor-notifications
-GET /nurse-notifications
-POST /cases_list
-POST /doctor-review
-POST /complete_case
+http://127.0.0.1:8080
 ```
 
 ## Content Types
@@ -44,53 +37,9 @@ POST /complete_case
 
 No authentication or authorization is currently enforced by the backend.
 
-## Notifications
-
-Current backend behavior uses shared public notification feeds:
-
-- `all_doctor/{notification_id}` for doctor-facing notifications
-- `all_nurse/{notification_id}` for nurse-facing notifications
-
-Flow:
-
-- `POST /send-to-doctor` creates a notification in `all_doctor`
-- `POST /doctor-review` creates a notification in `all_nurse`
-
-Frontend read endpoints:
-
-- `GET /doctor-notifications`
-- `GET /nurse-notifications`
-
-These are currently shared queues, not per-user inboxes.
-
-Bell badge strategy:
-
-- frontend stores its own last-seen notification timestamp
-- frontend calls notification list API with `since=<ISO datetime>`
-- backend responds with `has_new`, `new_count`, and `latest_created_at`
-
-Notification delivery options:
-
-| Option | How it works | Pros | Cons | Fit for current design |
-|---|---|---|---|---|
-| API polling | Mobile app calls notification APIs periodically | Simple, uses current REST backend, easy to debug | Delayed updates, extra battery/network use, more backend load, weak for backgrounded app | Current implementation |
-| Firestore realtime listener | Mobile app listens directly to `all_doctor` or `all_nurse` | Near real-time, no polling loop, good while app is open | Requires Firebase client integration and careful security rules, weak for terminated app alerts | Good next step for live in-app bell updates |
-| FCM push | Backend sends push notifications to device tokens | Best for background/closed app alerts, native OS notifications, efficient delivery | Requires token management, more setup, should not be sole source of truth | Good add-on when true push is needed |
-| Firestore + FCM | Store notification in Firestore and also send FCM | Best overall design, reliable history plus instant alerting, app can recover missed pushes | More moving parts and implementation work | Recommended long term |
-| WebSocket / SSE | Mobile app keeps a live connection to backend | Real-time without polling | More infra complexity, weaker mobile background behavior, more connection handling work | Usually not worth it here |
-
-Current conclusion:
-
-| Question | Conclusion |
-|---|---|
-| What are we doing now? | API polling against `GET /doctor-notifications` and `GET /nurse-notifications` |
-| Why is it acceptable now? | It is the simplest option and matches the current shared broadcast model |
-| Main limitation | Bell state is based on client-side last-seen tracking, not server-side per-user unread state |
-| Recommended upgrade path | Firestore realtime for in-app updates, then add FCM if background push is needed |
-
 ## Standard Error Shape
 
-FastAPI error responses are generally returned as:
+Most non-success responses follow:
 
 ```json
 {
@@ -114,16 +63,13 @@ Validation errors may return:
 
 ## Timestamp Rules
 
-Current backend behavior:
+- `routes/cases.py` normalizes parsed datetimes to UTC.
+- `appointment_at` and `completed_at` should be ISO 8601 datetimes with timezone.
+- Some routes still use Firestore server timestamps, especially in `routes/analysis.py`, `routes/task.py`, and `routes/patients.py`.
 
-- In `routes/cases.py`, backend-generated timestamps are normalized to UTC.
-- Frontend-provided datetimes are parsed and converted to UTC before storage.
-- `appointment_at` and `completed_at` should be sent as ISO 8601 datetimes.
-- Some other files still use Firestore server timestamps, especially `routes/analysis.py`, `routes/task.py`, and `routes/patients.py`.
+Recommended client rule:
 
-Recommended frontend rule:
-
-- Always send ISO 8601 with timezone offset, for example `2026-03-23T14:30:00+07:00`.
+- always send ISO 8601 with timezone offset, for example `2026-03-23T14:30:00+07:00`
 
 ## Core Enums
 
@@ -144,128 +90,13 @@ Recommended frontend rule:
 - `MEDIUM`
 - `ROUTINE`
 
-## High-Level Data Model
+## Data Objects
 
-### Patient
+### Patient Object
 
 ```json
 {
   "patient_id": "PT-2603-00001",
-  "patient_name": "John Doe",
-  "phone_no": "0812345678",
-  "dob": "1990-01-01",
-  "gender": "female",
-  "height_cm": 160.0,
-  "weight_kg": 55.0,
-  "medical_history": "DM",
-  "diabetes": {
-    "has_diabetes": "Yes",
-    "years": "1-5y",
-    "risk_history": [],
-    "complications": []
-  },
-  "photo_url": "https://..."
-}
-```
-
-### Case
-
-```json
-{
-  "case_id": "CS-260323-00001",
-  "patient_id": "PT-2603-00001",
-  "status": "PLAN_ISSUED",
-  "urgency": "MEDIUM",
-  "current_record_id": "REC-00001",
-  "current_analysis_id": "AN-20260323143000",
-  "current_plan_id": "PL-20260323143000",
-  "case_created_at": "2026-03-23T07:30:00+00:00",
-  "case_updated_at": "2026-03-23T09:00:00+00:00"
-}
-```
-
-The case document also stores current snapshot fields:
-
-- `current_timestamps`
-- `current_image`
-- `current_vital_signs`
-- `current_wound_detail`
-- `current_ischemia`
-- `current_infection`
-- `current_neuropathy`
-- `current_sinbad`
-- `current_lab_results`
-- `current_vascular`
-- `current_gangrene_extent`
-- `current_analysis`
-- `current_treatment_plan`
-- `current_task_list`
-- `current_healing_progress`
-
-### Record
-
-Important record sections:
-
-- `record_id`
-- `case_id`
-- `patient_id`
-- `status`
-- `urgency`
-- `timestamps`
-- `vital_signs`
-- `wound_detail`
-- `ischemia`
-- `infection`
-- `neuropathy`
-- `sinbad`
-- `lab_results`
-- `vascular`
-- `gangrene_extent`
-- `analysis`
-- `treatment_plan`
-- `task_list`
-- `image`
-- `current_healing_progress`
-
-### Vital Signs
-
-Current stored shape:
-
-```json
-{
-  "temperature": "...",
-  "blood_pressure": "120/80",
-  "blood_pressure_systolic": "120",
-  "blood_pressure_diastolic": "80",
-  "blood_glucose": "...",
-  "heart_rate": "...",
-  "respiratory_rate": "..."
-}
-```
-
-## Firestore Layout
-
-```text
-patients/{patient_id}
-
-cases/{case_id}
-cases/{case_id}/records/{record_id}
-cases/{case_id}/records/{record_id}/analysis_versions/{analysis_id}
-cases/{case_id}/records/{record_id}/plan_versions/{plan_id}
-cases/{case_id}/records/{record_id}/plan_versions/{plan_id}/tasks/{task_id}
-
-metadata/counters_{YYMM}
-metadata/counters_case_{YYMMDD}
-```
-
-## Firestore Field Hierarchy
-
-### `patients/{patient_id}`
-
-Example:
-
-```json
-{
   "nrc_id": "1234567890123",
   "patient_name": "John Doe",
   "phone_no": "0812345678",
@@ -287,9 +118,7 @@ Example:
 }
 ```
 
-### `cases/{case_id}`
-
-Core fields:
+### Case Object
 
 ```json
 {
@@ -302,15 +131,8 @@ Core fields:
   "case_created_at": "2026-03-23T07:30:00+00:00",
   "case_updated_at": "2026-03-23T09:00:00+00:00",
   "current_record_id": "REC-00001",
-  "current_analysis_id": "AN-20260323090000",
-  "current_plan_id": "PL-20260323100000"
-}
-```
-
-Snapshot fields stored on the case:
-
-```json
-{
+  "current_analysis_id": "AN-20260323100000",
+  "current_plan_id": "PL-20260323100000",
   "current_timestamps": {},
   "current_image": {},
   "current_vital_signs": {},
@@ -321,17 +143,15 @@ Snapshot fields stored on the case:
   "current_sinbad": {},
   "current_lab_results": {},
   "current_vascular": {},
-  "current_gangrene_extent": "none",
+  "current_gangrene_extent": null,
   "current_analysis": {},
   "current_treatment_plan": {},
   "current_task_list": [],
-  "current_healing_progress": "..."
+  "current_healing_progress": null
 }
 ```
 
-### `cases/{case_id}/records/{record_id}`
-
-Example shape:
+### Record Object
 
 ```json
 {
@@ -358,109 +178,23 @@ Example shape:
   "image": {
     "image_folder_url": "https://..."
   },
-  "vital_signs": {
-    "temperature": "37.0",
-    "blood_pressure": "120/80",
-    "blood_pressure_systolic": "120",
-    "blood_pressure_diastolic": "80",
-    "blood_glucose": "145",
-    "heart_rate": "76",
-    "respiratory_rate": "18"
-  },
-  "wound_detail": {
-    "location_primary": "toe",
-    "location_detail": "left great toe",
-    "wound_type": "ulcer",
-    "shape": "irregular",
-    "size": {
-      "width_cm": 2.4,
-      "length_cm": 3.1
-    },
-    "depth_category": "full_thickness",
-    "bed": {
-      "slough_pct": 40,
-      "necrotic_pct": 10
-    },
-    "edge_description": "irregular",
-    "periwound_status": "erythematous",
-    "discharge": {
-      "volume": "moderate",
-      "type": "seropurulent (cloudy yellow)"
-    },
-    "odor_presence": "faint",
-    "pain_score": 5,
-    "has_infection": true,
-    "skin_condition": "dry"
-  },
-  "ischemia": {
-    "points": [1],
-    "pulse": "yes",
-    "checklist": []
-  },
-  "infection": {
-    "checklist": ["Warmth (hotter than other foot)"],
-    "erythema_extent": "gt_0_5_cm",
-    "probe_to_bone_test": "negative",
-    "has_deep_abscess_or_fasciitis": false
-  },
-  "neuropathy": {
-    "points": [1]
-  },
-  "sinbad": {
-    "site": "Forefoot",
-    "ischemia": "No",
-    "neuropathy": "Yes",
-    "infection": "Yes",
-    "area": ">= 1 cm²",
-    "depth": "Skin only"
-  },
-  "lab_results": {
-    "wbc_count": "11000",
-    "crp": "15",
-    "esr": "25",
-    "procalcitonin": "0.2"
-  },
-  "vascular": {
-    "abi_value": "1.0",
-    "ankle_pressure_mmHg": "120",
-    "toe_pressure_mmHg": "90",
-    "tcpo2_mmHg": "55"
-  },
-  "gangrene_extent": "none",
+  "vital_signs": {},
+  "wound_detail": {},
+  "ischemia": {},
+  "infection": {},
+  "neuropathy": {},
+  "sinbad": {},
+  "lab_results": {},
+  "vascular": {},
+  "gangrene_extent": null,
   "analysis": {},
-  "treatment_plan": {
-    "plan_id": "PL-20260323100000",
-    "plan_text": "Perform dressing change, offloading, and follow-up review.",
-    "followup_days": 7,
-    "status": "SENT",
-    "plan_tasks": [
-      {
-        "task_id": "TSK-0001",
-        "task_text": "Apply dressing",
-        "status": "SENT",
-        "task_due": "2026-03-24",
-        "completed_at": null,
-        "task_photo_url": null
-      }
-    ]
-  },
-  "task_list": [
-    {
-      "task_id": "TSK-0001",
-      "task_text": "Apply dressing",
-      "status": "SENT",
-      "task_due": "2026-03-24",
-      "completed_at": null,
-      "task_photo_url": null
-    }
-  ],
-  "current_healing_progress": "..."
+  "treatment_plan": {},
+  "task_list": [],
+  "current_healing_progress": null
 }
 ```
 
-### `cases/{case_id}/records/{record_id}/analysis_versions/{analysis_id}`
-
-Example:
+### Analysis Version Object
 
 ```json
 {
@@ -470,12 +204,7 @@ Example:
   "status": "SENT",
   "source": "Doctor",
   "created_at": "timestamp",
-  "payload": {
-    "analysis": {},
-    "treatment_plan": {},
-    "signature": null,
-    "signature_base64": null
-  }
+  "payload": {}
 }
 ```
 
@@ -490,9 +219,7 @@ Observed `status` values:
 - `DRAFT`
 - `SENT`
 
-### `cases/{case_id}/records/{record_id}/plan_versions/{plan_id}`
-
-Example:
+### Plan Version Object
 
 ```json
 {
@@ -508,9 +235,7 @@ Example:
 }
 ```
 
-### `cases/{case_id}/records/{record_id}/plan_versions/{plan_id}/tasks/{task_id}`
-
-Example:
+### Task Object
 
 ```json
 {
@@ -528,73 +253,174 @@ Example:
 }
 ```
 
-### `metadata/counters_{YYMM}`
-
-Used for patient numbering.
+### Doctor Notification Object
 
 ```json
 {
-  "last_running_num": 15
+  "notification_id": "NTF-20260323090000123456",
+  "type": "CASE_SENT_TO_DOCTOR",
+  "case_id": "CS-260323-00001",
+  "record_id": "REC-00001",
+  "patient_id": "PT-2603-00001",
+  "patient_name": "John Doe",
+  "urgency": "URGENT",
+  "status": "UNREAD",
+  "title": "New case for review",
+  "message": "Case CS-260323-00001 is ready for doctor review.",
+  "created_at": "2026-03-23T09:00:00.123456+00:00",
+  "read_at": null
 }
 ```
 
-### `metadata/counters_case_{YYMMDD}`
-
-Used for case numbering.
+### Nurse Notification Object
 
 ```json
 {
-  "last_running_num": 42
+  "notification_id": "NTF-20260323100000123456",
+  "type": "PLAN_ISSUED_TO_NURSE",
+  "case_id": "CS-260323-00001",
+  "record_id": "REC-00001",
+  "patient_id": "PT-2603-00001",
+  "patient_name": "John Doe",
+  "urgency": "URGENT",
+  "created_by_nurse": "NURSE-001",
+  "status": "UNREAD",
+  "title": "Plan ready",
+  "message": "Doctor review is complete for case CS-260323-00001.",
+  "created_at": "2026-03-23T10:00:00.123456+00:00",
+  "read_at": null
 }
 ```
 
-### Status Propagation Rules
+## Firestore Layout
 
-- `case.status` is the high-level case lifecycle state.
-- `record.status` is the active state for the current record.
-- `current_treatment_plan.status` mirrors the active plan snapshot.
-- `current_task_list[*].status` mirrors the active task snapshot.
-- `/request_close` only changes case and record to `REQUEST_CLOSE`.
-- `/create_appointment` changes case, record, plan, and tasks to `APPOINTMENT`.
-- `/complete_case` changes case, record, plan, and tasks to `COMPLETED`.
-- `/doctor-review` changes case and record to `PLAN_ISSUED`, and forces plan/tasks to `SENT`.
+```text
+patients/{patient_id}
+
+cases/{case_id}
+cases/{case_id}/records/{record_id}
+cases/{case_id}/records/{record_id}/analysis_versions/{analysis_id}
+cases/{case_id}/records/{record_id}/plan_versions/{plan_id}
+cases/{case_id}/records/{record_id}/plan_versions/{plan_id}/tasks/{task_id}
+
+all_doctor/{notification_id}
+all_nurse/{notification_id}
+
+metadata/counters_{YYMM}
+metadata/counters_case_{YYMMDD}
+```
+
+## Status Propagation Rules
+
+- `case.status` is the high-level lifecycle state.
+- `record.status` is the state of the current working record.
+- `current_treatment_plan.status` mirrors the current plan snapshot.
+- `current_task_list[*].status` mirrors the current task snapshot.
+- `POST /doctor-review` forces plan and task status to `SENT`.
+- `POST /create_appointment` updates case, record, current plan, and current tasks to `APPOINTMENT`.
+- `POST /request_close` only updates case and record to `REQUEST_CLOSE`.
+- `POST /complete_case` updates case, record, current plan, and current tasks to `COMPLETED`.
 
 ## Endpoint Summary
 
 | Method | Path | Purpose |
-|---|---|---|
-| `POST` | `/load-dashboard` | Connectivity check |
+| --- | --- | --- |
+| `GET` | `/load-dashboard` | Return dashboard summary counters and upcoming tasks |
 | `POST` | `/create-patient-profile` | Create patient profile |
 | `GET` | `/patients_list` | List patients |
 | `PATCH` | `/patients/{patient_id}` | Update patient profile |
 | `POST` | `/create-case` | Create first case record |
 | `POST` | `/update_cases` | Create follow-up record |
-| `POST` | `/cases_list` | List cases, optionally filtered by status |
-| `POST` | `/case_detail` | Load case, records, patient profile |
-| `POST` | `/send-to-doctor` | Save nurse-reviewed record and create AI analysis/plan versions |
-| `POST` | `/doctor-review` | Save doctor-reviewed analysis and plan |
-| `POST` | `/create_appointment` | Move current case/record/plan/tasks to `APPOINTMENT` |
+| `POST` | `/cases_list` | List cases with optional filters |
+| `POST` | `/case_detail` | Load case, records, and patient profile |
+| `POST` | `/send-to-doctor` | Save nurse-reviewed record and create analysis/plan versions |
+| `POST` | `/doctor-review` | Save doctor-reviewed analysis and issue plan |
+| `POST` | `/create_appointment` | Move current case flow to `APPOINTMENT` |
 | `POST` | `/request_close` | Mark case and current record as `REQUEST_CLOSE` |
-| `POST` | `/complete_case` | Move current case/record/plan/tasks to `COMPLETED` |
+| `POST` | `/complete_case` | Move current case flow to `COMPLETED` |
+| `POST` | `/analyze-transcribe` | Transcribe uploaded audio |
 | `POST` | `/analyze-fillin` | Upload image and get fill-in output |
 | `POST` | `/analyze-wound` | Run AI wound analysis |
-| `POST` | `/analyze-healing` | Generate healing progress |
+| `POST` | `/analyze-healing` | Generate healing progress summary |
+| `GET` | `/doctor-notifications` | List shared doctor notifications |
+| `GET` | `/nurse-notifications` | List shared nurse notifications |
 | `POST` | `/tasks_list` | List current treatment plans with tasks |
-| `POST` | `/task_detail` | Load one task or the current plan task list |
+| `POST` | `/task_detail` | Load one task or the current task list |
 | `POST` | `/task_update` | Update current plan tasks |
 
 ## Endpoint Contracts
 
-### `POST /create-patient-profile`
+### Dashboard
 
-Content type: `multipart/form-data`
+**GET /load-dashboard**
 
-Fields:
+----
 
-- `patient_data`: JSON string, required
-- `image`: file, optional
+Returns dashboard counters and up to 4 upcoming tasks derived from `cases` and `patients`.
 
-Success response:
+* **URL Params**
+  None
+
+* **Data Params**
+  None
+
+* **Headers**
+  Content-Type: application/json
+
+* **Success Response:**
+* **Code:** 200
+  **Content:**
+
+```json
+{
+  "status": "success",
+  "today_task_no": 2,
+  "total_active_patient": 4,
+  "upcoming_plan": [
+    {
+      "case_id": "CS-260323-00001",
+      "patient_id": "PT-2603-00001",
+      "patient_name": "John Doe",
+      "status": "PLAN_ISSUED",
+      "urgency": "MEDIUM",
+      "case_updated_at": "2026-03-23T09:00:00+00:00",
+      "due_date": "2026-03-24",
+      "patient_photo_url": "https://..."
+    }
+  ]
+}
+```
+
+* **Error Response:**
+  * **Code:** 500
+  **Content:** `{ "detail": "..." }`
+
+### Patients
+
+**POST /create-patient-profile**
+
+----
+
+Creates a new patient profile and optionally uploads a profile image.
+
+* **URL Params**
+  None
+
+* **Data Params**
+
+```json
+{
+  "patient_data": "JSON string of patient fields",
+  "image": "optional file"
+}
+```
+
+* **Headers**
+  Content-Type: multipart/form-data
+
+* **Success Response:**
+* **Code:** 200
+  **Content:**
 
 ```json
 {
@@ -605,22 +431,66 @@ Success response:
 }
 ```
 
-### `GET /patients_list?limit=50`
+* **Error Response:**
+  * **Code:** 400
+  **Content:** `{ "detail": "Data format error: ..." }`
 
-Success response:
+**GET /patients_list**
+
+----
+
+Returns patients ordered by `created_at` descending.
+
+* **URL Params**
+  *Optional:* `limit=[integer]`
+
+* **Data Params**
+  None
+
+* **Headers**
+  Content-Type: application/json
+
+* **Success Response:**
+* **Code:** 200
+  **Content:**
 
 ```json
 {
   "status": "success",
-  "patients": []
+  "patients": [
+    { "<patient_object>": "..." }
+  ]
 }
 ```
 
-### `PATCH /patients/{patient_id}`
+* **Error Response:**
+  * **Code:** 500
+  **Content:** `{ "detail": "..." }`
 
-Body: partial JSON object with non-null fields to merge.
+**PATCH /patients/{patient_id}**
 
-Success response:
+----
+
+Updates non-null fields on the specified patient profile.
+
+* **URL Params**
+  *Required:* `patient_id=[string]`
+
+* **Data Params**
+
+```json
+{
+  "phone_no": "0899999999",
+  "weight_kg": 56
+}
+```
+
+* **Headers**
+  Content-Type: application/json
+
+* **Success Response:**
+* **Code:** 200
+  **Content:**
 
 ```json
 {
@@ -630,9 +500,25 @@ Success response:
 }
 ```
 
-### `POST /create-case`
+* **Error Response:**
+  * **Code:** 400
+  **Content:** `{ "detail": "No fields to update" }`
+  OR
+  * **Code:** 500
+  **Content:** `{ "detail": "..." }`
 
-Request body:
+### Cases
+
+**POST /create-case**
+
+----
+
+Creates the initial case document and first record for a patient.
+
+* **URL Params**
+  None
+
+* **Data Params**
 
 ```json
 {
@@ -656,7 +542,12 @@ Request body:
 }
 ```
 
-Success response:
+* **Headers**
+  Content-Type: application/json
+
+* **Success Response:**
+* **Code:** 200
+  **Content:**
 
 ```json
 {
@@ -667,21 +558,64 @@ Success response:
 }
 ```
 
-### `POST /update_cases`
+* **Error Response:**
+  * **Code:** 500
+  **Content:** `{ "detail": "..." }`
 
-Request body is the same shape as `/create-case`, plus:
+**POST /update_cases**
 
-- `case_id`: required
+----
 
-Behavior:
+Creates a follow-up record under an existing case.
 
-- creates a new follow-up record
-- carries forward non-null sections from the latest/current record
-- may duplicate the latest treatment plan into a new `plan_id`
+* **URL Params**
+  None
 
-### `POST /cases_list`
+* **Data Params**
+  Same structure as `POST /create-case`, plus:
 
-Request body:
+```json
+{
+  "case_id": "CS-260323-00001"
+}
+```
+
+* **Headers**
+  Content-Type: application/json
+
+* **Success Response:**
+* **Code:** 200
+  **Content:**
+
+```json
+{
+  "status": "Case update success",
+  "patient_id": "PT-2603-00001",
+  "case_id": "CS-260323-00001",
+  "record_id": "REC-00002"
+}
+```
+
+* **Error Response:**
+  * **Code:** 400
+  **Content:** `{ "detail": "patient_id does not match case" }`
+  OR
+  * **Code:** 404
+  **Content:** `{ "detail": "Case not found" }`
+  OR
+  * **Code:** 500
+  **Content:** `{ "detail": "..." }`
+
+**POST /cases_list**
+
+----
+
+Returns case documents with optional `patient_id` and status filtering.
+
+* **URL Params**
+  None
+
+* **Data Params**
 
 ```json
 {
@@ -691,25 +625,36 @@ Request body:
 }
 ```
 
-Notes:
+* **Headers**
+  Content-Type: application/json
 
-- `filter` is optional
-- when present, backend applies `where status in [...]`
-- status values are uppercased internally
-- Firestore `in` is capped, so the backend trims to at most 10 values
-
-Success response:
+* **Success Response:**
+* **Code:** 200
+  **Content:**
 
 ```json
 {
   "status": "success",
-  "cases": []
+  "cases": [
+    { "<case_object>": "..." }
+  ]
 }
 ```
 
-### `POST /case_detail`
+* **Error Response:**
+  * **Code:** 500
+  **Content:** `{ "detail": "..." }`
 
-Request body:
+**POST /case_detail**
+
+----
+
+Returns the case snapshot, its records, and the linked patient profile.
+
+* **URL Params**
+  None
+
+* **Data Params**
 
 ```json
 {
@@ -717,42 +662,52 @@ Request body:
 }
 ```
 
-Success response:
+* **Headers**
+  Content-Type: application/json
+
+* **Success Response:**
+* **Code:** 200
+  **Content:**
 
 ```json
 {
   "status": "success",
-  "case": {},
-  "records": [],
-  "patient_profile": {}
+  "case": { "<case_object>": "..." },
+  "records": [
+    { "<record_object>": "..." }
+  ],
+  "patient_profile": { "<patient_object>": "..." }
 }
 ```
 
-### `POST /send-to-doctor`
+* **Error Response:**
+  * **Code:** 400
+  **Content:** `{ "detail": "case_id is required" }`
+  OR
+  * **Code:** 404
+  **Content:** `{ "detail": "Case not found" }`
+  OR
+  * **Code:** 500
+  **Content:** `{ "detail": "..." }`
 
-Request body: `WoundCaseRecordUpdate` payload.
+**POST /send-to-doctor**
 
-Required clinical sections:
+----
 
-- `vital_signs`
-- `wound_detail`
-- `ischemia`
-- `infection`
-- `neuropathy`
-- `sinbad`
-- `lab_results`
-- `vascular`
+Merges nurse-reviewed data into the record and creates analysis and plan versions.
 
-Behavior:
+* **URL Params**
+  None
 
-- merges into the existing record
-- creates `analysis_versions/{analysis_id}`
-- creates `plan_versions/{plan_id}`
-- creates plan task documents
-- creates a shared doctor notification in `all_doctor/{notification_id}`
-- updates case current snapshot
+* **Data Params**
+  `WoundCaseRecordUpdate` JSON payload.
 
-Success response:
+* **Headers**
+  Content-Type: application/json
+
+* **Success Response:**
+* **Code:** 200
+  **Content:**
 
 ```json
 {
@@ -766,9 +721,20 @@ Success response:
 }
 ```
 
-### `POST /doctor-review`
+* **Error Response:**
+  * **Code:** 500
+  **Content:** `{ "detail": "..." }`
 
-Request body:
+**POST /doctor-review**
+
+----
+
+Creates a doctor analysis version, optionally creates a doctor plan version, and forces plan and tasks to `SENT`.
+
+* **URL Params**
+  None
+
+* **Data Params**
 
 ```json
 {
@@ -796,17 +762,12 @@ Request body:
 }
 ```
 
-Behavior:
+* **Headers**
+  Content-Type: application/json
 
-- creates a new doctor analysis version
-- creates a new doctor plan version when `treatment_plan` is provided
-- forces plan status to `SENT`
-- forces each plan task status to `SENT`
-- updates case and record status to `PLAN_ISSUED`
-- preserves previous `SINBAD` classification
-- creates a shared nurse notification in `all_nurse/{notification_id}`
-
-Success response:
+* **Success Response:**
+* **Code:** 200
+  **Content:**
 
 ```json
 {
@@ -822,80 +783,26 @@ Success response:
 }
 ```
 
-### `GET /doctor-notifications`
+* **Error Response:**
+  * **Code:** 400
+  **Content:** `{ "detail": "case_id is required" }`
+  OR
+  * **Code:** 404
+  **Content:** `{ "detail": "Case not found" }`
+  OR
+  * **Code:** 500
+  **Content:** `{ "detail": "..." }`
 
-Query params:
+**POST /create_appointment**
 
-- `limit` optional integer, default `50`, min `1`, max `200`
+----
 
-Behavior:
+Updates case, record, current plan, and current tasks to `APPOINTMENT`.
 
-- reads from `all_doctor`
-- orders by `created_at` descending
+* **URL Params**
+  None
 
-Success response:
-
-```json
-{
-  "status": "success",
-  "notifications": [
-    {
-      "notification_id": "NTF-20260323090000123456",
-      "type": "CASE_SENT_TO_DOCTOR",
-      "case_id": "CS-260323-00001",
-      "record_id": "REC-00001",
-      "patient_id": "PT-2603-00001",
-      "patient_name": "John Doe",
-      "urgency": "URGENT",
-      "status": "UNREAD",
-      "title": "New case for review",
-      "message": "Case CS-260323-00001 is ready for doctor review.",
-      "created_at": "2026-03-23T09:00:00.123456+00:00",
-      "read_at": null
-    }
-  ]
-}
-```
-
-### `GET /nurse-notifications`
-
-Query params:
-
-- `limit` optional integer, default `50`, min `1`, max `200`
-
-Behavior:
-
-- reads from `all_nurse`
-- orders by `created_at` descending
-
-Success response:
-
-```json
-{
-  "status": "success",
-  "notifications": [
-    {
-      "notification_id": "NTF-20260323100000123456",
-      "type": "PLAN_ISSUED_TO_NURSE",
-      "case_id": "CS-260323-00001",
-      "record_id": "REC-00001",
-      "patient_id": "PT-2603-00001",
-      "patient_name": "John Doe",
-      "urgency": "URGENT",
-      "created_by_nurse": "NURSE-001",
-      "status": "UNREAD",
-      "title": "Plan ready",
-      "message": "Doctor review is complete for case CS-260323-00001.",
-      "created_at": "2026-03-23T10:00:00.123456+00:00",
-      "read_at": null
-    }
-  ]
-}
-```
-
-### `POST /create_appointment`
-
-Request body:
+* **Data Params**
 
 ```json
 {
@@ -904,13 +811,12 @@ Request body:
 }
 ```
 
-Behavior:
+* **Headers**
+  Content-Type: application/json
 
-- resolves `record_id` from `current_record_id`
-- updates case, current record, current plan, and current tasks to `APPOINTMENT`
-- writes `timestamps.appointment_at`
-
-Success response:
+* **Success Response:**
+* **Code:** 200
+  **Content:**
 
 ```json
 {
@@ -923,9 +829,26 @@ Success response:
 }
 ```
 
-### `POST /request_close`
+* **Error Response:**
+  * **Code:** 400
+  **Content:** `{ "detail": "appointment_at must be a valid ISO datetime" }`
+  OR
+  * **Code:** 404
+  **Content:** `{ "detail": "Case not found" }`
+  OR
+  * **Code:** 500
+  **Content:** `{ "detail": "..." }`
 
-Request body:
+**POST /request_close**
+
+----
+
+Updates case and current record to `REQUEST_CLOSE` and creates a doctor notification.
+
+* **URL Params**
+  None
+
+* **Data Params**
 
 ```json
 {
@@ -933,26 +856,43 @@ Request body:
 }
 ```
 
-Behavior:
+* **Headers**
+  Content-Type: application/json
 
-- resolves `record_id` from `current_record_id`
-- updates only case and current record to `REQUEST_CLOSE`
-- does not change plan or task statuses
-
-Success response:
+* **Success Response:**
+* **Code:** 200
+  **Content:**
 
 ```json
 {
   "status": "success",
   "message": "Close request saved",
   "case_id": "CS-260323-00001",
-  "record_id": "REC-00001"
+  "record_id": "REC-00001",
+  "notification_id": "NTF-20260323120000123456"
 }
 ```
 
-### `POST /complete_case`
+* **Error Response:**
+  * **Code:** 400
+  **Content:** `{ "detail": "case_id is required" }`
+  OR
+  * **Code:** 404
+  **Content:** `{ "detail": "Case not found" }`
+  OR
+  * **Code:** 500
+  **Content:** `{ "detail": "..." }`
 
-Request body:
+**POST /complete_case**
+
+----
+
+Updates case, current record, current plan, and current tasks to `COMPLETED`.
+
+* **URL Params**
+  None
+
+* **Data Params**
 
 ```json
 {
@@ -961,15 +901,12 @@ Request body:
 }
 ```
 
-`completed_at` is optional. If omitted, backend uses current UTC time.
+* **Headers**
+  Content-Type: application/json
 
-Behavior:
-
-- resolves `record_id` from `current_record_id`
-- updates case, current record, current plan, and current tasks to `COMPLETED`
-- writes `timestamps.completed_at`
-
-Success response:
+* **Success Response:**
+* **Code:** 200
+  **Content:**
 
 ```json
 {
@@ -982,17 +919,96 @@ Success response:
 }
 ```
 
-### `POST /analyze-fillin`
+* **Error Response:**
+  * **Code:** 400
+  **Content:** `{ "detail": "case_id is required" }`
+  OR
+  * **Code:** 404
+  **Content:** `{ "detail": "Case not found" }`
+  OR
+  * **Code:** 500
+  **Content:** `{ "detail": "..." }`
 
-Content type: `multipart/form-data`
+### Analysis
 
-Fields:
+**POST /analyze-transcribe**
 
-- `case_id`: required
-- `record_id`: required
-- `image`: required
+----
 
-Success response:
+Transcribes uploaded audio using the configured model.
+
+* **URL Params**
+  None
+
+* **Data Params**
+
+```json
+{
+  "case_id": "CS-260323-00001",
+  "record_id": "REC-00001",
+  "audio": "required file"
+}
+```
+
+* **Headers**
+  Content-Type: multipart/form-data
+
+* **Success Response:**
+* **Code:** 200
+  **Content:**
+
+```json
+{
+  "status": "success",
+  "case_id": "CS-260323-00001",
+  "record_id": "REC-00001",
+  "transcript": "..."
+}
+```
+
+* **Alternative Success Response:**
+* **Code:** 200
+  **Content:**
+
+```json
+{
+  "status": "blocked",
+  "reason": "..."
+}
+```
+
+* **Error Response:**
+  * **Code:** 400
+  **Content:** `{ "detail": "Audio file is empty" }`
+  OR
+  * **Code:** 500
+  **Content:** `{ "detail": "..." }`
+
+**POST /analyze-fillin**
+
+----
+
+Uploads an image to storage, stores the URL, and returns model-produced fill-in data.
+
+* **URL Params**
+  None
+
+* **Data Params**
+
+```json
+{
+  "case_id": "CS-260323-00001",
+  "record_id": "REC-00001",
+  "image": "required file"
+}
+```
+
+* **Headers**
+  Content-Type: multipart/form-data
+
+* **Success Response:**
+* **Code:** 200
+  **Content:**
 
 ```json
 {
@@ -1005,16 +1021,32 @@ Success response:
 }
 ```
 
-### `POST /analyze-wound`
+* **Error Response:**
+  * **Code:** 400
+  **Content:** `{ "detail": "Invalid image file" }`
+  OR
+  * **Code:** 500
+  **Content:** `{ "detail": "..." }`
 
-Content type: `multipart/form-data`
+**POST /analyze-wound**
 
-Fields:
+----
 
-- `payload_data`: JSON string, required
-- `image`: required
+Runs AI wound analysis using structured payload data plus an uploaded image.
 
-Expected minimum `payload_data`:
+* **URL Params**
+  None
+
+* **Data Params**
+
+```json
+{
+  "payload_data": "JSON string",
+  "image": "required file"
+}
+```
+
+Minimum `payload_data` shape:
 
 ```json
 {
@@ -1028,7 +1060,12 @@ Expected minimum `payload_data`:
 }
 ```
 
-Success response:
+* **Headers**
+  Content-Type: multipart/form-data
+
+* **Success Response:**
+* **Code:** 200
+  **Content:**
 
 ```json
 {
@@ -1037,11 +1074,27 @@ Success response:
 }
 ```
 
-Note: the final `analysis` field is returned as a JSON string, not as a nested object.
+* **Alternative Success Response:**
+* **Code:** 200
+  **Content:** `{ "status": "blocked", "reason": "..." }`
 
-### `POST /analyze-healing`
+* **Error Response:**
+  * **Code:** 400
+  **Content:** `{ "detail": "Invalid payload_data JSON: ..." }`
+  OR
+  * **Code:** 500
+  **Content:** `{ "detail": "..." }`
 
-Request body:
+**POST /analyze-healing**
+
+----
+
+Generates healing progress from the case timeline and may store a doctor-review draft analysis.
+
+* **URL Params**
+  None
+
+* **Data Params**
 
 ```json
 {
@@ -1049,19 +1102,114 @@ Request body:
 }
 ```
 
-Success response:
+* **Headers**
+  Content-Type: application/json
+
+* **Success Response:**
+* **Code:** 200
+  **Content:**
 
 ```json
 {
   "status": "success",
   "analysis": "Overall wound healing is improving",
-  "records": []
+  "records": [],
+  "notification_id": "NTF-20260323130000123456"
 }
 ```
 
-### `POST /tasks_list`
+* **Alternative Success Response:**
+* **Code:** 200
+  **Content:** `{ "status": "blocked", "reason": "...", "records": [] }`
 
-Request body:
+* **Error Response:**
+  * **Code:** 400
+  **Content:** `{ "detail": "case_id is required" }`
+  OR
+  * **Code:** 404
+  **Content:** `{ "detail": "No records found for this case" }`
+  OR
+  * **Code:** 500
+  **Content:** `{ "detail": "..." }`
+
+### Notifications
+
+**GET /doctor-notifications**
+
+----
+
+Returns the shared doctor notification feed ordered by `created_at` descending.
+
+* **URL Params**
+  *Optional:* `limit=[integer]`
+
+* **Data Params**
+  None
+
+* **Headers**
+  Content-Type: application/json
+
+* **Success Response:**
+* **Code:** 200
+  **Content:**
+
+```json
+{
+  "status": "success",
+  "notifications": [
+    { "<doctor_notification_object>": "..." }
+  ]
+}
+```
+
+* **Error Response:**
+  * **Code:** 500
+  **Content:** `{ "detail": "..." }`
+
+**GET /nurse-notifications**
+
+----
+
+Returns the shared nurse notification feed ordered by `created_at` descending.
+
+* **URL Params**
+  *Optional:* `limit=[integer]`
+
+* **Data Params**
+  None
+
+* **Headers**
+  Content-Type: application/json
+
+* **Success Response:**
+* **Code:** 200
+  **Content:**
+
+```json
+{
+  "status": "success",
+  "notifications": [
+    { "<nurse_notification_object>": "..." }
+  ]
+}
+```
+
+* **Error Response:**
+  * **Code:** 500
+  **Content:** `{ "detail": "..." }`
+
+### Tasks
+
+**POST /tasks_list**
+
+----
+
+Returns current treatment plans from recent cases, enriched with patient info.
+
+* **URL Params**
+  None
+
+* **Data Params**
 
 ```json
 {
@@ -1069,18 +1217,44 @@ Request body:
 }
 ```
 
-Success response:
+* **Headers**
+  Content-Type: application/json
+
+* **Success Response:**
+* **Code:** 200
+  **Content:**
 
 ```json
 {
   "status": "success",
-  "current_treatment_plan": []
+  "current_treatment_plan": [
+    {
+      "case_id": "CS-260323-00001",
+      "patient_id": "PT-2603-00001",
+      "patient_name": "John Doe",
+      "photo_url": "https://...",
+      "current_record_id": "REC-00001",
+      "current_plan_id": "PL-20260323100000",
+      "current_treatment": {}
+    }
+  ]
 }
 ```
 
-### `POST /task_detail`
+* **Error Response:**
+  * **Code:** 500
+  **Content:** `{ "detail": "..." }`
 
-Request body:
+**POST /task_detail**
+
+----
+
+Returns one indexed task or the full `plan_tasks` list for a case.
+
+* **URL Params**
+  None
+
+* **Data Params**
 
 ```json
 {
@@ -1089,7 +1263,12 @@ Request body:
 }
 ```
 
-Success response:
+* **Headers**
+  Content-Type: application/json
+
+* **Success Response:**
+* **Code:** 200
+  **Content:**
 
 ```json
 {
@@ -1102,34 +1281,54 @@ Success response:
 }
 ```
 
-### `POST /task_update`
+If `task_index` is omitted, response returns `plan_tasks` instead of `task`.
 
-Content type: `multipart/form-data`
+* **Error Response:**
+  * **Code:** 400
+  **Content:** `{ "detail": "case_id is required" }`
+  OR
+  * **Code:** 404
+  **Content:** `{ "detail": "Case not found" }`
+  OR
+  * **Code:** 500
+  **Content:** `{ "detail": "..." }`
 
-Fields:
+**POST /task_update**
 
-- `case_id`: required
-- `plan_id`: optional
-- `updates`: JSON string list, required
-- `images`: optional file list
+----
 
-Example `updates`:
+Updates one or more tasks in the current plan and optionally uploads task images.
+
+* **URL Params**
+  None
+
+* **Data Params**
 
 ```json
-[
-  {
-    "task_id": "TSK-0001",
-    "updates": {
-      "status": "COMPLETED",
-      "task_due": "2026-03-30",
-      "completed_at": "2026-03-30T09:00:00+00:00",
-      "task_text": "Updated task text"
+{
+  "case_id": "CS-260323-00001",
+  "plan_id": "PL-20260323100000",
+  "updates": [
+    {
+      "task_id": "TSK-0001",
+      "updates": {
+        "status": "COMPLETED",
+        "task_due": "2026-03-30",
+        "completed_at": "2026-03-30T09:00:00+00:00",
+        "task_text": "Updated task text"
+      }
     }
-  }
-]
+  ],
+  "images": ["optional file list"]
+}
 ```
 
-Success response:
+* **Headers**
+  Content-Type: multipart/form-data
+
+* **Success Response:**
+* **Code:** 200
+  **Content:**
 
 ```json
 {
@@ -1140,7 +1339,17 @@ Success response:
 }
 ```
 
-## Case Workflow
+* **Error Response:**
+  * **Code:** 400
+  **Content:** `{ "detail": "plan_id does not match current plan" }`
+  OR
+  * **Code:** 404
+  **Content:** `{ "detail": "Case not found" }`
+  OR
+  * **Code:** 500
+  **Content:** `{ "detail": "..." }`
+
+## Workflow Summary
 
 Typical happy path:
 
@@ -1154,32 +1363,39 @@ Typical happy path:
 8. Optional request-close sets case to `REQUEST_CLOSE`
 9. Completion sets case to `COMPLETED`
 
-## Mobile App Integration Notes
+## Mobile App Notes
 
-Observed live Flutter usage:
+Observed Flutter usage includes:
 
-- `case_service.dart` uses `/cases_list`, `/case_detail`, `/task_detail`, `/doctor-review`, and `/complete_case`
-- the Flutter app maps `current_*` snapshot fields heavily for detail display
-- current mobile code expects direct-root endpoints such as:
-  - `/cases_list`
-  - `/case_detail`
-  - `/doctor-review`
-  - `/complete_case`
+- `/cases_list`
+- `/case_detail`
+- `/task_detail`
+- `/doctor-review`
+- `/complete_case`
 
-Some placeholder mobile code still references `/api/v1/...` routes that are not implemented in this backend. Those should be treated as non-live or mock-oriented unless the backend is later versioned to match them.
+The mobile app relies heavily on `current_*` snapshot fields on the case document.
 
-## Known Gaps
+## Production Readiness Gaps
 
-- Response formats are not fully standardized across endpoints.
-- Some non-`cases.py` routes still use Firestore server timestamps.
-- Some mobile service code still contains mock or legacy `/api/v1/...` references.
-- Read operations use `POST` in several places.
-- There is no auth layer yet.
+- no auth or role-based authorization
+- no versioned namespace such as `/api/v1`
+- several read operations use `POST` instead of `GET`
+- response formats are not fully standardized across endpoints
+- timestamps are not fully consistent across all routes
+- notifications are shared queues, not per-user inboxes
+- no explicit pagination cursors
+- public storage URLs are used for uploaded images
+- no idempotency strategy for retry-safe writes
+- AI endpoints have long-running external dependencies but no job queue or async status model
+- no documented rate limiting, request tracing, or audit model
 
-## Recommended Next Step
+## Recommended Production Improvements
 
-If this document will be shared externally, the next step should be to convert it into:
-
-1. a strict OpenAPI schema
-2. a shared error model
-3. a versioned API namespace such as `/api/v1`
+1. Add Firebase Auth or equivalent auth, then enforce nurse/doctor role authorization in every route.
+2. Version the API under `/api/v1` and freeze request and response schemas.
+3. Standardize envelopes, error codes, and timestamp serialization across all endpoints.
+4. Replace shared notification feeds with per-user or per-role scoped inbox design plus proper unread tracking.
+5. Stop using public file URLs for clinical images and move to private storage access.
+6. Add pagination, filtering contracts, and stable ordering for list endpoints.
+7. Move AI-heavy routes to background jobs with persisted job state and retries.
+8. Add automated contract tests and OpenAPI generation from code.

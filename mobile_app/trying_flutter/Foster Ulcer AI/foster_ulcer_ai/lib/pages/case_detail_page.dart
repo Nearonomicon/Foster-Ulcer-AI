@@ -284,7 +284,7 @@ extension _CaseDetailPage on _MainNavigationScreenState {
                   ? Image.network(
                       photoUrl,
                       fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => const Icon(
+                      errorBuilder: (_, _, _) => const Icon(
                         LucideIcons.user,
                         color: Color(0xFF0D9488),
                         size: 28,

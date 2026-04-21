@@ -107,7 +107,7 @@ extension _IntakePage on _MainNavigationScreenState {
             }).toList(),
           ),
           const SizedBox(height: 20),
-          _buildFormLabel("PHONE NO*"),
+          _buildFormLabel("PHONE NO"),
           TextFormField(
             controller: _patientPhoneCtrl,
             keyboardType: TextInputType.phone,
