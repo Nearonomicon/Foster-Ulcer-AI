@@ -6,7 +6,7 @@ This app now has a client-side push notification module built around Firebase Cl
 
 1. The app starts `PushNotificationService` in `lib/main.dart`.
 2. The service asks for notification permission, reads the FCM device token, and listens for token refresh.
-3. The app posts the token to `POST /device-notifications/register`.
+3. The app posts the token to `POST /notification-devices/register`.
 4. The backend stores the token against the nurse user and sends FCM messages when a case/task event happens.
 5. If the app is foregrounded, the service shows a local notification and refreshes the in-app notification list.
 6. If the app is backgrounded or terminated, the OS delivers the push and reopening the app routes the user into the notification panel.
@@ -27,14 +27,15 @@ This app now has a client-side push notification module built around Firebase Cl
 
 ## Backend contract
 
-Recommended request for `POST /device-notifications/register`:
+Recommended request for `POST /notification-devices/register`:
 
 ```json
 {
-  "user_id": "nurse-123",
-  "role": "nurse",
+  "user_id": "nurse-app",
+  "role": "NURSE",
+  "fcm_token": "fcm-token",
   "platform": "android",
-  "device_token": "fcm-token"
+  "device_id": "optional-device-id"
 }
 ```
 
@@ -43,7 +44,8 @@ Recommended backend table:
 - `user_id`
 - `role`
 - `platform`
-- `device_token`
+- `fcm_token`
+- `device_id`
 - `last_seen_at`
 - `is_active`
 

@@ -84,13 +84,12 @@ extension _CaseDetailPage on _MainNavigationScreenState {
         : (c['current_treatment_plan'] is Map)
             ? Map<String, dynamic>.from(c['current_treatment_plan'])
             : <String, dynamic>{};
-    final planTasks = (plan['plan_tasks'] is List)
-        ? List<Map<String, dynamic>>.from(plan['plan_tasks'])
-        : (activeRecord?['task_list'] is List)
-            ? List<Map<String, dynamic>>.from(activeRecord?['task_list'])
-            : (c['current_task_list'] is List)
-                ? List<Map<String, dynamic>>.from(c['current_task_list'])
-                : <Map<String, dynamic>>[];
+    final currentTreatmentPlan = (c['current_treatment_plan'] is Map)
+        ? Map<String, dynamic>.from(c['current_treatment_plan'])
+        : <String, dynamic>{};
+    final planTasks = (currentTreatmentPlan['plan_tasks'] is List)
+        ? List<Map<String, dynamic>>.from(currentTreatmentPlan['plan_tasks'])
+        : <Map<String, dynamic>>[];
 
     return PopScope(
       canPop: false,

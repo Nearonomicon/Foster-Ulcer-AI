@@ -225,9 +225,12 @@ async def task_update(
         if not current_plan_id or not current_record_id:
             raise HTTPException(status_code=404, detail="Current plan/record not found for case")
 
+        record_treatment = dict(current_treatment)
+        record_treatment["plan_tasks"] = updated_tasks
+
         record_ref = case_ref.collection("records").document(current_record_id)
         batch.set(record_ref, {
-            "treatment_plan": current_treatment,
+            "treatment_plan": record_treatment,
             "task_list": firestore.DELETE_FIELD,
             "record_updated_at": firestore.SERVER_TIMESTAMP,
         }, merge=True)

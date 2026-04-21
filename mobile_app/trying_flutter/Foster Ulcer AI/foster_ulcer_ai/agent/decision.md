@@ -1,5 +1,50 @@
 # Development Decisions
 
+## 2026-04-21 15:32:53 +07:00
+
+### Notification Device Registration
+
+- We decided the mobile app should register FCM tokens on startup and token refresh using `POST /notification-devices/register`.
+- We decided the app should send `fcm_token` instead of the previous `device_token` field.
+- We decided the app should identify this client as `user_id: nurse-app` and `role: NURSE` until a fuller authenticated nurse identity is wired in.
+- We decided to print the outgoing registration payload in the Flutter terminal to make push-notification debugging easier.
+
+### Agent Notes
+
+- We decided future development changes should update both `agent/changelog.md` and `agent/decision.md`.
+
+## 2026-04-21 15:26:38 +07:00
+
+### Follow-up Analysis
+
+- We decided the follow-up flow should remain sequential:
+  `/analyze-wound` first,
+  then `/analyze-healing`.
+- We decided `/analyze-healing` should only run after `/analyze-wound` succeeds and returns valid parsed AI output.
+- We decided to wait 1 minute between successful `/analyze-wound` and `/analyze-healing`.
+- We decided to allow `/analyze-healing` up to 3 minutes before timing out on the Flutter side.
+- We decided to show user-facing progress text for each major phase instead of a generic `Analyzing...` message.
+
+### Push Notification Debugging
+
+- We decided to keep push notification code enabled after briefly testing a comment-out approach.
+- We decided `google-services.json` should stay local and be gitignored in normal development.
+- We decided Android Firebase package id must match the Gradle `applicationId`.
+- We decided manual Android Firebase BoM and Analytics dependencies are not required for the Flutter push-notification setup.
+- We decided the app should initialize push notifications after `runApp()` so Firebase setup cannot block first render.
+
+### Gemini API
+
+- We confirmed the backend currently uses the global Gemini Developer API, not Vertex AI regional endpoints.
+- We decided the current `RESOURCE_EXHAUSTED` issue should be treated as backend quota/rate/concurrency pressure, not a Flutter sequencing bug.
+- We identified retry, queueing, or migration to Vertex AI regional endpoints as future backend improvements.
+
+### Case Detail Data Sources
+
+- We decided the Case Detail Task List should use only `current_treatment_plan.plan_tasks`.
+- We decided not to use record-level `task_list`, record-level `treatment_plan.plan_tasks`, or `current_task_list` as fallbacks for the visible Task List.
+- We confirmed the SINBAD score pill near WIfI is sourced from `analysis.classifications.SINBAD.total`.
+
 ## 2026-04-20 13:46:48 +07:00
 
 ### Push Notifications

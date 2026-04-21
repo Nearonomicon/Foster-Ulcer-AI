@@ -25,4 +25,6 @@
 - Made `current_treatment_plan.plan_tasks` the case-level task source of truth.
 - Made `records/{record_id}.treatment_plan.plan_tasks` the record-level task source of truth.
 - Updated `/task_update` to sync task changes into both the case current treatment plan and current record treatment plan, while deleting deprecated task snapshot fields.
+- Tightened `/task_update` record sync so `records/{record_id}.treatment_plan.plan_tasks` is rebuilt from the updated task array whenever task status/details are changed.
 - Added `test_gemini_api.py` to send `Hello Gemini` through the existing backend Gemini client and print the response.
+- Added `test_notification.py` to send a manual FCM test notification to active Android device tokens, with optional `DOCTOR` or `NURSE` role filtering.

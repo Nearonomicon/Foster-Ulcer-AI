@@ -501,8 +501,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     );
   }
 
-  static const String _baseUrl = "http://10.0.2.2:8080";
-  // static const String _baseUrl = "https://foster-ulcer-ai-backend-429230748709.asia-southeast3.run.app";
+  // static const String _baseUrl = "http://10.0.2.2:8080";
+  static const String _baseUrl = "https://foster-ulcer-ai-backend-429230748709.asia-southeast3.run.app";
   final Uri _fillinUri = Uri.parse("$_baseUrl/analyze-fillin");
   final Uri _analyzeWoundUri = Uri.parse("$_baseUrl/analyze-wound");
   final Uri _analyzeHealingUri = Uri.parse("$_baseUrl/analyze-healing");
@@ -519,7 +519,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   final Uri _requestCloseUri = Uri.parse("$_baseUrl/request_close");
   final Uri _loadDashboardUri = Uri.parse("$_baseUrl/load-dashboard");
   final Uri _nurseNotificationsUri = Uri.parse("$_baseUrl/nurse-notifications");
-  final Uri _registerDeviceTokenUri = Uri.parse("$_baseUrl/device-notifications/register");
+  final Uri _registerDeviceTokenUri = Uri.parse("$_baseUrl/notification-devices/register");
   final Uri _caseDetailUri = Uri.parse("$_baseUrl/case_detail");
   final Uri _assessmentTranscribeUri = Uri.parse("$_baseUrl/analyze-transcribe");
   final Uri _patientListUri = Uri.parse("$_baseUrl/patients_list");
@@ -2076,24 +2076,26 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   Future<void> _syncNotificationToken(String token) async {
     try {
+      final payload = {
+        'user_id': 'nurse-app',
+        'role': 'NURSE',
+        'fcm_token': token,
+        'platform': Platform.operatingSystem,
+        'device_id': null,
+      };
+      debugPrint('notification-devices/register payload: ${jsonEncode(payload)}');
       final resp = await http
           .post(
             _registerDeviceTokenUri,
             headers: const {'Content-Type': 'application/json'},
-            body: jsonEncode({
-              'device_token': token,
-              'platform': Platform.operatingSystem,
-              'role': 'nurse',
-              // Replace this fallback once the app has authenticated nurse ids.
-              'user_id': 'default-nurse',
-            }),
+            body: jsonEncode(payload),
           )
           .timeout(const Duration(seconds: 30));
       if (resp.statusCode < 200 || resp.statusCode >= 300) {
-        debugPrint('device-notifications/register failed (${resp.statusCode}): ${resp.body}');
+        debugPrint('notification-devices/register failed (${resp.statusCode}): ${resp.body}');
       }
     } catch (error) {
-      debugPrint('device-notifications/register error: $error');
+      debugPrint('notification-devices/register error: $error');
     }
   }
 
