@@ -72,8 +72,12 @@ This document summarizes the API as implemented in the backend source, primarily
 | `POST` | `/case_detail` | Load one case, its records, and patient profile |
 | `POST` | `/send-to-doctor` | Finalize a record for doctor review and create analysis/plan versions |
 | `POST` | `/doctor-review` | Save doctor-edited analysis as a doctor-sourced analysis version |
+| `POST` | `/notification-devices/register` | Register an app device FCM token for role broadcast |
+| `POST` | `/notification-devices/unregister` | Deactivate an app device FCM token |
 | `GET` | `/doctor-notifications` | List shared doctor notifications |
 | `GET` | `/nurse-notifications` | List shared nurse notifications |
+| `POST` | `/notifications/{notification_id}/read` | Mark one doctor/nurse notification as read |
+| `POST` | `/notifications/mark-all-read` | Mark all doctor/nurse notifications as read |
 | `POST` | `/analyze-fillin` | Upload wound image and return structured fill-in output |
 | `POST` | `/analyze-wound` | Run layered AI wound analysis |
 | `POST` | `/analyze-healing` | Generate healing-progress summary from records |
@@ -321,9 +325,9 @@ JSON matching `UpdateCaseRequest`.
   - `vascular`
   - `gangrene_extent`
   - `treatment_plan`
-  - `task_list`
   - `analysis`
 - If the latest record has a treatment plan, duplicates it with a new `plan_id`
+- Task data is carried forward through `treatment_plan.plan_tasks`; deprecated `task_list` and `current_task_list` snapshots are deleted on new writes
 - Updates case `current_record_id`, clears `current_analysis_id`, and sets `current_plan_id` to the duplicated plan ID if one was created
 
 **Response 200**
@@ -444,7 +448,7 @@ JSON matching `WoundCaseRecordUpdate`.
 | `lab_results` | object | Yes |
 | `vascular` | object | Yes |
 
-Other fields from `WoundCaseRecord` may also be supplied, including `urgency`, `analysis`, `treatment_plan`, `task_list`, `timestamps`, and `image`.
+Other fields from `WoundCaseRecord` may also be supplied, including `urgency`, `analysis`, `treatment_plan`, deprecated `task_list` fallback input, `timestamps`, and `image`.
 
 **Behavior**
 
@@ -456,9 +460,13 @@ Other fields from `WoundCaseRecord` may also be supplied, including `urgency`, `
   - `plan_id` as `PL-YYYYMMDDHHMMSS`
 - Creates `analysis_versions/{analysis_id}`
 - Creates `plan_versions/{plan_id}`
-- Builds tasks from `task_list` or `treatment_plan.plan_tasks`
+- Builds tasks from `treatment_plan.plan_tasks`; falls back to deprecated `task_list` only for older payload compatibility
 - Auto-generates `task_id` values as `TSK-0001`, `TSK-0002`, ... when missing
+- Defaults missing task `source` values to `AI`
+- Writes tasks to `records/{record_id}.treatment_plan.plan_tasks`, `cases/{case_id}.current_treatment_plan.plan_tasks`, and plan-version task documents
+- Deletes deprecated `records/{record_id}.task_list` and `cases/{case_id}.current_task_list`
 - Creates a shared doctor notification in `all_doctor/{notification_id}`
+- Broadcasts FCM push to active device tokens registered with role `DOCTOR`
 - Writes current snapshot back to the case and sets:
   - `status = DOCTOR_REVIEW`
   - `current_record_id`
@@ -539,10 +547,13 @@ Any incoming `analysis_id`, `status`, `source`, or `created_at` values are not u
 - If `signature_base64` is provided, stores it on the record and inside the saved analysis payload
 - If `treatment_plan` is provided, updates:
   - `records/{record_id}.treatment_plan`
-  - `records/{record_id}.task_list`
   - `cases/{case_id}.current_treatment_plan`
   - `cases/{case_id}.current_plan_id`
+- Forces doctor plan tasks to `status = "SENT"`
+- Defaults missing task `source` values to `Doctor` and preserves explicit task source values from the frontend
+- Deletes deprecated `records/{record_id}.task_list` and `cases/{case_id}.current_task_list`
 - Creates a shared nurse notification in `all_nurse/{notification_id}`
+- Broadcasts FCM push to active device tokens registered with role `NURSE`
 - Updates:
   - `records/{record_id}.analysis`
   - `records/{record_id}.status = PLAN_ISSUED`
@@ -568,7 +579,74 @@ Any incoming `analysis_id`, `status`, `source`, or `created_at` values are not u
 }
 ```
 
-### 5.11 `GET /doctor-notifications`
+### 5.11 `POST /notification-devices/register`
+
+**Purpose**
+
+Registers an app device FCM token so backend notifications can broadcast to the doctor or nurse app.
+
+**Request body**
+
+```json
+{
+  "user_id": "doctor-app",
+  "role": "DOCTOR",
+  "fcm_token": "<FCM_TOKEN>",
+  "platform": "android",
+  "device_id": "optional-device-id"
+}
+```
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `user_id` | string | Yes | Stored for audit/debugging. Role controls broadcast targeting. |
+| `role` | string | Yes | `DOCTOR` or `NURSE` |
+| `fcm_token` | string | Yes | Firebase Messaging token |
+| `platform` | string | No | Use `android` for Android clients |
+| `device_id` | string | No | Optional app/device identifier |
+
+**Behavior**
+
+- Stores the token in Firestore `notification_devices`
+- Uses a SHA-256 hash of the token as the document ID
+- Marks the token active with `is_active = true`
+- Broadcast targeting uses `role`, not `user_id`
+
+**Response 200**
+
+```json
+{
+  "status": "success",
+  "message": "Notification device registered",
+  "device_token_id": "<sha256-token-id>"
+}
+```
+
+### 5.12 `POST /notification-devices/unregister`
+
+**Purpose**
+
+Marks an FCM token inactive.
+
+**Request body**
+
+```json
+{
+  "fcm_token": "<FCM_TOKEN>"
+}
+```
+
+**Response 200**
+
+```json
+{
+  "status": "success",
+  "message": "Notification device unregistered",
+  "device_token_id": "<sha256-token-id>"
+}
+```
+
+### 5.13 `GET /doctor-notifications`
 
 **Purpose**
 
@@ -604,7 +682,7 @@ Returns the shared doctor notification feed from Firestore `all_doctor`.
 }
 ```
 
-### 5.12 `GET /nurse-notifications`
+### 5.14 `GET /nurse-notifications`
 
 **Purpose**
 
@@ -641,12 +719,101 @@ Returns the shared nurse notification feed from Firestore `all_nurse`.
 }
 ```
 
+### 5.15 `POST /notifications/{notification_id}/read`
+
+**Purpose**
+
+Marks a single notification as read.
+
+**Request body**
+
+Optional JSON object.
+
+```json
+{
+  "role": "DOCTOR"
+}
+```
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `role` | string | No | `DOCTOR` or `NURSE`. If omitted, backend searches both shared feeds. |
+
+**Behavior**
+
+- Finds `{notification_id}` in `all_doctor` and/or `all_nurse`
+- Updates `status = "READ"`
+- Updates `read_at` to Firestore server timestamp
+
+**Response 200**
+
+```json
+{
+  "status": "success",
+  "message": "Notification marked read",
+  "notification_id": "NTF-20260422120000123456",
+  "collection": "all_doctor"
+}
+```
+
+**Errors**
+
+- `400` if role is not `DOCTOR` or `NURSE`
+- `404` if the notification ID is not found
+- `500` on server/database failure
+
+### 5.16 `POST /notifications/mark-all-read`
+
+**Purpose**
+
+Marks all unread notifications as read for one role feed, or both feeds if no role is provided.
+
+**Request body**
+
+Optional JSON object.
+
+```json
+{
+  "role": "NURSE"
+}
+```
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `role` | string | No | `DOCTOR` or `NURSE`. If omitted, marks both shared feeds. |
+
+**Behavior**
+
+- Queries unread notifications with `status = "UNREAD"`
+- Updates each matched notification to `status = "READ"`
+- Updates `read_at` to Firestore server timestamp
+- Commits in batches of 500 writes
+
+**Response 200**
+
+```json
+{
+  "status": "success",
+  "message": "Notifications marked read",
+  "updated_count": 12,
+  "role": "NURSE"
+}
+```
+
+**Errors**
+
+- `400` if role is not `DOCTOR` or `NURSE`
+- `500` on server/database failure
+
 ### Notification Flow
 
 - `POST /send-to-doctor` writes a shared doctor notification to `all_doctor`
 - `POST /doctor-review` writes a shared nurse notification to `all_nurse`
+- Doctor-side FCM broadcasts to all active `notification_devices` with `role = "DOCTOR"`
+- Nurse-side FCM broadcasts to all active `notification_devices` with `role = "NURSE"`
 - Both feeds are public shared queues for now, not user-specific inboxes
 - Frontend reads them with `GET /doctor-notifications` and `GET /nurse-notifications`
+- Frontend registers app tokens with `/notification-devices/register`; doctor app must use `DOCTOR`, nurse app must use `NURSE`
 
 ### Notification Delivery Options
 
@@ -662,10 +829,10 @@ Returns the shared nurse notification feed from Firestore `all_nurse`.
 
 | Question | Conclusion |
 |---|---|
-| What are we doing now? | API polling against `GET /doctor-notifications` and `GET /nurse-notifications` |
-| Why is it acceptable now? | It is the simplest option and matches the current shared broadcast model |
-| Main limitation | Bell state is based on client-side last-seen tracking, not server-side per-user unread state |
-| Recommended upgrade path | Firestore realtime for in-app updates, then add FCM if background push is needed |
+| What are we doing now? | Firestore notification history plus role-wide FCM broadcast |
+| Why is it acceptable now? | Doctor and nurse are separate apps, so role-based broadcast maps directly to app type |
+| Main limitation | Notification feeds are still shared role queues, not per-user inboxes |
+| Recommended upgrade path | Add per-user unread tracking only if individual clinician inbox semantics become required |
 
 **Errors**
 
@@ -673,7 +840,7 @@ Returns the shared nurse notification feed from Firestore `all_nurse`.
 - `404` if the case or record does not exist
 - `500` on server/database failure
 
-### 5.11 `POST /analyze-fillin`
+### 5.17 `POST /analyze-fillin`
 
 **Purpose**
 
@@ -893,7 +1060,7 @@ The response key is `current_treatment_plan`, not `tasks`.
 
 - `500` on server/database failure
 
-### 5.15 `POST /task_detail`
+### 5.21 `POST /task_detail`
 
 **Purpose**
 
@@ -935,7 +1102,7 @@ Optional JSON object.
 - `404` if `task_index` is out of range
 - `500` on server/database failure
 
-### 5.16 `POST /task_update`
+### 5.22 `POST /task_update`
 
 **Purpose**
 
@@ -965,7 +1132,8 @@ Updates tasks in the current treatment plan and in the current plan version task
       "task_due": "2026-03-20",
       "completed_at": "2026-03-18T12:00:00Z",
       "task_photo_url": "https://...",
-      "task_text": "Updated task text"
+      "task_text": "Updated task text",
+      "source": "Doctor"
     }
   }
 ]
@@ -978,13 +1146,16 @@ Only these fields are accepted inside each `updates` object:
 - `completed_at`
 - `task_photo_url`
 - `task_text`
+- `source`
 
 **Behavior**
 
 - Parses `updates` as JSON list
 - Uploads each provided image to Firebase and overwrites `task_photo_url`
 - Updates `cases/{case_id}.current_treatment_plan.plan_tasks`
+- Updates `cases/{case_id}/records/{current_record_id}.treatment_plan.plan_tasks`
 - Updates current plan version task documents under the current record
+- Deletes deprecated `current_task_list` and `task_list` snapshots on new writes
 - Returns the actual `current_plan_id`, not the provided `plan_id`
 
 **Response 200**
@@ -1097,9 +1268,10 @@ Important sections:
 - outputs:
   - `analysis`
   - `treatment_plan`
-  - `task_list`
   - `image`
   - `current_healing_progress`
+
+`task_list` is deprecated. Use `treatment_plan.plan_tasks` on records and `current_treatment_plan.plan_tasks` on cases.
 
 ### Treatment Plan
 
@@ -1116,7 +1288,8 @@ Important sections:
       "status": "PENDING",
       "task_due": "2026-03-20",
       "completed_at": null,
-      "task_photo_url": "https://..."
+      "task_photo_url": "https://...",
+      "source": "AI"
     }
   ]
 }

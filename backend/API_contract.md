@@ -145,8 +145,9 @@ Recommended client rule:
   "current_vascular": {},
   "current_gangrene_extent": null,
   "current_analysis": {},
-  "current_treatment_plan": {},
-  "current_task_list": [],
+  "current_treatment_plan": {
+    "plan_tasks": []
+  },
   "current_healing_progress": null
 }
 ```
@@ -188,8 +189,9 @@ Recommended client rule:
   "vascular": {},
   "gangrene_extent": null,
   "analysis": {},
-  "treatment_plan": {},
-  "task_list": [],
+  "treatment_plan": {
+    "plan_tasks": []
+  },
   "current_healing_progress": null
 }
 ```
@@ -249,7 +251,8 @@ Observed `status` values:
   "status": "SENT",
   "task_due": "2026-03-24",
   "completed_at": null,
-  "task_photo_url": null
+  "task_photo_url": null,
+  "source": "Doctor"
 }
 ```
 
@@ -305,21 +308,31 @@ cases/{case_id}/records/{record_id}/plan_versions/{plan_id}/tasks/{task_id}
 
 all_doctor/{notification_id}
 all_nurse/{notification_id}
+notification_devices/{sha256_fcm_token}
 
 metadata/counters_{YYMM}
 metadata/counters_case_{YYMMDD}
 ```
+
+## FCM Push Delivery
+
+- Doctor-side notifications broadcast to all active device tokens with `role = "DOCTOR"`.
+- Nurse-side notifications broadcast to all active device tokens with `role = "NURSE"`.
+- The frontend should register the doctor app and nurse app separately with `/notification-devices/register`.
+- `user_id` is stored for debugging/audit but is not used for FCM targeting in the current role-broadcast design.
 
 ## Status Propagation Rules
 
 - `case.status` is the high-level lifecycle state.
 - `record.status` is the state of the current working record.
 - `current_treatment_plan.status` mirrors the current plan snapshot.
-- `current_task_list[*].status` mirrors the current task snapshot.
+- `current_treatment_plan.plan_tasks[*].status` is the case-level task snapshot.
+- `records/{record_id}.treatment_plan.plan_tasks[*].status` is the record-level task snapshot.
+- `current_task_list` and `task_list` are deprecated snapshots and are deleted on new writes.
 - `POST /doctor-review` forces plan and task status to `SENT`.
-- `POST /create_appointment` updates case, record, current plan, and current tasks to `APPOINTMENT`.
+- `POST /create_appointment` updates case, record, current treatment plan tasks, record treatment plan tasks, and plan-version task documents to `APPOINTMENT`.
 - `POST /request_close` only updates case and record to `REQUEST_CLOSE`.
-- `POST /complete_case` updates case, record, current plan, and current tasks to `COMPLETED`.
+- `POST /complete_case` updates case, record, current treatment plan tasks, record treatment plan tasks, and plan-version task documents to `COMPLETED`.
 
 ## Endpoint Summary
 
@@ -335,6 +348,10 @@ metadata/counters_case_{YYMMDD}
 | `POST` | `/case_detail` | Load case, records, and patient profile |
 | `POST` | `/send-to-doctor` | Save nurse-reviewed record and create analysis/plan versions |
 | `POST` | `/doctor-review` | Save doctor-reviewed analysis and issue plan |
+| `POST` | `/notification-devices/register` | Register FCM token for doctor/nurse app role broadcast |
+| `POST` | `/notification-devices/unregister` | Deactivate an FCM token |
+| `POST` | `/notifications/{notification_id}/read` | Mark one notification as read |
+| `POST` | `/notifications/mark-all-read` | Mark unread notifications as read |
 | `POST` | `/create_appointment` | Move current case flow to `APPOINTMENT` |
 | `POST` | `/request_close` | Mark case and current record as `REQUEST_CLOSE` |
 | `POST` | `/complete_case` | Move current case flow to `COMPLETED` |
@@ -696,6 +713,8 @@ Returns the case snapshot, its records, and the linked patient profile.
 
 Merges nurse-reviewed data into the record and creates analysis and plan versions.
 
+Tasks should be sent under `treatment_plan.plan_tasks`. Deprecated `task_list` input is accepted only as a compatibility fallback. Missing task `source` defaults to `AI`.
+
 * **URL Params**
   None
 
@@ -731,6 +750,8 @@ Merges nurse-reviewed data into the record and creates analysis and plan version
 
 Creates a doctor analysis version, optionally creates a doctor plan version, and forces plan and tasks to `SENT`.
 
+Doctor plan tasks are stored under `treatment_plan.plan_tasks`. Missing task `source` defaults to `Doctor`; explicit source values are preserved.
+
 * **URL Params**
   None
 
@@ -754,7 +775,8 @@ Creates a doctor analysis version, optionally creates a doctor plan version, and
     "plan_tasks": [
       {
         "task_text": "Apply dressing",
-        "task_due": "2026-03-30"
+        "task_due": "2026-03-30",
+        "source": "Doctor"
       }
     ]
   },
@@ -793,11 +815,121 @@ Creates a doctor analysis version, optionally creates a doctor plan version, and
   * **Code:** 500
   **Content:** `{ "detail": "..." }`
 
+**POST /notification-devices/register**
+
+----
+
+Registers an FCM token for role-wide doctor or nurse app broadcast.
+
+* **Data Params**
+
+```json
+{
+  "user_id": "doctor-app",
+  "role": "DOCTOR",
+  "fcm_token": "<FCM_TOKEN>",
+  "platform": "android",
+  "device_id": "optional-device-id"
+}
+```
+
+Use `role = "DOCTOR"` for the doctor app and `role = "NURSE"` for the nurse app. `user_id` is stored for debugging/audit but is not used for current FCM targeting.
+
+* **Success Response:**
+
+```json
+{
+  "status": "success",
+  "message": "Notification device registered",
+  "device_token_id": "<sha256-token-id>"
+}
+```
+
+**POST /notification-devices/unregister**
+
+----
+
+Marks an FCM token inactive.
+
+* **Data Params**
+
+```json
+{
+  "fcm_token": "<FCM_TOKEN>"
+}
+```
+
+* **Success Response:**
+
+```json
+{
+  "status": "success",
+  "message": "Notification device unregistered",
+  "device_token_id": "<sha256-token-id>"
+}
+```
+
+**POST /notifications/{notification_id}/read**
+
+----
+
+Marks one notification read in `all_doctor` or `all_nurse`.
+
+* **Data Params**
+
+Optional:
+
+```json
+{
+  "role": "DOCTOR"
+}
+```
+
+If `role` is omitted, backend searches both shared feeds. If present, role must be `DOCTOR` or `NURSE`.
+
+* **Success Response:**
+
+```json
+{
+  "status": "success",
+  "message": "Notification marked read",
+  "notification_id": "NTF-20260422120000123456",
+  "collection": "all_doctor"
+}
+```
+
+**POST /notifications/mark-all-read**
+
+----
+
+Marks unread notifications read in one role feed, or both feeds if no role is supplied.
+
+* **Data Params**
+
+Optional:
+
+```json
+{
+  "role": "NURSE"
+}
+```
+
+* **Success Response:**
+
+```json
+{
+  "status": "success",
+  "message": "Notifications marked read",
+  "updated_count": 12,
+  "role": "NURSE"
+}
+```
+
 **POST /create_appointment**
 
 ----
 
-Updates case, record, current plan, and current tasks to `APPOINTMENT`.
+Updates case, record, current treatment plan, record treatment plan, and plan-version task documents to `APPOINTMENT`.
 
 * **URL Params**
   None
@@ -887,7 +1019,7 @@ Updates case and current record to `REQUEST_CLOSE` and creates a doctor notifica
 
 ----
 
-Updates case, current record, current plan, and current tasks to `COMPLETED`.
+Updates case, current record, current treatment plan, record treatment plan, and plan-version task documents to `COMPLETED`.
 
 * **URL Params**
   None
@@ -1299,6 +1431,8 @@ If `task_index` is omitted, response returns `plan_tasks` instead of `task`.
 
 Updates one or more tasks in the current plan and optionally uploads task images.
 
+Task updates are synced to both `cases/{case_id}.current_treatment_plan.plan_tasks` and `records/{record_id}.treatment_plan.plan_tasks`, plus the plan-version task documents.
+
 * **URL Params**
   None
 
@@ -1315,7 +1449,8 @@ Updates one or more tasks in the current plan and optionally uploads task images
         "status": "COMPLETED",
         "task_due": "2026-03-30",
         "completed_at": "2026-03-30T09:00:00+00:00",
-        "task_text": "Updated task text"
+        "task_text": "Updated task text",
+        "source": "Doctor"
       }
     }
   ],

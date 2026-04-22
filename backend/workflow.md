@@ -232,7 +232,8 @@ flowchart TD
    - Computes next `record_id`.
    - Creates a new follow-up record under the selected case.
    - Merges forward non-null data from the latest/current record into the new record.
-   - Carries forward previous `treatment_plan`, `task_list`, and `analysis` when present.
+   - Carries forward previous `treatment_plan` and `analysis` when present.
+   - Carries tasks forward through `treatment_plan.plan_tasks`; deprecated `task_list` is no longer a canonical field.
    - If a treatment plan exists, duplicates it with a new `plan_id` for the new record.
    - Updates the case current snapshot to point at the new record.
 5. `POST /analyze-fillin`
@@ -382,8 +383,10 @@ flowchart TD
    - Parses the submitted `updates` JSON list.
    - Optionally uploads one image per update item.
    - Updates tasks inside `cases/{case_id}.current_treatment_plan.plan_tasks`.
+   - Updates tasks inside `cases/{case_id}/records/{current_record_id}.treatment_plan.plan_tasks`.
    - Updates task documents under:
      - `cases/{case_id}/records/{current_record_id}/plan_versions/{current_plan_id}/tasks/{task_id}`
+   - Deletes deprecated `current_task_list` and `task_list` snapshots on new writes.
    - Updates `case_updated_at`.
    - Returns `updated_task_ids`.
 
@@ -397,8 +400,9 @@ flowchart TD
     D --> E[current_treatment returned]
     E --> F[POST /task_update]
     F --> G[case.current_treatment_plan.plan_tasks updated]
-    F --> H["plan_versions/{plan_id}/tasks/{task_id} updated"]
-    F --> I[case_updated_at updated]
+    F --> H[record.treatment_plan.plan_tasks updated]
+    F --> I["plan_versions/{plan_id}/tasks/{task_id} updated"]
+    F --> J[case_updated_at updated]
 ```
 
 ## 5. Flow Relationships
@@ -418,6 +422,7 @@ flowchart TD
 - Analysis version and plan version are generated when the case is sent to doctor review.
 - Task execution updates both:
   - the case current treatment snapshot
+  - the record treatment plan snapshot
   - the current plan-version task documents under the current record
 
 ## 6. Important Current Implementation Notes
@@ -425,5 +430,8 @@ flowchart TD
 - Follow-up records inherit many values from the latest/current record through non-null merge logic.
 - `/analyze-wound` writes case status as `"ANALYZING"`, even though that value is not part of the declared `Status` enum.
 - `/tasks_list` returns its array under `current_treatment_plan`, not `tasks`.
+- `current_treatment_plan.plan_tasks` is the task source of truth on cases.
+- `records/{record_id}.treatment_plan.plan_tasks` is the task source of truth on records.
+- `current_task_list` and `task_list` are deprecated snapshots and are deleted on new writes.
 - `send-to-doctor` is the step that creates official analysis and plan version subcollections.
 - Healing analysis is separate from wound analysis and only runs when `/analyze-healing` is called.

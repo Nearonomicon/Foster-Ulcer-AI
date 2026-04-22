@@ -54,6 +54,7 @@ Extra flow:
 - Create follow-up record with `/update_cases`
 - Filter inbox by status using `/cases_list`
 - Patch patient profile with `PATCH /patients/{patient_id}`
+- Register app FCM tokens with `/notification-devices/register`
 - Check shared notifications with `/doctor-notifications` and `/nurse-notifications`
 - Check dashboard aggregation with `GET /load-dashboard`
 - Optionally test `/analyze-transcribe`
@@ -75,29 +76,33 @@ Extra flow:
 | TC-010 | `POST /analyze-wound` | Run wound analysis with image and payload | Positive | Returns `status=success` or `blocked` |
 | TC-011 | `POST /analyze-transcribe` | Transcribe audio note | Optional Positive | Returns `status=success` or `blocked` |
 | TC-012 | `POST /send-to-doctor` | Save reviewed record and draft plan | Positive | Returns `analysis_id`, `plan_id`, case moves to `DOCTOR_REVIEW` |
-| TC-013 | `GET /doctor-notifications` | Verify doctor notification after send-to-doctor | Positive | Matching case notification exists |
+| TC-013 | `GET /doctor-notifications` | Verify doctor notification after send-to-doctor | Positive | Matching case notification exists and doctor FCM broadcasts to `DOCTOR` tokens |
 | TC-014 | `POST /doctor-review` | Finalize doctor review and issue plan | Positive | Returns new `analysis_id`, `plan_id`, case moves to `PLAN_ISSUED` |
-| TC-015 | `GET /nurse-notifications` | Verify nurse notification after doctor-review | Positive | Matching case notification exists |
+| TC-015 | `GET /nurse-notifications` | Verify nurse notification after doctor-review | Positive | Matching case notification exists and nurse FCM broadcasts to `NURSE` tokens |
 | TC-016 | `POST /case_detail` | Verify case snapshot after doctor review | Positive | Plan and tasks are `SENT` |
-| TC-017 | `POST /tasks_list` | List current treatment plans | Positive | Case appears in task list |
-| TC-018 | `POST /task_detail` | Get task detail by index | Positive | Selected task is returned |
-| TC-019 | `POST /task_detail` | Get full task list without index | Positive | `plan_tasks` is returned |
-| TC-020 | `POST /task_update` | Update task status/details | Positive | Updated task id is returned and reflected in case |
-| TC-021 | `GET /load-dashboard` | Check dashboard aggregates | Positive | Returns `today_task_no`, `total_active_patient`, `upcoming_plan` |
-| TC-022 | `POST /create_appointment` | Move case to appointment state | Positive | Case, record, plan, and tasks become `APPOINTMENT` |
-| TC-023 | `POST /cases_list` | Filter cases by `APPOINTMENT` | Positive | Case appears in result |
-| TC-024 | `POST /request_close` | Request close for current case | Positive | Case and record become `REQUEST_CLOSE` |
-| TC-025 | `GET /doctor-notifications` | Verify doctor notification after request close | Positive | Matching close-request notification exists |
-| TC-026 | `POST /cases_list` | Filter cases by `REQUEST_CLOSE` | Positive | Case appears in result |
-| TC-027 | `POST /complete_case` | Complete the case | Positive | Case, record, plan, and tasks become `COMPLETED` |
-| TC-028 | `POST /cases_list` | Filter cases by `COMPLETED` | Positive | Case appears in result |
-| TC-029 | `POST /update_cases` | Create follow-up record | Optional Positive | New `record_id` is created and current record moves |
-| TC-030 | `POST /analyze-healing` | Run healing analysis | Optional Positive | Returns healing summary and may update current healing snapshot |
-| TC-031 | `POST /case_detail` | Missing `case_id` validation | Negative | Returns `400` |
-| TC-032 | `POST /task_update` | Wrong `plan_id` validation | Negative | Returns `400` |
-| TC-033 | `POST /create_appointment` | Invalid datetime validation | Negative | Returns `400` |
-| TC-034 | `POST /request_close` | Missing `case_id` validation | Negative | Returns `400` |
-| TC-035 | `POST /complete_case` | Missing `case_id` validation | Negative | Returns `400` |
+| TC-017 | `POST /notifications/{notification_id}/read` | Mark one notification read | Positive | Notification becomes `READ` with `read_at` |
+| TC-018 | `POST /notifications/mark-all-read` | Mark all role notifications read | Positive | Returns updated count |
+| TC-019 | `POST /tasks_list` | List current treatment plans | Positive | Case appears in task list |
+| TC-020 | `POST /task_detail` | Get task detail by index | Positive | Selected task is returned |
+| TC-021 | `POST /task_detail` | Get full task list without index | Positive | `plan_tasks` is returned |
+| TC-022 | `POST /task_update` | Update task status/details | Positive | Updated task id is returned and reflected in case |
+| TC-023 | `GET /load-dashboard` | Check dashboard aggregates | Positive | Returns `today_task_no`, `total_active_patient`, `upcoming_plan` |
+| TC-024 | `POST /create_appointment` | Move case to appointment state | Positive | Case, record, plan, and tasks become `APPOINTMENT` |
+| TC-025 | `POST /cases_list` | Filter cases by `APPOINTMENT` | Positive | Case appears in result |
+| TC-026 | `POST /request_close` | Request close for current case | Positive | Case and record become `REQUEST_CLOSE` |
+| TC-027 | `GET /doctor-notifications` | Verify doctor notification after request close | Positive | Matching close-request notification exists |
+| TC-028 | `POST /cases_list` | Filter cases by `REQUEST_CLOSE` | Positive | Case appears in result |
+| TC-029 | `POST /complete_case` | Complete the case | Positive | Case, record, plan, and tasks become `COMPLETED` |
+| TC-030 | `POST /cases_list` | Filter cases by `COMPLETED` | Positive | Case appears in result |
+| TC-031 | `POST /update_cases` | Create follow-up record | Optional Positive | New `record_id` is created and current record moves |
+| TC-032 | `POST /analyze-healing` | Run healing analysis | Optional Positive | Returns healing summary and may update current healing snapshot |
+| TC-033 | `POST /notification-devices/register` | Register doctor or nurse app token | Optional Positive | Token is stored active for role broadcast |
+| TC-034 | `POST /notification-devices/unregister` | Unregister app token | Optional Positive | Token is marked inactive |
+| TC-035 | `POST /case_detail` | Missing `case_id` validation | Negative | Returns `400` |
+| TC-036 | `POST /task_update` | Wrong `plan_id` validation | Negative | Returns `400` |
+| TC-037 | `POST /create_appointment` | Invalid datetime validation | Negative | Returns `400` |
+| TC-038 | `POST /request_close` | Missing `case_id` validation | Negative | Returns `400` |
+| TC-039 | `POST /complete_case` | Missing `case_id` validation | Negative | Returns `400` |
 | TC-036 | `POST /update_cases` | Mismatched `patient_id` validation | Negative | Returns `400` |
 
 ## Variables To Save During Testing
@@ -571,6 +576,7 @@ Expected:
 - case status becomes `PLAN_ISSUED`
 - plan status becomes `SENT`
 - all task statuses become `SENT`
+- task `source` is preserved when provided, otherwise defaults to `Doctor`
 
 ## TC-016 Check Case Detail After Doctor Review
 
@@ -580,12 +586,12 @@ Expected:
 
 - `case.status` is `PLAN_ISSUED`
 - `case.current_treatment_plan.status` is `SENT`
-- `case.current_task_list[*].status` is `SENT`
+- `case.current_treatment_plan.plan_tasks[*].status` is `SENT`
 - `case.current_healing_progress` may be set if included in analysis
 
 Save first task id from:
 
-- `case.current_task_list[0].task_id`
+- `case.current_treatment_plan.plan_tasks[0].task_id`
 
 ## TC-017 List Tasks
 
@@ -698,7 +704,8 @@ Expected:
 - case status becomes `APPOINTMENT`
 - current record status becomes `APPOINTMENT`
 - current plan status becomes `APPOINTMENT`
-- current tasks become `APPOINTMENT`
+- `case.current_treatment_plan.plan_tasks[*].status` becomes `APPOINTMENT`
+- `record.treatment_plan.plan_tasks[*].status` becomes `APPOINTMENT`
 
 ## TC-023 Filter Appointment Cases
 
@@ -968,6 +975,7 @@ Expected:
 
 - a notification exists for `{{case_id}}`
 - the notification `record_id` matches `{{record_id}}`
+- if active Android tokens are registered with `role = "DOCTOR"`, FCM broadcasts to the doctor app
 
 Run this again after `/request_close`.
 
@@ -989,6 +997,93 @@ Expected:
 
 - a notification exists for `{{case_id}}`
 - the notification `record_id` matches `{{record_id}}`
+- if active Android tokens are registered with `role = "NURSE"`, FCM broadcasts to the nurse app
+
+### TC-017 Mark One Notification Read
+
+Endpoint:
+
+```http
+POST /notifications/{{notification_id}}/read
+Content-Type: application/json
+```
+
+Body:
+
+```json
+{
+  "role": "DOCTOR"
+}
+```
+
+Expected:
+
+- response `status` is `success`
+- notification `status` becomes `READ`
+- notification `read_at` is set
+
+### TC-018 Mark All Notifications Read
+
+Endpoint:
+
+```http
+POST /notifications/mark-all-read
+Content-Type: application/json
+```
+
+Body:
+
+```json
+{
+  "role": "NURSE"
+}
+```
+
+Expected:
+
+- response `status` is `success`
+- response includes `updated_count`
+- unread notifications for that role feed become `READ`
+
+### TC-033 and TC-034 Register / Unregister Notification Device
+
+Register doctor app token:
+
+```http
+POST /notification-devices/register
+Content-Type: application/json
+```
+
+```json
+{
+  "user_id": "doctor-app",
+  "role": "DOCTOR",
+  "fcm_token": "{{doctor_fcm_token}}",
+  "platform": "android",
+  "device_id": "test-doctor-device"
+}
+```
+
+Register nurse app token by changing `role` to `NURSE` and using the nurse token.
+
+Unregister:
+
+```http
+POST /notification-devices/unregister
+Content-Type: application/json
+```
+
+```json
+{
+  "fcm_token": "{{doctor_fcm_token}}"
+}
+```
+
+Expected:
+
+- register returns `status = success` and `device_token_id`
+- unregister returns `status = success` and the same token hash id
+- role controls FCM broadcast targeting; `user_id` is for audit/debugging
 
 ### TC-021 Check Dashboard
 

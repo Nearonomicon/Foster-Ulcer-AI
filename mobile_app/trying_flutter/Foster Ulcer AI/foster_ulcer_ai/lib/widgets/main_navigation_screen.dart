@@ -84,6 +84,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     _patientHistoryCtrl.dispose();
     _otherCompCtrl.dispose();
     _healingPageCtrl.dispose();
+    _assessmentScrollCtrl.dispose();
     _assessmentPlayerCompleteSub.cancel();
     _pushForegroundSub?.cancel();
     _pushOpenedSub?.cancel();
@@ -213,6 +214,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   final Set<String> _infectionChecklist = {};
   bool _fillinReviewed = false;
   bool _fillinExpanded = false;
+  final ScrollController _assessmentScrollCtrl = ScrollController();
+  final Set<String> _assessmentInvalidKeys = {};
+  final Map<String, GlobalKey> _assessmentFieldKeys = {};
   final Map<String, bool> _sinbadHelpExpanded = {};
   bool _showInflammatoryLabs = false;
   bool _showDeepInfectionIndicators = false;
@@ -280,6 +284,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     _sinbadArea = null;
     _sinbadDepth = null;
     _sinbadScoreLast = 0;
+    _assessmentInvalidKeys.clear();
     _neuropathyPoints.clear();
     _ischemiaPoints.clear();
     _ischemiaChecklist.clear();
@@ -334,6 +339,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   List<Map<String, dynamic>> _dashboardUpcomingPlan = [];
   bool _notificationsLoading = false;
   List<Map<String, dynamic>> _notificationsItems = [];
+  bool _notificationsUnreadOnly = false;
     // =========================
   // Task Detail (NEW)
   // =========================
@@ -519,6 +525,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   final Uri _requestCloseUri = Uri.parse("$_baseUrl/request_close");
   final Uri _loadDashboardUri = Uri.parse("$_baseUrl/load-dashboard");
   final Uri _nurseNotificationsUri = Uri.parse("$_baseUrl/nurse-notifications");
+  Uri _notificationReadUri(String notificationId) => Uri.parse("$_baseUrl/notifications/$notificationId/read");
+  final Uri _notificationsMarkAllReadUri = Uri.parse("$_baseUrl/notifications/mark-all-read");
   final Uri _registerDeviceTokenUri = Uri.parse("$_baseUrl/notification-devices/register");
   final Uri _caseDetailUri = Uri.parse("$_baseUrl/case_detail");
   final Uri _assessmentTranscribeUri = Uri.parse("$_baseUrl/analyze-transcribe");
@@ -740,6 +748,110 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       if (o == raw || o == normalized) return opt;
     }
     return null;
+  }
+
+  GlobalKey _assessmentFieldKey(String key) {
+    return _assessmentFieldKeys.putIfAbsent(key, () => GlobalKey());
+  }
+
+  void _clearAssessmentInvalidKey(String key) {
+    if (!_assessmentInvalidKeys.contains(key)) return;
+    setState(() => _assessmentInvalidKeys.remove(key));
+  }
+
+  Future<void> _scrollToAssessmentKey(String key) async {
+    await Future<void>.delayed(const Duration(milliseconds: 250));
+    final context = _assessmentFieldKeys[key]?.currentContext;
+    if (context == null) return;
+    await Scrollable.ensureVisible(
+      context,
+      duration: const Duration(milliseconds: 450),
+      curve: Curves.easeOutCubic,
+      alignment: 0.12,
+    );
+  }
+
+  Map<String, String> _validateAssessmentInputs() {
+    final errors = <String, String>{};
+
+    void requireValue(String key, String message) {
+      final value = _reviewed[key];
+      if (value == null || value.toString().trim().isEmpty) {
+        errors[key] = message;
+      }
+    }
+
+    void enumIfPresent(String key, List<String> options, String label) {
+      final value = _reviewed[key];
+      if (value == null || value.toString().trim().isEmpty) return;
+      if (_coerceEnum(value.toString(), options) == null) {
+        errors[key] = "$label does not match the allowed choices.";
+      }
+    }
+
+    enumIfPresent('location_primary', const [
+      "toe",
+      "sole",
+      "side",
+      "heel",
+      "dorsal_aspect",
+      "medial_malleolus",
+      "lateral_malleolus",
+    ], 'Location Primary');
+    enumIfPresent('wound_type', const ["ulcer", "surgical", "traumatic", "pressure", "burn", "other"], 'Wound Type');
+    enumIfPresent('shape', const ["round", "oval", "irregular", "linear", "punched_out"], 'Shape');
+    enumIfPresent('depth_category', const [
+      "superficial",
+      "partial_thickness",
+      "full_thickness",
+      "deep",
+      "very_deep_exposed_bone_tendon",
+    ], 'Depth Category');
+    enumIfPresent('edge_description', const ["smooth", "thickened", "irregular", "rolled_epibole", "undermined", "calloused"], 'Edge Description');
+    enumIfPresent('periwound_status', const [
+      "normal",
+      "erythematous",
+      "edematous",
+      "indurated",
+      "macerated",
+      "fluctuant",
+      "hyperpigmented",
+    ], 'Periwound Status');
+    enumIfPresent('discharge_volume', const ["none", "minimal", "moderate", "heavy"], 'Discharge Volume');
+    enumIfPresent('discharge_type', const [
+      "serous (clear)",
+      "sanguineous (bloody)",
+      "serosanguineous (pink)",
+      "purulent (yellow/pus)",
+      "seropurulent (cloudy yellow)",
+    ], 'Discharge Type');
+    enumIfPresent('odor_presence', const ["none", "faint", "moderate", "foul", "putrid"], 'Odor Presence');
+    enumIfPresent('has_infection', const ["true", "false"], 'Has Infection');
+    enumIfPresent('skin_condition', const ["healthy", "dry", "cracked", "macerated", "fragile", "scaling"], 'Skin Condition');
+
+    if ((_reviewed['sinbad_site'] ?? _reviewed['location_primary']) == null) {
+      errors['location_primary'] = 'Location Primary is required if SINBAD site is empty.';
+      errors['sinbad_site'] = 'Choose the SINBAD site or fill Location Primary.';
+    }
+    if ((_reviewed['sinbad_ischemia'] ?? _reviewed['ischemia_pulse']) == null) {
+      errors['sinbad_ischemia'] = 'Choose ischemia status.';
+    }
+    if ((_reviewed['sinbad_neuropathy'] ?? _reviewed['neuropathy_points']) == null) {
+      errors['sinbad_neuropathy'] = 'Choose neuropathy status.';
+    }
+    if ((_reviewed['sinbad_infection'] ?? _reviewed['infection_checklist']) == null) {
+      errors['sinbad_infection'] = 'Choose infection status.';
+    }
+    if (_reviewed['sinbad_area'] == null) {
+      requireValue('size_width_cm', 'Width is required if SINBAD area is empty.');
+      requireValue('size_length_cm', 'Length is required if SINBAD area is empty.');
+    }
+    if ((_reviewed['sinbad_depth'] ?? _reviewed['depth_category']) == null) {
+      errors['depth_category'] = 'Depth Category is required if SINBAD depth is empty.';
+      errors['sinbad_depth'] = 'Choose wound depth or fill Depth Category.';
+    }
+
+    return errors;
   }
 
   double? _toDouble(dynamic v) {
@@ -1215,27 +1327,32 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       }
       return;
     }
-    final missing = <String>[];
-    if ((_reviewed['sinbad_site'] ?? _reviewed['location_primary']) == null) missing.add('SINBAD site/location');
-    if ((_reviewed['sinbad_ischemia'] ?? _reviewed['ischemia_pulse']) == null) missing.add('Ischemia');
-    if ((_reviewed['sinbad_neuropathy'] ?? _reviewed['neuropathy_points']) == null) missing.add('Neuropathy');
-    if ((_reviewed['sinbad_infection'] ?? _reviewed['infection_checklist']) == null) missing.add('Infection signs');
-    if (_reviewed['sinbad_area'] == null &&
-        (_reviewed['size_width_cm'] == null || _reviewed['size_length_cm'] == null)) {
-      missing.add('Wound size (width & length)');
-    }
-    if ((_reviewed['sinbad_depth'] ?? _reviewed['depth_category']) == null) missing.add('Depth');
-
-    if (missing.isNotEmpty) {
+    final validationErrors = _validateAssessmentInputs();
+    if (validationErrors.isNotEmpty) {
+      final invalidKeys = validationErrors.keys.toSet();
+      final firstInvalidKey = validationErrors.keys.first;
+      final hasReviewError = invalidKeys.any((key) => !key.startsWith('sinbad_'));
+      setState(() {
+        _assessmentInvalidKeys
+          ..clear()
+          ..addAll(invalidKeys);
+        if (hasReviewError) {
+          _fillinExpanded = true;
+        }
+      });
+      unawaited(_scrollToAssessmentKey(firstInvalidKey));
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Missing required fields: ${missing.join(', ')}"),
+            content: Text("Please fix: ${validationErrors.values.first}"),
             backgroundColor: Colors.orange,
           ),
         );
       }
       return;
+    }
+    if (_assessmentInvalidKeys.isNotEmpty) {
+      setState(() => _assessmentInvalidKeys.clear());
     }
     setState(() {
       _analysisTitle = "GEMINI CLOUD";
@@ -2164,6 +2281,67 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     }
   }
 
+  String _notificationId(Map<String, dynamic> item) {
+    return (item['notification_id'] ?? item['id'] ?? item['doc_id'] ?? '').toString();
+  }
+
+  bool _notificationIsUnread(Map<String, dynamic> item) {
+    return (item['status'] ?? '').toString().toUpperCase() == 'UNREAD';
+  }
+
+  Future<void> _markNotificationRead(Map<String, dynamic> item) async {
+    final notificationId = _notificationId(item);
+    if (notificationId.isEmpty || !_notificationIsUnread(item)) return;
+    try {
+      final resp = await http
+          .post(
+            _notificationReadUri(notificationId),
+            headers: const {'Content-Type': 'application/json'},
+            body: jsonEncode({'role': 'NURSE'}),
+          )
+          .timeout(const Duration(seconds: 20));
+      if (resp.statusCode < 200 || resp.statusCode >= 300) {
+        throw Exception("mark read failed (${resp.statusCode}): ${resp.body}");
+      }
+      if (!mounted) return;
+      setState(() {
+        item['status'] = 'READ';
+        item['read_at'] = DateTime.now().toIso8601String();
+      });
+    } catch (e) {
+      debugPrint("mark notification read error: $e");
+    }
+  }
+
+  Future<void> _markAllNotificationsRead() async {
+    try {
+      final resp = await http
+          .post(
+            _notificationsMarkAllReadUri,
+            headers: const {'Content-Type': 'application/json'},
+            body: jsonEncode({'role': 'NURSE'}),
+          )
+          .timeout(const Duration(seconds: 30));
+      if (resp.statusCode < 200 || resp.statusCode >= 300) {
+        throw Exception("mark all read failed (${resp.statusCode}): ${resp.body}");
+      }
+      if (!mounted) return;
+      setState(() {
+        for (final item in _notificationsItems) {
+          item['status'] = 'READ';
+          item['read_at'] ??= DateTime.now().toIso8601String();
+        }
+      });
+    } catch (e) {
+      debugPrint("mark all notifications read error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Failed to mark notifications read: $e"), backgroundColor: Colors.redAccent),
+        );
+      }
+    }
+  }
+
   String _formatNotificationTime(dynamic raw) {
     if (raw == null || raw.toString().isEmpty) return "";
     try {
@@ -2233,6 +2411,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (context) {
+        final visibleNotifications = _notificationsUnreadOnly
+            ? _notificationsItems.where(_notificationIsUnread).toList()
+            : _notificationsItems;
         return SafeArea(
           child: SizedBox(
             height: MediaQuery.of(context).size.height * 0.72,
@@ -2240,16 +2421,47 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               children: [
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-                  child: Row(
+                  child: Column(
                     children: [
-                      const Text(
-                        "Notifications",
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+                      Row(
+                        children: [
+                          const Text(
+                            "Notifications",
+                            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+                          ),
+                          const Spacer(),
+                          if (_notificationsItems.any(_notificationIsUnread))
+                            TextButton(
+                              onPressed: () => unawaited(_markAllNotificationsRead()),
+                              child: const Text(
+                                "Mark all read",
+                                style: TextStyle(fontWeight: FontWeight.w800, color: Color(0xFF0D9488)),
+                              ),
+                            ),
+                          IconButton(
+                            onPressed: () => Navigator.of(context).pop(),
+                            icon: const Icon(LucideIcons.x, size: 18),
+                          ),
+                        ],
                       ),
-                      const Spacer(),
-                      IconButton(
-                        onPressed: () => Navigator.of(context).pop(),
-                        icon: const Icon(LucideIcons.x, size: 18),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: Container(
+                          padding: const EdgeInsets.all(3),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF1F5F9),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              _buildNotificationFilterChip(unreadOnly: false, selected: !_notificationsUnreadOnly),
+                              _buildNotificationFilterChip(unreadOnly: true, selected: _notificationsUnreadOnly),
+                            ],
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -2258,7 +2470,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 Expanded(
                   child: _notificationsLoading
                       ? const Center(child: CircularProgressIndicator(color: Color(0xFF0D9488)))
-                      : _notificationsItems.isEmpty
+                      : visibleNotifications.isEmpty
                           ? const Center(
                               child: Text(
                                 "No notifications.",
@@ -2267,10 +2479,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                             )
                           : ListView.separated(
                               padding: const EdgeInsets.all(20),
-                              itemCount: _notificationsItems.length,
+                              itemCount: visibleNotifications.length,
                               separatorBuilder: (_, _) => const SizedBox(height: 12),
                               itemBuilder: (context, index) {
-                                final item = _notificationsItems[index];
+                                final item = visibleNotifications[index];
                                 final title = (item['title'] ?? item['message'] ?? item['notification_text'] ?? 'Notification').toString();
                                 final body = (item['message'] ?? item['body'] ?? item['detail'] ?? item['description'] ?? '').toString();
                                 final patientName = (item['patient_name'] ?? '').toString();
@@ -2284,21 +2496,25 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                                 final urgencyLabel = _urgencyLabel(urgency);
                                 final urgencyColor = _urgencyColor(urgency);
                                 final typeLabel = _notificationTypeLabel(item);
-                                return Container(
-                                  padding: const EdgeInsets.all(16),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white,
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(color: const Color(0xFFE2E8F0)),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: Colors.black.withOpacity(0.03),
-                                        blurRadius: 10,
-                                        offset: const Offset(0, 4),
-                                      ),
-                                    ],
-                                  ),
-                                  child: Column(
+                                final isUnread = notificationStatus == 'UNREAD';
+                                return InkWell(
+                                  borderRadius: BorderRadius.circular(20),
+                                  onTap: () => unawaited(_markNotificationRead(item)),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      color: isUnread ? const Color(0xFFF8FBFF) : Colors.white,
+                                      borderRadius: BorderRadius.circular(20),
+                                      border: Border.all(color: isUnread ? const Color(0xFFBFDBFE) : const Color(0xFFE2E8F0)),
+                                      boxShadow: [
+                                        BoxShadow(
+                                          color: Colors.black.withOpacity(0.03),
+                                          blurRadius: 10,
+                                          offset: const Offset(0, 4),
+                                        ),
+                                      ],
+                                    ),
+                                    child: Column(
                                     crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Row(
@@ -2371,6 +2587,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                                               LucideIcons.briefcaseMedical,
                                               caseId,
                                               onTap: () async {
+                                                await _markNotificationRead(item);
                                                 Navigator.of(context).pop();
                                                 if (_currentStep != 'case_detail') {
                                                   _previousStep = _currentStep;
@@ -2419,6 +2636,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                                       ],
                                     ],
                                   ),
+                                  ),
                                 );
                               },
                             ),
@@ -2460,6 +2678,40 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNotificationFilterChip({required bool unreadOnly, required bool selected}) {
+    return InkWell(
+      onTap: () {
+        if (_notificationsUnreadOnly == unreadOnly) return;
+        setState(() => _notificationsUnreadOnly = unreadOnly);
+        Navigator.of(context).pop();
+        unawaited(_openNotificationsPanel());
+      },
+      borderRadius: BorderRadius.circular(999),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+        decoration: BoxDecoration(
+          color: selected ? Colors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(999),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.08),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: Icon(
+          unreadOnly ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+          size: 17,
+          color: selected ? const Color(0xFF0D9488) : const Color(0xFF64748B),
         ),
       ),
     );
@@ -2784,9 +3036,61 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         ),
       );
 
-  Widget _buildTextField({required String label, required String placeholder, IconData? icon, String? initialValue, TextInputType keyboardType = TextInputType.text, String? bindKey}) {
+  Widget _buildTextField({
+    required String label,
+    required String placeholder,
+    IconData? icon,
+    String? initialValue,
+    TextInputType keyboardType = TextInputType.text,
+    String? bindKey,
+  }) {
     final TextEditingController? controller = bindKey == null ? null : _ctrl(bindKey, initial: initialValue ?? '');
-    return Padding(padding: const EdgeInsets.only(bottom: 20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF0D9488))), const SizedBox(height: 8), TextFormField(controller: controller, keyboardType: keyboardType, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14), onChanged: (v) { if (bindKey != null) { _reviewed[bindKey] = v; if (bindKey == 'size_width_cm' || bindKey == 'size_length_cm') { _maybeComputeSinbadAreaFromSize(); } } }, decoration: _inputDeco(icon ?? LucideIcons.fileText, placeholder))]));
+    final isInvalid = bindKey != null && _assessmentInvalidKeys.contains(bindKey);
+    return Container(
+      key: bindKey == null ? null : _assessmentFieldKey(bindKey),
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: isInvalid ? const EdgeInsets.all(8) : EdgeInsets.zero,
+      decoration: BoxDecoration(
+        color: isInvalid ? const Color(0xFFFFF1F2) : Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        border: isInvalid ? Border.all(color: const Color(0xFFEF4444), width: 2) : null,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              color: isInvalid ? const Color(0xFFB91C1C) : const Color(0xFF0D9488),
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextFormField(
+            controller: controller,
+            keyboardType: keyboardType,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+            onChanged: (v) {
+              if (bindKey == null) return;
+              _reviewed[bindKey] = v;
+              _clearAssessmentInvalidKey(bindKey);
+              if (bindKey == 'size_width_cm' || bindKey == 'size_length_cm') {
+                _maybeComputeSinbadAreaFromSize();
+              }
+            },
+            decoration: _inputDeco(icon ?? LucideIcons.fileText, placeholder),
+          ),
+          if (isInvalid) ...[
+            const SizedBox(height: 6),
+            const Text(
+              "Required. Please fill this field.",
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFFB91C1C)),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   void _maybeComputeSinbadAreaFromSize() {
@@ -2806,7 +3110,77 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   Widget _buildDropdownField({required String label, required List<String> options, String? value, String? bindKey}) {
     final String? effectiveValue = _coerceEnum(value, options);
-    return Padding(padding: const EdgeInsets.only(bottom: 20), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF0D9488))), const SizedBox(height: 8), DropdownButtonFormField<String>(isExpanded: true, key: ValueKey('drop_${label}_${effectiveValue ?? 'none'}'), initialValue: effectiveValue, decoration: InputDecoration(filled: true, fillColor: const Color(0xFFF8FAFC), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none), contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12)), items: options.map((s) => DropdownMenuItem<String>(value: s, child: Text(s.replaceAll('_', ' '), maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold)))).toList(), onChanged: (v) { if (bindKey == null) return; setState(() { _reviewed[bindKey] = v; if (bindKey == 'has_infection') { if (v == 'true') { _sinbadInfection = 'Yes'; _reviewed['sinbad_infection'] = 'Yes'; } else if (v == 'false') { _sinbadInfection = 'No'; _reviewed['sinbad_infection'] = 'No'; } } }); })]));
+    final hasMismatchedEnum = value != null && value.toString().trim().isNotEmpty && effectiveValue == null;
+    final isInvalid = bindKey != null && _assessmentInvalidKeys.contains(bindKey);
+    return Container(
+      key: bindKey == null ? null : _assessmentFieldKey(bindKey),
+      margin: const EdgeInsets.only(bottom: 20),
+      padding: isInvalid ? const EdgeInsets.all(8) : EdgeInsets.zero,
+      decoration: BoxDecoration(
+        color: isInvalid ? const Color(0xFFFFF1F2) : Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        border: isInvalid ? Border.all(color: const Color(0xFFEF4444), width: 2) : null,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              color: isInvalid ? const Color(0xFFB91C1C) : const Color(0xFF0D9488),
+            ),
+          ),
+          const SizedBox(height: 8),
+          DropdownButtonFormField<String>(
+            isExpanded: true,
+            key: ValueKey('drop_${label}_${effectiveValue ?? 'none'}'),
+            initialValue: effectiveValue,
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: const Color(0xFFF8FAFC),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            ),
+            items: options
+                .map((s) => DropdownMenuItem<String>(
+                      value: s,
+                      child: Text(
+                        s.replaceAll('_', ' '),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                      ),
+                    ))
+                .toList(),
+            onChanged: (v) {
+              if (bindKey == null) return;
+              setState(() {
+                _reviewed[bindKey] = v;
+                _assessmentInvalidKeys.remove(bindKey);
+                if (bindKey == 'has_infection') {
+                  if (v == 'true') {
+                    _sinbadInfection = 'Yes';
+                    _reviewed['sinbad_infection'] = 'Yes';
+                  } else if (v == 'false') {
+                    _sinbadInfection = 'No';
+                    _reviewed['sinbad_infection'] = 'No';
+                  }
+                }
+              });
+            },
+          ),
+          if (isInvalid) ...[
+            const SizedBox(height: 6),
+            Text(
+              hasMismatchedEnum ? "Value does not match the allowed choices. Please choose again." : "Required. Please choose one option.",
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFFB91C1C)),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   Widget _buildChoiceChip(String label, {bool initialSelected = false, String? bindKey}) {

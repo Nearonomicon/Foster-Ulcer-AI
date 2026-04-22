@@ -1,5 +1,48 @@
 # Development Decisions
 
+## 2026-04-22 13:34:25 +07:00
+
+### Notification Filter UI
+
+- We decided the notification filter toggle should sit below the `Mark all read` action instead of sharing the title row.
+- We decided to use icons instead of text for the filter:
+  eye for all notifications,
+  eye-slash for unread-only notifications.
+
+## 2026-04-22 13:30:50 +07:00
+
+### Notification Filter UI
+
+- We decided the unread filter should look like a segmented toggle instead of a plain text button.
+- We decided the active filter should be visually obvious through chip styling rather than text color only.
+
+## 2026-04-22 13:28:33 +07:00
+
+### Notification Filter
+
+- We decided the notification panel should include a small toggle for unread-only viewing.
+- We decided the unread filter should be local UI state and not require a new backend query.
+
+## 2026-04-22 13:20:34 +07:00
+
+### Notification Read State
+
+- We decided unread notifications should be marked read when the nurse taps the notification card.
+- We decided case-detail navigation from a notification should mark that notification read first.
+- We decided the notification panel should include a `Mark all read` action when unread notifications exist.
+- We decided the app should optimistically update local notification state after successful backend read calls instead of requiring a refetch.
+- We decided to support multiple backend id field names for notification records: `notification_id`, `id`, and `doc_id`.
+
+## 2026-04-22 10:19:17 +07:00
+
+### Assessment Validation UX
+
+- We decided Submit Assessment should guide the nurse to the exact missing or invalid input instead of only showing a snackbar.
+- We decided invalid nurse review fields and SINBAD cards should be highlighted in red.
+- We decided the Fill-in Answers review section should expand automatically when a nurse-review field inside it is invalid.
+- We decided enum mismatches from AI/transcription prefill should be treated as actionable validation errors and require the nurse to choose a valid option.
+- We decided the submit payload should remain unchanged; this work only improves client-side validation and guidance.
+
 ## 2026-04-21 15:32:53 +07:00
 
 ### Notification Device Registration

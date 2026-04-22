@@ -1,5 +1,59 @@
 # Changelog
 
+## 2026-04-22 13:34:25 +07:00
+
+### Notification Filter UI
+
+- Moved the notification filter toggle below the `Mark all read` row.
+- Replaced text labels with icons:
+  eye icon for all notifications,
+  eye-slash icon for unread-only notifications.
+
+## 2026-04-22 13:30:50 +07:00
+
+### Notification Filter UI
+
+- Replaced the plain unread text button with a compact segmented-style `All` / `Unread` toggle.
+- Added selected-state styling with a white active chip, teal label, and subtle shadow.
+
+## 2026-04-22 13:28:33 +07:00
+
+### Notification Filter
+
+- Added a compact notification panel toggle to show only unread notifications.
+- Added local `_notificationsUnreadOnly` state for switching between all notifications and unread-only notifications.
+- Updated notification list rendering to use the filtered visible notification list.
+
+## 2026-04-22 13:20:34 +07:00
+
+### Notification Read State
+
+- Added frontend integration for `POST /notifications/{notification_id}/read`.
+- Added frontend integration for `POST /notifications/mark-all-read`.
+- Added notification id extraction from `notification_id`, `id`, or `doc_id`.
+- Added unread detection based on `status == UNREAD`.
+- Added card tap behavior to mark a single unread notification as read.
+- Updated case-id notification navigation to mark the notification read before opening case detail.
+- Added a `Mark all read` action in the notification panel header when unread notifications exist.
+- Updated local notification list state after successful read operations so badges/status update without requiring a full refetch.
+
+## 2026-04-22 10:19:17 +07:00
+
+### Assessment Validation UX
+
+- Added assessment-form validation state for required nurse review and SINBAD fields.
+- Added enum mismatch detection for nurse review dropdown fields.
+- Added red visual highlighting around invalid nurse review fields and SINBAD cards.
+- Added field keys and scroll guidance so Submit Assessment scrolls to the first invalid field.
+- Updated the Fill-in Answers review section to expand automatically when an invalid nurse-review field needs attention.
+- Updated invalid field interactions so selecting or typing into a highlighted field clears its error state.
+
+### Verification
+
+- Attempted `dart format` on touched Dart files, but it timed out in this environment.
+- Attempted focused `dart analyze` on touched Dart files, but it timed out in this environment.
+- Performed targeted source inspection after the timeout.
+
 ## 2026-04-21 15:32:53 +07:00
 
 ### Notification Device Registration

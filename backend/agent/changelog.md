@@ -28,3 +28,7 @@
 - Tightened `/task_update` record sync so `records/{record_id}.treatment_plan.plan_tasks` is rebuilt from the updated task array whenever task status/details are changed.
 - Added `test_gemini_api.py` to send `Hello Gemini` through the existing backend Gemini client and print the response.
 - Added `test_notification.py` to send a manual FCM test notification to active Android device tokens, with optional `DOCTOR` or `NURSE` role filtering.
+- Updated project Markdown documentation (`API.md`, `API_contract.md`, `test.md`, and `workflow.md`) to reflect role-wide FCM broadcasts, notification device registration, task `source`, and `current_treatment_plan.plan_tasks` as the task source of truth.
+- Added notification read-state endpoints:
+  - `POST /notifications/{notification_id}/read`
+  - `POST /notifications/mark-all-read`

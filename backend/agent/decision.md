@@ -17,15 +17,15 @@ Use a hybrid notification design:
   - `role`
   - `fcm_token`
   - active/inactive state
-- Route push notifications by existing workflow ownership fields:
-  - `assigned_doctor` for doctor-targeted push
-  - `created_by_nurse` for nurse-targeted push
+- Route push notifications by app role:
+  - `DOCTOR` role broadcasts to the doctor app
+  - `NURSE` role broadcasts to the nurse app
 
 ### Rationale
 
 - Firestore remains the source of truth even if push delivery fails.
 - FCM adds background and terminated-app alerts without changing the existing notification feed design.
-- Using the existing doctor and nurse IDs avoids introducing a new user-mapping layer in this step.
+- Role-based app registration avoids requiring clinician IDs to match FCM token ownership.
 - Token deactivation on unregistered-device errors prevents repeated failed sends.
 
 ### Consequences
@@ -33,7 +33,7 @@ Use a hybrid notification design:
 - Frontend must register the current device token with the backend after login or token refresh.
 - Frontend should unregister or replace tokens on logout, reinstall, or token rotation.
 - Shared collections `all_doctor` and `all_nurse` still exist, so this is not yet a per-user inbox model.
-- Correct push targeting depends on frontend `user_id` values matching backend workflow IDs such as `DR-001` and `NURSE-001`.
+- Correct push targeting depends on frontend apps registering the correct role. `user_id` is retained for audit/debugging and is not used for current FCM targeting.
 
 ### Follow-up
 

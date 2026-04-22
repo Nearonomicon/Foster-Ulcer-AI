@@ -57,6 +57,7 @@ extension _AssessmentPage on _MainNavigationScreenState {
         _buildHeader("Wound Assessment", onBack: () => _navigateTo('response_view')),
         Expanded(
           child: SingleChildScrollView(
+            controller: _assessmentScrollCtrl,
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
             child: Column(
               children: [
@@ -94,6 +95,8 @@ extension _AssessmentPage on _MainNavigationScreenState {
                 Theme(
                   data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
                   child: ExpansionTile(
+                    key: ValueKey('fillin_review_$_fillinExpanded'),
+                    initiallyExpanded: _fillinExpanded,
                     onExpansionChanged: (v) => setState(() => _fillinExpanded = v),
                     tilePadding: const EdgeInsets.symmetric(horizontal: 4),
                     title: Row(
@@ -490,15 +493,21 @@ extension _AssessmentPage on _MainNavigationScreenState {
     required String group,
     required List<_SinbadOption> options,
   }) {
+    final invalidKey = 'sinbad_$group';
+    final isInvalid = _assessmentInvalidKeys.contains(invalidKey);
     final hasHelp = (helpText != null && helpText.isNotEmpty) || helpWidget != null;
     final isExpanded = _sinbadHelpExpanded[group] == true;
     return Container(
+      key: _assessmentFieldKey(invalidKey),
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: isInvalid ? const Color(0xFFFFF1F2) : Colors.white,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(
+          color: isInvalid ? const Color(0xFFEF4444) : const Color(0xFFE2E8F0),
+          width: isInvalid ? 2 : 1,
+        ),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.04),
@@ -512,7 +521,7 @@ extension _AssessmentPage on _MainNavigationScreenState {
         children: [
           Row(
             children: [
-              Icon(icon, color: const Color(0xFF0D9488)),
+              Icon(icon, color: isInvalid ? const Color(0xFFEF4444) : const Color(0xFF0D9488)),
               const SizedBox(width: 8),
               Expanded(
                 child: Column(
@@ -538,6 +547,13 @@ extension _AssessmentPage on _MainNavigationScreenState {
                 ),
             ],
           ),
+          if (isInvalid) ...[
+            const SizedBox(height: 8),
+            const Text(
+              "Required. Please choose one option.",
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xFFB91C1C)),
+            ),
+          ],
           if (hasHelp) ...[
             const SizedBox(height: 8),
             AnimatedCrossFade(
@@ -1531,6 +1547,7 @@ extension _AssessmentPage on _MainNavigationScreenState {
               _reviewed['sinbad_depth'] = label;
               break;
           }
+          _assessmentInvalidKeys.remove('sinbad_$group');
           _maybeShowHighRisk(_calcSinbadScore());
         });
       },
