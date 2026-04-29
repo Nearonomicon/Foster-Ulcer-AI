@@ -434,4 +434,6 @@ flowchart TD
 - `records/{record_id}.treatment_plan.plan_tasks` is the task source of truth on records.
 - `current_task_list` and `task_list` are deprecated snapshots and are deleted on new writes.
 - `send-to-doctor` is the step that creates official analysis and plan version subcollections.
+- `doctor-review` is the only step where the doctor can add, delete, or reorder plan tasks.
+- Doctor task order is carried in `treatment_plan.plan_tasks[*].order_index`.
 - Healing analysis is separate from wound analysis and only runs when `/analyze-healing` is called.

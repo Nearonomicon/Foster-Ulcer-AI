@@ -539,32 +539,35 @@ Body:
   "case_id": "{{case_id}}",
   "record_id": "{{record_id}}",
   "analysis_id": "{{analysis_id}}",
-  "payload": {
-    "analysis": {
-      "diagnosis": "Doctor reviewed diagnosis",
-      "description": "Confirmed infected ulcer",
-      "healing_progress": "Baseline assessment completed",
-      "classifications": {}
-    }
+  "analysis": {
+    "diagnosis": "Doctor reviewed diagnosis",
+    "description": "Confirmed infected ulcer",
+    "healing_progress": "Baseline assessment completed",
+    "classifications": {}
   },
   "treatment_plan": {
     "plan_text": "Perform dressing change, offloading, and follow-up review.",
     "followup_days": 7,
     "plan_tasks": [
       {
+        "order_index": 1,
         "task_text": "Apply dressing",
         "task_due": "2026-03-24"
       },
       {
+        "order_index": 2,
         "task_text": "Offloading education",
         "task_due": "2026-03-24"
       },
       {
+        "order_index": 3,
         "task_text": "Review in clinic",
         "task_due": "2026-03-30"
       }
     ]
   },
+  "ai_result_edit_flag": true,
+  "treatment_plan_edit_flag": true,
   "signature_base64": "data:image/png;base64,TEST_SIGNATURE"
 }
 ```
@@ -576,6 +579,7 @@ Expected:
 - case status becomes `PLAN_ISSUED`
 - plan status becomes `SENT`
 - all task statuses become `SENT`
+- task order is saved from `order_index` and normalized to sequential values
 - task `source` is preserved when provided, otherwise defaults to `Doctor`
 
 ## TC-016 Check Case Detail After Doctor Review
@@ -892,7 +896,7 @@ Expected:
 - image upload works
 - analyze wound works
 - send-to-doctor works
-- doctor-review creates plan and tasks
+- doctor-review creates plan and tasks from top-level `analysis` and `treatment_plan`
 - plan/tasks move to `SENT`
 - task update works
 - appointment changes case/record/plan/tasks to `APPOINTMENT`
@@ -907,6 +911,7 @@ Expected:
 ## Notes
 
 - `/doctor-review` still requires explicit `record_id`
+- `/doctor-review` prefers top-level `analysis` and `treatment_plan`; legacy `payload` is still accepted
 - `/create_appointment`, `/request_close`, and `/complete_case` use the case’s `current_record_id`
 - some timestamps outside `routes/cases.py` still rely on Firestore server timestamps
 - if Firestore composite indexes are missing, some filtered queries may require index creation

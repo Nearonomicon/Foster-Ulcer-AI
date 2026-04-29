@@ -262,13 +262,13 @@ extension _DoctorSummaryPage on _MainNavigationScreenState {
                 children: [
                   {'l': 'HIGH', 'v': 'high_urgent', 'c': Colors.red},
                   {'l': 'MEDIUM', 'v': 'medium', 'c': Colors.orange},
-                  {'l': 'ROUTINE', 'v': 'routine', 'c': Color(0xFF0D9488)},
+                  {'l': 'LOW', 'v': 'low', 'c': Color(0xFF0D9488)},
                 ].map((u) {
                   return Expanded(
                     child: GestureDetector(
                       onTap: _currentStep == 'doctor_summary' ? () => setState(() => _selectedUrgency = u['v'] as String) : null,
                       child: Container(
-                        margin: EdgeInsets.only(right: u['l'] == 'ROUTINE' ? 0 : 8),
+                        margin: EdgeInsets.only(right: u['l'] == 'LOW' ? 0 : 8),
                         padding: const EdgeInsets.symmetric(vertical: 12),
                         decoration: BoxDecoration(
                           color: _selectedUrgency == u['v'] ? u['c'] as Color : const Color(0xFFF8FAFC),

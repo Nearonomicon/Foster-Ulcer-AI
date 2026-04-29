@@ -18,7 +18,7 @@ extension _CasesPage on _MainNavigationScreenState {
 
     final q = _casesSearchQuery.trim().toLowerCase();
     final selectedStatuses = _casesStatusFilters.map((status) => status.toLowerCase()).toSet();
-    final urgencyFilter = _casesUrgencyFilter.toLowerCase();
+    final urgencyFilter = _casesUrgencyFilter.toLowerCase() == 'low' ? 'routine' : _casesUrgencyFilter.toLowerCase();
 
     DateTime? parseIso(String? raw) {
       if (raw == null || raw.isEmpty) return null;
@@ -139,7 +139,7 @@ extension _CasesPage on _MainNavigationScreenState {
                   child: _buildCasesFilterDropdown(
                     label: "Urgency",
                     value: _casesUrgencyFilter,
-                    items: const ["ALL", "URGENT", "MEDIUM", "ROUTINE"],
+                    items: const ["ALL", "URGENT", "MEDIUM", "LOW"],
                     onChanged: (value) => setState(() => _casesUrgencyFilter = value),
                   ),
                 ),

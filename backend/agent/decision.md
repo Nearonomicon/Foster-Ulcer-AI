@@ -126,3 +126,41 @@ The workflow needs to distinguish AI-created tasks from doctor-created or doctor
 - Existing tasks without `source` can still be read.
 - New tasks should include or receive a source value.
 - `source` is stored in treatment plan tasks and task subcollection documents.
+
+## 2026-04-28: Use a clean doctor-review payload and explicit task ordering
+
+### Context
+
+The existing `/doctor-review` request duplicated analysis and treatment-plan data across multiple fields:
+
+- top-level `treatment_plan`
+- `payload.treatment_plan`
+- `payload.analysis`
+- `payload.AI_analysis`
+
+The workflow also needed an explicit task ordering field for doctor-side task reordering during review submission.
+
+### Decision
+
+- Prefer a clean `/doctor-review` request with:
+  - top-level `analysis`
+  - top-level `treatment_plan`
+  - optional `ai_result_edit_flag`
+  - optional `treatment_plan_edit_flag`
+  - optional `signature` or `signature_base64`
+- Keep legacy `payload` parsing temporarily for backward compatibility.
+- Use `treatment_plan.plan_tasks[*].order_index` as the explicit task ordering field.
+- Keep doctor task add/delete/reorder scoped to `/doctor-review` only.
+
+### Rationale
+
+- A single analysis object and a single treatment-plan object are easier for the frontend to build and reason about.
+- Explicit `order_index` avoids relying on accidental array position after serialization and round trips.
+- Backward-compatible parsing reduces rollout risk while the doctor app migrates.
+
+### Consequences
+
+- Frontend should move to the clean top-level `/doctor-review` request shape.
+- Frontend should send `order_index` for each task in the final intended order.
+- Backend continues normalizing task order before saving.
+- Stored analysis version payloads may still contain older nested shapes from previous clients.

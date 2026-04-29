@@ -64,6 +64,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         if (!mounted) return;
         unawaited(_handleOpenedPushNotification(pendingPush));
       });
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(_fetchNurseNotifications());
+      });
     }
   }
 
@@ -223,10 +228,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   bool _showObjectiveIschemia = false;
   Map<String, dynamic>? _selectedPatient;
   bool _isAnalyzing = false;
-  String _analysisTitle = "GEMINI CLOUD";
+  String _analysisTitle = "AI";
   String _analysisMessage = "Analyzing...";
   XFile? _capturedImage;
   Uint8List? _capturedImageBytes;
+  bool _woundPhotoAwaitingConfirmation = false;
   final PageController _healingPageCtrl = PageController(viewportFraction: 0.88);
   int _healingIndex = 0;
   XFile? _patientPhoto;
@@ -273,6 +279,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     _healingResponseText = null;
     _capturedImage = null;
     _capturedImageBytes = null;
+    _woundPhotoAwaitingConfirmation = false;
     _clearVitalsInfo();
   }
 
@@ -350,7 +357,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   String _tasksSearchQuery = '';
   static const Set<String> _defaultTasksTreatmentStatuses = {
     'DRAFT',
-    'ACTIVE',
+    'SENT',
   };
   final Set<String> _tasksTreatmentStatuses = {..._defaultTasksTreatmentStatuses};
   String _tasksTaskStatus = 'ALL';
@@ -1021,8 +1028,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         setState(() {
           _capturedImage = image;
           _capturedImageBytes = bytes;
+          _woundPhotoAwaitingConfirmation = true;
         });
-        await _uploadAndAnalyzeFillin(image);
       }
     } catch (e) {
       debugPrint("Error picking image: $e");
@@ -1129,8 +1136,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       setState(() {
         _capturedImage = image;
         _capturedImageBytes = bytes;
+        _woundPhotoAwaitingConfirmation = true;
       });
-      await _uploadAndAnalyzeFillin(image);
     } catch (e) {
       debugPrint("Error capturing wound photo: $e");
       if (mounted) {
@@ -1143,6 +1150,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           _currentStep == 'camera' &&
           _woundCameraController == controller &&
           controller.value.isInitialized &&
+          !_woundPhotoAwaitingConfirmation &&
           !controller.value.isStreamingImages) {
         try {
           await controller.startImageStream(_analyzeWoundPreviewFrame);
@@ -1257,7 +1265,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   Future<void> _uploadAndAnalyzeFillin(XFile imageFile) async {
     setState(() {
-      _analysisTitle = "GEMINI CLOUD";
+      _analysisTitle = "AI";
       _analysisMessage = "Analyzing wound";
       _isAnalyzing = true;
     });
@@ -1300,16 +1308,60 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           _reviewed.remove('pain_score');
           _reviewed.remove('has_infection');
           _reviewed.addAll(preservedVitals);
+          _fillinExpanded = true;
+          _woundPhotoAwaitingConfirmation = false;
         });
         _applyPrefillControllersFromReviewed();
         _maybeComputeSinbadAreaFromSize();
+      } else {
+        setState(() => _woundPhotoAwaitingConfirmation = false);
       }
-      _navigateTo('response_view');
+      _navigateTo('assessment');
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Upload failed: $e"), backgroundColor: Colors.redAccent));
     } finally {
       if (mounted) setState(() => _isAnalyzing = false);
     }
+  }
+
+  Future<void> _confirmWoundPhotoForFillin() async {
+    final image = _capturedImage;
+    if (image == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Please capture a wound photo first."), backgroundColor: Colors.orange),
+        );
+      }
+      return;
+    }
+    await _uploadAndAnalyzeFillin(image);
+  }
+
+  Future<void> _retakeWoundPhoto() async {
+    final controller = _woundCameraController;
+    setState(() {
+      _capturedImage = null;
+      _capturedImageBytes = null;
+      _woundPhotoAwaitingConfirmation = false;
+      _woundCaptureBlocked = true;
+      _woundBrightnessScore = 0;
+      _woundMotionScore = 0;
+      _woundGuidanceMessage = 'Center the wound inside the guide';
+      _woundPreviousLumaSample = null;
+      _woundStableFrameCount = 0;
+    });
+    if (controller != null && controller.value.isInitialized) {
+      if (!controller.value.isStreamingImages) {
+        try {
+          await controller.startImageStream(_analyzeWoundPreviewFrame);
+        } catch (_) {
+          await _disposeWoundCamera();
+          await _initWoundCamera();
+        }
+      }
+      return;
+    }
+    await _initWoundCamera();
   }
 
   Future<void> _submitToAnalyzeWound() async {
@@ -1355,7 +1407,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       setState(() => _assessmentInvalidKeys.clear());
     }
     setState(() {
-      _analysisTitle = "GEMINI CLOUD";
+      _analysisTitle = "AI";
       _analysisMessage = "Analyzing...";
       _isAnalyzing = true;
     });
@@ -1488,7 +1540,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
               if (caseId != null && caseId.isNotEmpty) {
                 if (mounted) {
                   setState(() {
-                    _analysisTitle = "GEMINI CLOUD";
+                    _analysisTitle = "AI";
                     _analysisMessage = "Comparing current wound with previous records";
                     _isAnalyzing = true;
                   });
@@ -1568,7 +1620,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     final urgencyMap = {
       'high_urgent': 'URGENT',
       'medium': 'MEDIUM',
-      'routine': 'ROUTINE',
+      'low': 'LOW',
+      'routine': 'LOW',
     };
     final urgency = _selectedUrgency == null ? null : urgencyMap[_selectedUrgency];
 
@@ -1775,7 +1828,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     } finally {
       if (mounted) {
         setState(() {
-          _analysisTitle = "GEMINI CLOUD";
+          _analysisTitle = "AI";
           _analysisMessage = "Analyzing...";
           _isAnalyzing = false;
         });
@@ -2225,7 +2278,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         content: Text(text),
         action: SnackBarAction(
           label: 'Open',
-          onPressed: () => unawaited(_openNotificationsPanel()),
+          onPressed: () => unawaited(_openNotificationsPanel(resetFilter: true)),
         ),
         backgroundColor: const Color(0xFF0D9488),
       ),
@@ -2240,7 +2293,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     if (!mounted) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-      unawaited(_openNotificationsPanel());
+      unawaited(_openNotificationsPanel(resetFilter: true));
     });
   }
 
@@ -2400,7 +2453,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         .join(' ');
   }
 
-  Future<void> _openNotificationsPanel() async {
+  Future<void> _openNotificationsPanel({bool resetFilter = false}) async {
+    if (resetFilter && _notificationsUnreadOnly) {
+      setState(() => _notificationsUnreadOnly = false);
+    }
     await _fetchNurseNotifications();
     if (!mounted) return;
     showModalBottomSheet<void>(
@@ -2471,172 +2527,28 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                   child: _notificationsLoading
                       ? const Center(child: CircularProgressIndicator(color: Color(0xFF0D9488)))
                       : visibleNotifications.isEmpty
-                          ? const Center(
+                          ? Center(
                               child: Text(
-                                "No notifications.",
-                                style: TextStyle(fontSize: 13, color: Colors.blueGrey),
+                                _notificationsUnreadOnly ? "No unread notifications." : "No notifications.",
+                                style: const TextStyle(fontSize: 13, color: Colors.blueGrey),
                               ),
                             )
                           : ListView.separated(
-                              padding: const EdgeInsets.all(20),
+                              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
                               itemCount: visibleNotifications.length,
-                              separatorBuilder: (_, _) => const SizedBox(height: 12),
+                              separatorBuilder: (_, _) => const SizedBox(height: 8),
                               itemBuilder: (context, index) {
                                 final item = visibleNotifications[index];
                                 final title = (item['title'] ?? item['message'] ?? item['notification_text'] ?? 'Notification').toString();
                                 final body = (item['message'] ?? item['body'] ?? item['detail'] ?? item['description'] ?? '').toString();
                                 final patientName = (item['patient_name'] ?? '').toString();
                                 final caseId = (item['case_id'] ?? '').toString();
-                                final urgency = (item['urgency'] ?? '').toString();
-                                final type = (item['type'] ?? '').toString();
-                                final notificationStatus = (item['status'] ?? '').toString().toUpperCase();
-                                final createdAt = item['created_at'] ?? item['timestamp'] ?? item['sent_at'] ?? item['notification_at'];
-                                final when = _formatNotificationRelativeTime(createdAt);
-                                final exactTime = _formatNotificationTime(createdAt);
-                                final urgencyLabel = _urgencyLabel(urgency);
-                                final urgencyColor = _urgencyColor(urgency);
-                                final typeLabel = _notificationTypeLabel(item);
-                                final isUnread = notificationStatus == 'UNREAD';
-                                return InkWell(
-                                  borderRadius: BorderRadius.circular(20),
-                                  onTap: () => unawaited(_markNotificationRead(item)),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(16),
-                                    decoration: BoxDecoration(
-                                      color: isUnread ? const Color(0xFFF8FBFF) : Colors.white,
-                                      borderRadius: BorderRadius.circular(20),
-                                      border: Border.all(color: isUnread ? const Color(0xFFBFDBFE) : const Color(0xFFE2E8F0)),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: Colors.black.withOpacity(0.03),
-                                          blurRadius: 10,
-                                          offset: const Offset(0, 4),
-                                        ),
-                                      ],
-                                    ),
-                                    child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        crossAxisAlignment: CrossAxisAlignment.start,
-                                        children: [
-                                          Container(
-                                            width: 48,
-                                            height: 48,
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFFEFF6FF),
-                                              borderRadius: BorderRadius.circular(14),
-                                            ),
-                                            child: Icon(
-                                              _notificationTypeIcon(type),
-                                              size: 22,
-                                              color: Color(0xFF2563EB),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 12),
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment: CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  title,
-                                                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF1E293B)),
-                                                ),
-                                                if (body.isNotEmpty) ...[
-                                                  const SizedBox(height: 4),
-                                                  Text(
-                                                    body,
-                                                    maxLines: 2,
-                                                    overflow: TextOverflow.ellipsis,
-                                                    style: const TextStyle(fontSize: 13, color: Colors.blueGrey, height: 1.35),
-                                                  ),
-                                                ],
-                                              ],
-                                            ),
-                                          ),
-                                          if (notificationStatus.isNotEmpty)
-                                            Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                              decoration: BoxDecoration(
-                                                color: notificationStatus == 'UNREAD' ? const Color(0xFFDBEAFE) : const Color(0xFFF1F5F9),
-                                                borderRadius: BorderRadius.circular(999),
-                                              ),
-                                              child: Text(
-                                                notificationStatus,
-                                                style: TextStyle(
-                                                  fontSize: 11,
-                                                  fontWeight: FontWeight.w800,
-                                                  color: notificationStatus == 'UNREAD' ? const Color(0xFF2563EB) : const Color(0xFF64748B),
-                                                ),
-                                              ),
-                                            ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 14),
-                                      Wrap(
-                                        spacing: 10,
-                                        runSpacing: 10,
-                                        children: [
-                                          if (patientName.isNotEmpty)
-                                            _buildNotificationMetaPill(
-                                              LucideIcons.user,
-                                              patientName,
-                                            ),
-                                          if (caseId.isNotEmpty)
-                                            _buildNotificationMetaPill(
-                                              LucideIcons.briefcaseMedical,
-                                              caseId,
-                                              onTap: () async {
-                                                await _markNotificationRead(item);
-                                                Navigator.of(context).pop();
-                                                if (_currentStep != 'case_detail') {
-                                                  _previousStep = _currentStep;
-                                                  _previousTab = _activeTab;
-                                                }
-                                                final ok = await _fetchCaseDetail(caseId);
-                                                if (!ok || !mounted) return;
-                                                _navigateTo('case_detail', patient: item);
-                                              },
-                                            ),
-                                          if (type.isNotEmpty)
-                                            _buildNotificationMetaPill(
-                                              _notificationTypeIcon(type),
-                                              typeLabel,
-                                            ),
-                                          if (urgency.isNotEmpty)
-                                            _buildNotificationMetaPill(
-                                              LucideIcons.triangleAlert,
-                                              urgencyLabel,
-                                              bgColor: urgencyColor.withOpacity(0.12),
-                                              fgColor: urgencyColor,
-                                            ),
-                                        ],
-                                      ),
-                                      if (when.isNotEmpty || exactTime.isNotEmpty) ...[
-                                        const SizedBox(height: 14),
-                                        Row(
-                                          children: [
-                                            if (when.isNotEmpty)
-                                              Text(
-                                                when,
-                                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF64748B)),
-                                              ),
-                                            if (when.isNotEmpty && exactTime.isNotEmpty)
-                                              const Text(
-                                                "  •  ",
-                                                style: TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
-                                              ),
-                                            if (exactTime.isNotEmpty)
-                                              Text(
-                                                exactTime,
-                                                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: Color(0xFF94A3B8)),
-                                              ),
-                                          ],
-                                        ),
-                                      ],
-                                    ],
-                                  ),
-                                  ),
+                                return _buildNotificationCard(
+                                  item: item,
+                                  title: title,
+                                  body: body,
+                                  patientName: patientName,
+                                  caseId: caseId,
                                 );
                               },
                             ),
@@ -2646,6 +2558,238 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           ),
         );
       },
+    );
+  }
+
+  Widget _buildNotificationCard({
+    required Map<String, dynamic> item,
+    required String title,
+    required String body,
+    required String patientName,
+    required String caseId,
+  }) {
+    final urgency = (item['urgency'] ?? '').toString();
+    final type = (item['type'] ?? '').toString();
+    final notificationStatus = (item['status'] ?? '').toString().toUpperCase();
+    final createdAt = item['created_at'] ?? item['timestamp'] ?? item['sent_at'] ?? item['notification_at'];
+    final when = _formatNotificationRelativeTime(createdAt);
+    final exactTime = _formatNotificationTime(createdAt);
+    final urgencyLabel = _urgencyLabel(urgency);
+    final urgencyColor = _urgencyColor(urgency);
+    final typeLabel = _notificationTypeLabel(item);
+    final isUnread = notificationStatus == 'UNREAD';
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(18),
+      onTap: () => unawaited(_markNotificationRead(item)),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: isUnread ? const Color(0xFF93C5FD) : const Color(0xFFE2E8F0)),
+          boxShadow: [
+            BoxShadow(
+              color: isUnread ? const Color(0xFF2563EB).withOpacity(0.08) : Colors.black.withOpacity(0.025),
+              blurRadius: isUnread ? 12 : 7,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(18),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  width: 4,
+                  color: isUnread ? const Color(0xFF2563EB) : const Color(0xFFCBD5E1),
+                ),
+                Expanded(
+                  child: Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 36,
+                            height: 36,
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: isUnread
+                                    ? const [Color(0xFFDBEAFE), Color(0xFFEFF6FF)]
+                                    : const [Color(0xFFF1F5F9), Color(0xFFF8FAFC)],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: isUnread ? const Color(0xFFBFDBFE) : const Color(0xFFE2E8F0)),
+                            ),
+                            child: Icon(
+                              _notificationTypeIcon(type),
+                              size: 18,
+                              color: isUnread ? const Color(0xFF2563EB) : const Color(0xFF64748B),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        typeLabel,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w900,
+                                          letterSpacing: 0.4,
+                                          color: isUnread ? const Color(0xFF2563EB) : const Color(0xFF64748B),
+                                        ),
+                                      ),
+                                    ),
+                                    if (isUnread)
+                                      Container(
+                                        width: 7,
+                                        height: 7,
+                                        decoration: const BoxDecoration(
+                                          color: Color(0xFF2563EB),
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  title,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w900, color: Color(0xFF0F172A), height: 1.15),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (notificationStatus.isNotEmpty) ...[
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: isUnread ? const Color(0xFFDBEAFE) : const Color(0xFFF1F5F9),
+                                borderRadius: BorderRadius.circular(999),
+                                border: Border.all(color: isUnread ? const Color(0xFFBFDBFE) : const Color(0xFFE2E8F0)),
+                              ),
+                              child: Text(
+                                notificationStatus,
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w900,
+                                  color: isUnread ? const Color(0xFF2563EB) : const Color(0xFF64748B),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                      if (body.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFF8FAFC),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFE2E8F0)),
+                          ),
+                          child: Text(
+                            body,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 12, color: Color(0xFF475569), height: 1.3, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          if (patientName.isNotEmpty)
+                            _buildNotificationMetaPill(
+                              LucideIcons.user,
+                              patientName,
+                              bgColor: const Color(0xFFECFDF5),
+                              fgColor: const Color(0xFF047857),
+                            ),
+                          if (caseId.isNotEmpty)
+                            _buildNotificationMetaPill(
+                              LucideIcons.briefcaseMedical,
+                              caseId,
+                              bgColor: const Color(0xFFEFF6FF),
+                              fgColor: const Color(0xFF1D4ED8),
+                              onTap: () async {
+                                await _markNotificationRead(item);
+                                Navigator.of(context).pop();
+                                if (_currentStep != 'case_detail') {
+                                  _previousStep = _currentStep;
+                                  _previousTab = _activeTab;
+                                }
+                                final ok = await _fetchCaseDetail(caseId);
+                                if (!ok || !mounted) return;
+                                _navigateTo('case_detail', patient: item);
+                              },
+                            ),
+                          if (urgency.isNotEmpty)
+                            _buildNotificationMetaPill(
+                              LucideIcons.triangleAlert,
+                              urgencyLabel,
+                              bgColor: urgencyColor.withOpacity(0.12),
+                              fgColor: urgencyColor,
+                            ),
+                        ],
+                      ),
+                      if (when.isNotEmpty || exactTime.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            const Icon(LucideIcons.clock3, size: 12, color: Color(0xFF94A3B8)),
+                            const SizedBox(width: 5),
+                            if (when.isNotEmpty)
+                              Text(
+                                when,
+                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: Color(0xFF64748B)),
+                              ),
+                            if (when.isNotEmpty && exactTime.isNotEmpty)
+                              const Text(
+                                "  /  ",
+                                style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
+                              ),
+                            if (exactTime.isNotEmpty)
+                              Expanded(
+                                child: Text(
+                                  exactTime,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF94A3B8)),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ],
+                    ],
+                  ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -2662,7 +2806,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         onTap: onTap,
         borderRadius: BorderRadius.circular(999),
         child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
           decoration: BoxDecoration(
             color: bgColor,
             borderRadius: BorderRadius.circular(999),
@@ -2670,11 +2814,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 14, color: fgColor),
-              const SizedBox(width: 8),
+              Icon(icon, size: 12, color: fgColor),
+              const SizedBox(width: 6),
               Text(
                 text,
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: fgColor),
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: fgColor),
               ),
             ],
           ),
@@ -2852,6 +2996,11 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       if (step != 'camera') {
         _emergencyBypassProfile = false;
         _disposeWoundCamera();
+        if (_woundPhotoAwaitingConfirmation) {
+          _capturedImage = null;
+          _capturedImageBytes = null;
+          _woundPhotoAwaitingConfirmation = false;
+        }
       }
       if (step == 'assessment') {
         _sinbadSite = _reviewed['sinbad_site'];
@@ -2879,6 +3028,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         _selectedPatient = patient;
         _capturedImage = null; // BUG FIX: Clear session image when viewing a record
         _capturedImageBytes = null;
+        _woundPhotoAwaitingConfirmation = false;
         // Bind clinical data to state for mock patients/existing cases
         if (patient.containsKey('ai_wound_json')) {
           _aiWoundJson = Map<String, dynamic>.from(patient['ai_wound_json']);
@@ -2891,7 +3041,8 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
           _reviewed.clear();
         }
         if (patient.containsKey('urgency')) {
-          _selectedUrgency = patient['urgency'];
+          final urgency = patient['urgency']?.toString().toLowerCase();
+          _selectedUrgency = urgency == 'routine' ? 'low' : patient['urgency'];
         } else {
           _selectedUrgency = null;
         }
@@ -2905,6 +3056,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     final recordId = caseData['current_record_id']?.toString();
     _capturedImage = null;
     _capturedImageBytes = null;
+    _woundPhotoAwaitingConfirmation = false;
     if (patientId != null && patientId.isNotEmpty) {
       _patientProfile['patient_id'] = patientId;
     }
@@ -2927,6 +3079,28 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       ..addAll(_defaultCasesStatusFilters);
     _casesUrgencyFilter = 'ALL';
     _casesSortBy = 'UPDATED_DESC';
+  }
+
+  void _showSuccessAndOpenCases(
+    String message, {
+    Color backgroundColor = const Color(0xFF0D9488),
+    String? includeStatusFilter,
+  }) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: backgroundColor),
+    );
+    setState(() {
+      _activeTab = 2;
+      _currentStep = 'dashboard';
+      _casesFilterPatientId = null;
+      _casesFetchedOnce = false;
+      _resetCasesPageFilters();
+      if (includeStatusFilter != null) {
+        _casesStatusFilters.add(includeStatusFilter);
+      }
+    });
+    _fetchCasesList();
   }
 
   @override
@@ -3251,6 +3425,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         return Colors.red;
       case 'MEDIUM':
         return Colors.orange;
+      case 'LOW':
       case 'ROUTINE':
       default:
         return const Color(0xFF0D9488);
@@ -3264,9 +3439,10 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         return "HIGH";
       case 'MEDIUM':
         return "MEDIUM";
+      case 'LOW':
       case 'ROUTINE':
       default:
-        return "ROUTINE";
+        return "LOW";
     }
   }
 
@@ -3318,53 +3494,70 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       );
   Widget _buildSectionTitle(IconData icon, String title) => Row(children: [Icon(icon, size: 20, color: const Color(0xFF0D9488)), const SizedBox(width: 10), Expanded(child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF0D9488))))]);
   Widget _buildFixedBottomButton(String label, IconData icon, VoidCallback onPressed) => Container(padding: const EdgeInsets.all(24), decoration: const BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: Color(0xFFF1F5F9)))), child: ElevatedButton.icon(onPressed: onPressed, icon: Icon(icon), label: Text(label, style: const TextStyle(fontWeight: FontWeight.bold)), style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0D9488), foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 60), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)))));
-  Widget _buildNotificationButton() => Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: _openNotificationsPanel,
-          borderRadius: BorderRadius.circular(14),
-          child: Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.96),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: const Color(0xFFE2E8F0)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
+  Widget _buildNotificationButton() {
+    final unreadCount = _notificationsItems.where(_notificationIsUnread).length;
+    final unreadLabel = unreadCount > 9 ? '9+' : unreadCount.toString();
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _openNotificationsPanel(resetFilter: true),
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.96),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: const Color(0xFFE2E8F0)),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 12,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              const Center(
+                child: Icon(
+                  LucideIcons.bell,
+                  size: 18,
+                  color: Color(0xFF334155),
                 ),
-              ],
-            ),
-            child: Stack(
-              children: [
-                const Center(
-                  child: Icon(
-                    LucideIcons.bell,
-                    size: 18,
-                    color: Color(0xFF334155),
-                  ),
-                ),
-                if (_notificationsItems.isNotEmpty)
-                  Positioned(
-                    top: 8,
-                    right: 9,
-                    child: Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFEF4444),
-                        shape: BoxShape.circle,
+              ),
+              if (unreadCount > 0)
+                Positioned(
+                  top: -5,
+                  right: -5,
+                  child: Container(
+                    constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                    padding: const EdgeInsets.symmetric(horizontal: 5),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEF4444),
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: Colors.white, width: 1.5),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      unreadLabel,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w900,
+                        height: 1,
                       ),
                     ),
                   ),
-              ],
-            ),
+                ),
+            ],
           ),
         ),
-      );
+      ),
+    );
+  }
 
   Widget _buildPatientListTile(Map<String, dynamic> p, {VoidCallback? onTap}) {
     final urgencyColor = _urgencyColor(p['urgency']?.toString());

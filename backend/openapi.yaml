@@ -718,6 +718,8 @@ paths:
               properties:
                 case_id:
                   type: string
+                task_id:
+                  type: string
                 task_index:
                   type: integer
                   minimum: 0
@@ -812,7 +814,7 @@ components:
       enum: [CREATION, AI_PROCESSING, DOCTOR_REVIEW, PLAN_ISSUED, TREATMENT_ACTIVE, APPOINTMENT, REQUEST_CLOSE, COMPLETED]
     Urgency:
       type: string
-      enum: [URGENT, MEDIUM, ROUTINE]
+      enum: [URGENT, MEDIUM, LOW]
     CreatePatientProfileResponse:
       type: object
       additionalProperties: false
@@ -1205,6 +1207,14 @@ components:
           anyOf:
             - type: string
             - type: 'null'
+        source:
+          anyOf:
+            - type: string
+            - type: 'null'
+        order_index:
+          anyOf:
+            - type: integer
+            - type: 'null'
       required: [task_text]
     TreatmentPlan:
       type: object
@@ -1489,12 +1499,20 @@ components:
         payload:
           type: object
           additionalProperties: true
+          description: Legacy wrapper for older clients. Prefer top-level `analysis` and `treatment_plan`.
+        analysis:
+          type: object
+          additionalProperties: true
         treatment_plan:
           $ref: '#/components/schemas/TreatmentPlan'
+        ai_result_edit_flag:
+          type: boolean
+        treatment_plan_edit_flag:
+          type: boolean
         signature:
           oneOf:
             - type: string
             - type: object
               additionalProperties: true
         signature_base64: { type: string }
-      required: [case_id, record_id, payload]
+      required: [case_id, record_id]

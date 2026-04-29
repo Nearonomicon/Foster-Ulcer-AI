@@ -40,7 +40,7 @@ This document summarizes the API as implemented in the backend source, primarily
 
 - `URGENT`
 - `MEDIUM`
-- `ROUTINE`
+- `LOW`
 
 ### Wound Shape
 
@@ -504,11 +504,14 @@ Creates a doctor-sourced `analysis_versions/{analysis_id}` entry for an existing
 |---|---|---|---|
 | `case_id` | string | Yes | |
 | `record_id` | string | Yes | |
-| `payload` | object | Yes | Doctor-edited analysis payload |
+| `analysis` | object | Yes | Preferred doctor-edited analysis payload |
 | `analysis_id` | string | No | Source analysis version to copy `SINBAD` from; falls back to case `current_analysis_id` |
-| `treatment_plan` | object | No | Doctor-reviewed treatment plan snapshot; if omitted, backend also checks `payload.treatment_plan` |
+| `treatment_plan` | object | No | Doctor-reviewed treatment plan snapshot |
+| `ai_result_edit_flag` | boolean | No | Optional UI flag stored inside the saved review payload |
+| `treatment_plan_edit_flag` | boolean | No | Optional UI flag stored inside the saved review payload |
 | `signature` | string or object | No | Added into the stored review payload |
 | `signature_base64` | string | No | Stored on record and inside the saved review payload |
+| `payload` | object | No | Legacy wrapper accepted for backward compatibility; prefer top-level `analysis` and `treatment_plan` |
 
 Any incoming `analysis_id`, `status`, `source`, or `created_at` values are not used. The backend generates and stores:
 
@@ -528,10 +531,16 @@ Any incoming `analysis_id`, `status`, `source`, or `created_at` values are not u
   "source": "Doctor",
   "created_at": "Firestore server timestamp",
   "payload": {
-    "...": "doctor-edited analysis",
-    "healing_progress": "...",
+    "analysis": {
+      "...": "doctor-edited analysis",
+      "healing_progress": "..."
+    },
+    "treatment_plan": {
+      "plan_text": "...",
+      "plan_tasks": []
+    },
     "ai_result_edit_flag": true,
-    "healing_progress_edit_flag": true
+    "treatment_plan_edit_flag": true
   }
 }
 ```
@@ -539,10 +548,11 @@ Any incoming `analysis_id`, `status`, `source`, or `created_at` values are not u
 **Behavior**
 
 - Validates that the case and record exist
-- Accepts doctor analysis from `payload.analysis`, `payload.AI_analysis`, or `payload` directly
+- Accepts doctor analysis from top-level `analysis`
+- Also accepts legacy `payload.analysis`, `payload.AI_analysis`, or `payload` directly for backward compatibility
 - Creates a new doctor-sourced analysis version under the record
 - Creates a new `plan_versions/{plan_id}` and task documents when a treatment plan is provided
-- Copies `payload.classifications.SINBAD` from the previous analysis version so the doctor cannot overwrite it
+- Copies `analysis.classifications.SINBAD` from the previous analysis version so the doctor cannot overwrite it
 - If `signature` is provided, stores it inside the saved analysis payload
 - If `signature_base64` is provided, stores it on the record and inside the saved analysis payload
 - If `treatment_plan` is provided, updates:
@@ -550,6 +560,7 @@ Any incoming `analysis_id`, `status`, `source`, or `created_at` values are not u
   - `cases/{case_id}.current_treatment_plan`
   - `cases/{case_id}.current_plan_id`
 - Forces doctor plan tasks to `status = "SENT"`
+- Preserves explicit task `order_index` values from the frontend and normalizes ordering before saving
 - Defaults missing task `source` values to `Doctor` and preserves explicit task source values from the frontend
 - Deletes deprecated `records/{record_id}.task_list` and `cases/{case_id}.current_task_list`
 - Creates a shared nurse notification in `all_nurse/{notification_id}`
@@ -1289,7 +1300,8 @@ Important sections:
       "task_due": "2026-03-20",
       "completed_at": null,
       "task_photo_url": "https://...",
-      "source": "AI"
+      "source": "AI",
+      "order_index": 1
     }
   ]
 }

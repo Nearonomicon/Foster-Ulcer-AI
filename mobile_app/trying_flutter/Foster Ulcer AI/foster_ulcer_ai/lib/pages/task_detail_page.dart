@@ -459,15 +459,9 @@ extension _TaskDetailPage on _MainNavigationScreenState {
                                 appointmentAt: appointmentAt,
                               );
                               if (!ok || !mounted) return;
-                              if (_selectedTaskIndex != null) {
-                                await _fetchTaskDetail(caseId: caseId, taskIndex: _selectedTaskIndex!);
-                              }
-                              if (!mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text("Appointment created for ${fmtDueFull(appointmentAt.toIso8601String())}."),
-                                  backgroundColor: const Color(0xFF2563EB),
-                                ),
+                              _showSuccessAndOpenCases(
+                                "Appointment created for ${fmtDueFull(appointmentAt.toIso8601String())}.",
+                                backgroundColor: const Color(0xFF2563EB),
                               );
                             },
                       icon: const Icon(LucideIcons.calendarPlus, size: 18),
@@ -489,15 +483,10 @@ extension _TaskDetailPage on _MainNavigationScreenState {
                           : () async {
                               final ok = await _requestClose(caseId: caseId);
                               if (!ok || !mounted) return;
-                              if (_selectedTaskIndex != null) {
-                                await _fetchTaskDetail(caseId: caseId, taskIndex: _selectedTaskIndex!);
-                              }
-                              if (!mounted) return;
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text("Close request submitted."),
-                                  backgroundColor: Color(0xFFF59E0B),
-                                ),
+                              _showSuccessAndOpenCases(
+                                "Close request submitted.",
+                                backgroundColor: const Color(0xFFF59E0B),
+                                includeStatusFilter: 'REQUEST_CLOSE',
                               );
                             },
                       icon: const Icon(LucideIcons.circleSlash2, size: 18),

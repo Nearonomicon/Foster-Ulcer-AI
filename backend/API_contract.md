@@ -88,7 +88,7 @@ Recommended client rule:
 
 - `URGENT`
 - `MEDIUM`
-- `ROUTINE`
+- `LOW`
 
 ## Data Objects
 
@@ -252,7 +252,8 @@ Observed `status` values:
   "task_due": "2026-03-24",
   "completed_at": null,
   "task_photo_url": null,
-  "source": "Doctor"
+  "source": "Doctor",
+  "order_index": 1
 }
 ```
 
@@ -750,7 +751,7 @@ Tasks should be sent under `treatment_plan.plan_tasks`. Deprecated `task_list` i
 
 Creates a doctor analysis version, optionally creates a doctor plan version, and forces plan and tasks to `SENT`.
 
-Doctor plan tasks are stored under `treatment_plan.plan_tasks`. Missing task `source` defaults to `Doctor`; explicit source values are preserved.
+Doctor plan tasks are stored under `treatment_plan.plan_tasks`. Missing task `source` defaults to `Doctor`; explicit source values are preserved. Preferred clients send top-level `analysis` and `treatment_plan`. Legacy `payload` is still accepted for backward compatibility.
 
 * **URL Params**
   None
@@ -762,24 +763,26 @@ Doctor plan tasks are stored under `treatment_plan.plan_tasks`. Missing task `so
   "case_id": "CS-260323-00001",
   "record_id": "REC-00001",
   "analysis_id": "AN-20260323090000",
-  "payload": {
-    "analysis": {
-      "diagnosis": "...",
-      "description": "...",
-      "healing_progress": "..."
-    }
+  "analysis": {
+    "diagnosis": "...",
+    "description": "...",
+    "healing_progress": "..."
   },
   "treatment_plan": {
     "plan_text": "...",
     "followup_days": 7,
     "plan_tasks": [
       {
+        "task_id": "TSK-EXAMPLE-0001",
+        "order_index": 1,
         "task_text": "Apply dressing",
         "task_due": "2026-03-30",
         "source": "Doctor"
       }
     ]
   },
+  "ai_result_edit_flag": true,
+  "treatment_plan_edit_flag": true,
   "signature_base64": "data:image/png;base64,..."
 }
 ```

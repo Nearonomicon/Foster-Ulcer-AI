@@ -1,5 +1,132 @@
 # Changelog
 
+## 2026-04-23 14:02:00 +07:00
+
+### Wound Photo Preview Before Fill-in
+
+- Changed wound camera capture flow so taking or browsing a wound photo no longer calls `/analyze-fillin` immediately.
+- Added a full-screen wound photo preview on the camera page with `Retake` and `Use Photo` actions.
+- Added confirmation handling so `/analyze-fillin` runs only after the user accepts the selected photo.
+- Added retake logic to resume the live wound camera stream after dismissing the preview.
+- Discard unconfirmed wound photos when leaving the camera page.
+
+## 2026-04-23 13:39:00 +07:00
+
+### Loading Overlay AI Label
+
+- Changed loading overlay title text from `GEMINI CLOUD` to `AI`.
+- Updated all current analysis/loading flows that reuse `_analysisTitle` to show `AI` instead of `GEMINI`.
+
+## 2026-04-23 13:34:17 +07:00
+
+### Appointment and Close Success Navigation
+
+- Added a shared success handler that shows a success message and opens the dashboard Cases tab.
+- Updated successful Create Appointment flow to navigate to the refreshed case list after showing the appointment success message.
+- Updated successful Request Close flow to navigate to the refreshed case list after showing the close-request success message.
+- Ensured Request Close navigation includes the `REQUEST_CLOSE` case-status filter so the updated case remains visible.
+- Attempted `dart format` on touched Dart files, but it timed out in this environment.
+
+## 2026-04-23 13:10:00 +07:00
+
+### Shorebird Remote Updates
+
+- Installed and configured Shorebird for remote app upgrades when needed.
+- Added `shorebird.yaml` with the app id used by Shorebird update services.
+- Left Shorebird automatic background updates enabled by default.
+
+## 2026-04-23 10:43:52 +07:00
+
+### Launcher Logo Source Update
+
+- Switched launcher icon source from `pic/app_logo.png` to `pic/app_logo_bg.png`.
+- Verified `pic/app_logo_bg.png` is `1024x1024`.
+- Regenerated Android launcher mipmap PNGs from `pic/app_logo_bg.png`.
+- Regenerated iOS AppIcon PNGs from `pic/app_logo_bg.png`.
+
+## 2026-04-23 10:21:58 +07:00
+
+### App Name and Launcher Logo
+
+- Changed Android app display label to `AI DFU (Midwife)` using `@string/app_name`.
+- Added `android/app/src/main/res/values/strings.xml` with the new app name.
+- Updated iOS display name and bundle name to `AI DFU (Midwife)`.
+- Updated macOS product name and Windows metadata product/display strings to `AI DFU (Midwife)`.
+- Generated Android launcher icon mipmap PNGs from `pic/app_logo.png` on a white background.
+- Generated iOS AppIcon PNGs from `pic/app_logo.png` on a white background.
+
+## 2026-04-22 15:52:42 +07:00
+
+### Assessment Prefill Visibility
+
+- Verified `/analyze-fillin` still writes extracted values into `_reviewed` before opening Wound Assessment.
+- Verified text-field controllers are refreshed with `_applyPrefillControllersFromReviewed()` before navigation.
+- Verified SINBAD area is recalculated from extracted wound size before navigation.
+- Updated the skipped-preview flow to auto-expand `Fill-in Answers (Review)` so prefilled fields are visible immediately on Wound Assessment.
+
+## 2026-04-22 15:51:00 +07:00
+
+### Skip AI Extraction Dev Preview
+
+- Updated successful `/analyze-fillin` photo flow to navigate directly to the Wound Assessment page.
+- Kept the AI extraction data parsing and prefill behavior unchanged.
+- Kept `response_view` available for non-fill-in fallback/debug flows.
+
+## 2026-04-22 15:46:24 +07:00
+
+### Notification Bell Count Badge
+
+- Replaced the bell red dot with a compact unread-count badge.
+- Badge appears only when unread notifications exist.
+- Badge shows exact unread count up to `9`, then `9+`.
+- Preserved existing notification fetching and read/unread update behavior.
+
+## 2026-04-22 15:45:36 +07:00
+
+### Notification Bell Badge
+
+- Updated the bell notification red dot to show only when at least one notification has `status == UNREAD`.
+- Preserved the existing notification list, read/unread update behavior, and panel UI.
+
+## 2026-04-22 15:38:04 +07:00
+
+### Compact Notification Cards
+
+- Reduced in-app notification card padding, border radius, shadow, icon size, and spacing.
+- Reduced notification list padding and separator spacing.
+- Limited notification body preview to two lines.
+- Reduced metadata pill icon/text sizes and padding.
+- Preserved existing notification data mapping, read/unread behavior, case navigation, and filter behavior.
+
+## 2026-04-22 15:27:37 +07:00
+
+### Notification Visibility Fix
+
+- Fixed the redesigned notification card layout by keeping the status stripe inside an intrinsic-height row.
+- Updated notification panel external entry points to reset back to the all-notifications view when opened from the bell, push snackbar, or push tap.
+- Kept the unread-only eye-slash toggle behavior inside the panel.
+- Added a clearer empty state for unread-only mode: `No unread notifications.`
+- Attempted `dart format lib/widgets/main_navigation_screen.dart`, but it timed out in this environment.
+
+## 2026-04-22 15:23:46 +07:00
+
+### Notification Card Redesign
+
+- Extracted notification card rendering into `_buildNotificationCard`.
+- Redesigned in-app notification cards with:
+  a left read-status stripe,
+  stronger unread border/shadow,
+  gradient icon badge,
+  notification type eyebrow,
+  compact status chip,
+  body text panel,
+  colored metadata pills,
+  timestamp footer with clock icon.
+- Preserved existing card behaviors:
+  tap to mark read,
+  case-id pill opens case detail,
+  unread status updates locally.
+
 ## 2026-04-22 13:34:25 +07:00
 
 ### Notification Filter UI

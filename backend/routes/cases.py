@@ -1,5 +1,6 @@
 import json
 from datetime import date, datetime, timezone
+from uuid import uuid4
 from fastapi import APIRouter, HTTPException
 from fastapi.encoders import jsonable_encoder
 from firebase_admin import firestore
@@ -131,6 +132,7 @@ def _is_all_null(value: object) -> bool:
 
 
 def _normalize_plan_tasks_status(tasks: list[dict], status: str) -> list[dict]:
+    tasks = _normalize_plan_tasks(tasks)
     normalized_tasks = []
     for task in tasks:
         task_data = dict(task) if isinstance(task, dict) else {}
@@ -139,10 +141,86 @@ def _normalize_plan_tasks_status(tasks: list[dict], status: str) -> list[dict]:
     return normalized_tasks
 
 
+def _generate_task_id() -> str:
+    return f"TSK-{uuid4().hex[:8].upper()}"
+
+
+def _normalize_plan_tasks(tasks: list[dict] | None, *, default_source: str | None = None) -> list[dict]:
+    normalized_tasks = []
+    for idx, task in enumerate(tasks or [], start=1):
+        task_data = dict(task) if isinstance(task, dict) else {}
+        if not task_data.get("task_id"):
+            task_data["task_id"] = _generate_task_id()
+        if "completed_at" not in task_data:
+            task_data["completed_at"] = None
+        if not str(task_data.get("source") or "").strip() and default_source:
+            task_data["source"] = default_source
+        incoming_order_index = task_data.get("order_index")
+        try:
+            task_data["order_index"] = int(incoming_order_index)
+        except Exception:
+            task_data["order_index"] = idx
+        normalized_tasks.append(task_data)
+
+    normalized_tasks.sort(key=lambda item: (int(item.get("order_index") or 0), str(item.get("task_id") or "")))
+    for idx, task_data in enumerate(normalized_tasks, start=1):
+        task_data["order_index"] = idx
+    return normalized_tasks
+
+
 def _get_plan_tasks(treatment_plan: dict | None, fallback_tasks: list | None = None) -> list:
     if isinstance(treatment_plan, dict) and isinstance(treatment_plan.get("plan_tasks"), list):
         return treatment_plan.get("plan_tasks") or []
     return fallback_tasks or []
+
+
+def _task_doc_payload(task: dict, *, case_id: str, record_id: str, plan_id: str, timestamp_value: datetime) -> dict:
+    return {
+        "task_id": task.get("task_id"),
+        "case_id": case_id,
+        "record_id": record_id,
+        "plan_id": plan_id,
+        "created_at": timestamp_value,
+        "updated_at": timestamp_value,
+        "task_text": task.get("task_text"),
+        "status": task.get("status"),
+        "task_due": task.get("task_due"),
+        "completed_at": task.get("completed_at"),
+        "task_photo_url": task.get("task_photo_url"),
+        "source": task.get("source"),
+        "order_index": task.get("order_index"),
+    }
+
+
+def _extract_analysis_from_review_payload(review_payload: dict | None) -> dict | None:
+    if not isinstance(review_payload, dict):
+        return None
+
+    analysis = review_payload.get("analysis")
+    if isinstance(analysis, dict):
+        return dict(analysis)
+
+    analysis = review_payload.get("AI_analysis")
+    if isinstance(analysis, dict):
+        return dict(analysis)
+
+    treatment_plan = review_payload.get("treatment_plan")
+    non_analysis_keys = {
+        "treatment_plan",
+        "ai_result_edit_flag",
+        "treatment_plan_edit_flag",
+        "signature",
+        "signature_base64",
+    }
+    if treatment_plan is not None or any(key in review_payload for key in non_analysis_keys):
+        candidate = {
+            key: value
+            for key, value in review_payload.items()
+            if key not in non_analysis_keys
+        }
+        return candidate if candidate else None
+
+    return dict(review_payload)
 
 
 def _update_case_record_plan_and_tasks_status(
@@ -216,13 +294,14 @@ def _update_case_record_plan_and_tasks_status(
             "status": new_status.value,
             "updated_at": timestamp_value,
         }, merge=True)
-        for idx, task in enumerate(normalized_tasks, start=1):
-            task_id = task.get("task_id") or f"TSK-{idx:04d}"
+        for task in normalized_tasks:
+            task_id = task.get("task_id") or _generate_task_id()
             task_ref = plan_ref.collection("tasks").document(task_id)
             batch.set(task_ref, {
                 "task_id": task_id,
                 "status": new_status.value,
                 "updated_at": timestamp_value,
+                "order_index": task.get("order_index"),
             }, merge=True)
 
     batch.commit()
@@ -550,11 +629,9 @@ async def update_case(payload: UpdateCaseRequest):
             new_plan_id = f"PL-{_utc_now().strftime('%Y%m%d%H%M%S')}"
             duplicated_plan = dict(latest_plan)
             duplicated_plan["plan_id"] = new_plan_id
-            plan_tasks = duplicated_plan.get("plan_tasks")
-            if isinstance(plan_tasks, list):
-                duplicated_plan["plan_tasks"] = [
-                    dict(task) if isinstance(task, dict) else {} for task in plan_tasks
-                ]
+            duplicated_plan["plan_tasks"] = _normalize_plan_tasks(
+                duplicated_plan.get("plan_tasks"),
+            )
             record_doc_data["treatment_plan"] = duplicated_plan
         record_doc_data["task_list"] = firestore.DELETE_FIELD
 
@@ -585,22 +662,16 @@ async def update_case(payload: UpdateCaseRequest):
                 "followup_days": duplicated_plan.get("followup_days"),
             }, merge=True)
             plan_tasks = duplicated_plan.get("plan_tasks") or []
-            for idx, task in enumerate(plan_tasks, start=1):
-                task_id = task.get("task_id") or f"TSK-{idx:04d}"
+            for task in plan_tasks:
+                task_id = task.get("task_id") or _generate_task_id()
                 task_ref = plan_ref.collection("tasks").document(task_id)
-                batch.set(task_ref, {
-                    "task_id": task_id,
-                    "case_id": case_id,
-                    "record_id": record_id,
-                    "plan_id": new_plan_id,
-                    "created_at": plan_created_at,
-                    "task_text": task.get("task_text"),
-                    "status": task.get("status"),
-                    "task_due": task.get("task_due"),
-                    "completed_at": task.get("completed_at"),
-                    "task_photo_url": task.get("task_photo_url"),
-                    "source": task.get("source"),
-                }, merge=True)
+                batch.set(task_ref, _task_doc_payload(
+                    task,
+                    case_id=case_id,
+                    record_id=record_id,
+                    plan_id=new_plan_id,
+                    timestamp_value=plan_created_at,
+                ), merge=True)
         batch.commit()
 
         return {
@@ -814,16 +885,7 @@ async def send_to_doctor(payload: WoundCaseRecordUpdate):
         }
 
         tasks = _get_plan_tasks(treatment_plan, payload_dict.get("task_list") or [])
-        enriched_tasks = []
-        for idx, task in enumerate(tasks, start=1):
-            task = dict(task) if isinstance(task, dict) else {}
-            if not task.get("task_id"):
-                task["task_id"] = f"TSK-{idx:04d}"
-            if "completed_at" not in task:
-                task["completed_at"] = None
-            if not str(task.get("source") or "").strip():
-                task["source"] = "AI"
-            enriched_tasks.append(task)
+        enriched_tasks = _normalize_plan_tasks(tasks, default_source="AI")
         treatment_plan["plan_tasks"] = enriched_tasks
         tasks = enriched_tasks
 
@@ -846,21 +908,16 @@ async def send_to_doctor(payload: WoundCaseRecordUpdate):
         batch.set(analysis_ref, analysis_data, merge=True)
         batch.set(plan_ref, plan_data, merge=True)
 
-        for idx, task in enumerate(tasks, start=1):
-            task_id = task.get("task_id") or f"TSK-{idx:04d}"
+        for task in tasks:
+            task_id = task.get("task_id") or _generate_task_id()
             task_ref = plan_ref.collection("tasks").document(task_id)
-            batch.set(task_ref, {
-                "task_id": task_id,
-                "case_id": case_id,
-                "record_id": record_id,
-                "plan_id": plan_id,
-                "created_at": operation_time,
-                "task_text": task.get("task_text"),
-                "status": task.get("status"),
-                "task_due": task.get("task_due"),
-                "completed_at": task.get("completed_at"),
-                "source": task.get("source"),
-            }, merge=True)
+            batch.set(task_ref, _task_doc_payload(
+                task,
+                case_id=case_id,
+                record_id=record_id,
+                plan_id=plan_id,
+                timestamp_value=operation_time,
+            ), merge=True)
 
         batch.commit()
 
@@ -906,8 +963,11 @@ async def doctor_review(payload: dict):
         incoming_analysis_id = payload.get("analysis_id")
         case_id = payload.get("case_id")
         record_id = payload.get("record_id")
-        review_payload = payload.get("payload")
+        legacy_review_payload = payload.get("payload")
+        top_level_analysis = payload.get("analysis")
         treatment_plan = payload.get("treatment_plan")
+        ai_result_edit_flag = payload.get("ai_result_edit_flag")
+        treatment_plan_edit_flag = payload.get("treatment_plan_edit_flag")
         signature = payload.get("signature")
         signature_base64 = payload.get("signature_base64")
 
@@ -915,12 +975,16 @@ async def doctor_review(payload: dict):
             raise HTTPException(status_code=400, detail="case_id is required")
         if not record_id:
             raise HTTPException(status_code=400, detail="record_id is required")
-        if not isinstance(review_payload, dict):
+        if legacy_review_payload is not None and not isinstance(legacy_review_payload, dict):
             raise HTTPException(status_code=400, detail="payload must be an object")
-        if treatment_plan is None:
-            treatment_plan = review_payload.get("treatment_plan")
+        if top_level_analysis is not None and not isinstance(top_level_analysis, dict):
+            raise HTTPException(status_code=400, detail="analysis must be an object")
+        if treatment_plan is None and isinstance(legacy_review_payload, dict):
+            treatment_plan = legacy_review_payload.get("treatment_plan")
         if treatment_plan is not None and not isinstance(treatment_plan, dict):
             raise HTTPException(status_code=400, detail="treatment_plan must be an object")
+        if not isinstance(legacy_review_payload, dict) and not isinstance(top_level_analysis, dict):
+            raise HTTPException(status_code=400, detail="analysis is required")
 
         case_ref = db.collection("cases").document(case_id)
         case_snapshot = case_ref.get()
@@ -941,15 +1005,30 @@ async def doctor_review(payload: dict):
             if source_analysis_snapshot.exists:
                 source_analysis_data = source_analysis_snapshot.to_dict() or {}
                 source_payload = source_analysis_data.get("payload") or {}
-                classifications = source_payload.get("classifications") or {}
+                source_analysis = _extract_analysis_from_review_payload(source_payload) or {}
+                classifications = source_analysis.get("classifications") or {}
                 if isinstance(classifications, dict):
                     previous_sinbad = classifications.get("SINBAD")
 
-        doctor_analysis = review_payload.get("analysis")
+        review_payload: dict = {}
+        if isinstance(legacy_review_payload, dict):
+            review_payload.update(dict(legacy_review_payload))
+        if isinstance(top_level_analysis, dict):
+            review_payload["analysis"] = dict(top_level_analysis)
+        if treatment_plan is not None:
+            review_payload["treatment_plan"] = dict(treatment_plan)
+        if ai_result_edit_flag is not None:
+            review_payload["ai_result_edit_flag"] = ai_result_edit_flag
+        if treatment_plan_edit_flag is not None:
+            review_payload["treatment_plan_edit_flag"] = treatment_plan_edit_flag
+
+        doctor_analysis = None
+        if isinstance(top_level_analysis, dict):
+            doctor_analysis = dict(top_level_analysis)
+        else:
+            doctor_analysis = _extract_analysis_from_review_payload(review_payload)
         if not isinstance(doctor_analysis, dict):
-            doctor_analysis = review_payload.get("AI_analysis")
-        if not isinstance(doctor_analysis, dict):
-            doctor_analysis = dict(review_payload)
+            raise HTTPException(status_code=400, detail="analysis must resolve to an object")
 
         if previous_sinbad is not None:
             classifications = doctor_analysis.get("classifications")
@@ -958,12 +1037,8 @@ async def doctor_review(payload: dict):
             classifications["SINBAD"] = previous_sinbad
             doctor_analysis["classifications"] = classifications
 
-        if isinstance(review_payload.get("analysis"), dict):
-            review_payload["analysis"] = doctor_analysis
-        if isinstance(review_payload.get("AI_analysis"), dict):
-            review_payload["AI_analysis"] = doctor_analysis
-        if "analysis" not in review_payload and "AI_analysis" not in review_payload:
-            review_payload = doctor_analysis
+        review_payload["analysis"] = doctor_analysis
+        review_payload.pop("AI_analysis", None)
 
         if signature is not None:
             review_payload["signature"] = signature
@@ -979,16 +1054,12 @@ async def doctor_review(payload: dict):
             normalized_treatment_plan = dict(treatment_plan)
             normalized_treatment_plan["plan_id"] = plan_id
             normalized_treatment_plan["status"] = "SENT"
-            for idx, task in enumerate(normalized_treatment_plan.get("plan_tasks") or [], start=1):
-                task_data = dict(task) if isinstance(task, dict) else {}
-                if not task_data.get("task_id"):
-                    task_data["task_id"] = f"TSK-{idx:04d}"
+            normalized_tasks = _normalize_plan_tasks(
+                normalized_treatment_plan.get("plan_tasks") or [],
+                default_source="Doctor",
+            )
+            for task_data in normalized_tasks:
                 task_data["status"] = "SENT"
-                if "completed_at" not in task_data:
-                    task_data["completed_at"] = None
-                if not str(task_data.get("source") or "").strip():
-                    task_data["source"] = "Doctor"
-                normalized_tasks.append(task_data)
             normalized_treatment_plan["plan_tasks"] = normalized_tasks
             review_payload["treatment_plan"] = normalized_treatment_plan
 
@@ -1076,18 +1147,13 @@ async def doctor_review(payload: dict):
             for task in normalized_tasks:
                 task_id = task.get("task_id")
                 task_ref = plan_ref.collection("tasks").document(task_id)
-                batch.set(task_ref, {
-                    "task_id": task_id,
-                    "case_id": case_id,
-                    "record_id": record_id,
-                    "plan_id": plan_id,
-                    "created_at": operation_time,
-                    "task_text": task.get("task_text"),
-                    "status": task.get("status"),
-                    "task_due": task.get("task_due"),
-                    "completed_at": task.get("completed_at"),
-                    "source": task.get("source"),
-                }, merge=True)
+                batch.set(task_ref, _task_doc_payload(
+                    task,
+                    case_id=case_id,
+                    record_id=record_id,
+                    plan_id=plan_id,
+                    timestamp_value=operation_time,
+                ), merge=True)
         batch.commit()
 
         nurse_notification_id = None

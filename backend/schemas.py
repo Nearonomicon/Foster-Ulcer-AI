@@ -25,7 +25,7 @@ class Status(str, Enum):
 class Urgency(str, Enum):
     URGENT = "URGENT"
     MEDIUM = "MEDIUM"
-    ROUTINE = "ROUTINE"
+    LOW = "LOW"
 
 
 class NotificationUserRole(str, Enum):
@@ -306,10 +306,14 @@ class Vascular(BaseModel):
 
 
 class TaskItem(BaseModel):
+    task_id: Optional[str] = None
     task_text: str
     status: str = "PENDING"
     task_due: Optional[str] = None
+    completed_at: Optional[datetime] = None
+    task_photo_url: Optional[str] = None
     source: Optional[str] = None
+    order_index: Optional[int] = None
 
 
 class TreatmentPlan(BaseModel):

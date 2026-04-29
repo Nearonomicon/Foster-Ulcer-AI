@@ -89,7 +89,18 @@ extension _CaseDetailPage on _MainNavigationScreenState {
         : <String, dynamic>{};
     final planTasks = (currentTreatmentPlan['plan_tasks'] is List)
         ? List<Map<String, dynamic>>.from(currentTreatmentPlan['plan_tasks'])
-        : <Map<String, dynamic>>[];
+        : <Map<String, dynamic>>[]
+      ..sort((a, b) {
+        int orderValue(Map<String, dynamic> task) {
+          final raw = task['order_index'];
+          if (raw is int) return raw;
+          return int.tryParse(raw?.toString() ?? '') ?? 1 << 30;
+        }
+
+        final byOrder = orderValue(a).compareTo(orderValue(b));
+        if (byOrder != 0) return byOrder;
+        return (a['task_text']?.toString() ?? '').compareTo(b['task_text']?.toString() ?? '');
+      });
 
     return PopScope(
       canPop: false,
@@ -1077,12 +1088,32 @@ extension _CaseDetailPage on _MainNavigationScreenState {
           else
             ...tasks.map((t) {
               final text = t['task_text']?.toString() ?? "(task)";
-              final due = fmtDate(t['task_due']?.toString());
+              final dueRaw = t['task_due']?.toString();
+              final due = fmtDate(dueRaw);
               final tStatus = t['status']?.toString() ?? "Pending";
+              final isCompleted = tStatus.toLowerCase() == 'completed';
+              DateTime? dueAt;
+              if (dueRaw != null && dueRaw.isNotEmpty) {
+                try {
+                  dueAt = DateTime.parse(dueRaw).toLocal();
+                } catch (_) {}
+              }
+              final now = DateTime.now();
+              final today = DateTime(now.year, now.month, now.day);
+              final dueDate = dueAt == null ? null : DateTime(dueAt.year, dueAt.month, dueAt.day);
+              final isOverdue = !isCompleted && dueDate != null && dueDate.isBefore(today);
               return Container(
                 margin: const EdgeInsets.only(bottom: 10),
                 padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: const Color(0xFFF8FAFC), borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFF1F5F9))),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: isCompleted
+                        ? const Color(0xFF10B981)
+                        : (isOverdue ? const Color(0xFFEF4444) : const Color(0xFFF1F5F9)),
+                  ),
+                ),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [

@@ -32,3 +32,15 @@
 - Added notification read-state endpoints:
   - `POST /notifications/{notification_id}/read`
   - `POST /notifications/mark-all-read`
+
+## 2026-04-28
+
+- Simplified the preferred `/doctor-review` request contract to use:
+  - top-level `analysis`
+  - top-level `treatment_plan`
+  - optional `ai_result_edit_flag`
+  - optional `treatment_plan_edit_flag`
+- Kept legacy `payload` support in `/doctor-review` for backward compatibility during client migration.
+- Confirmed that doctor add, delete, and reorder of plan tasks only happens through `/doctor-review`.
+- Added and documented `order_index` on plan tasks and plan-version task documents.
+- Updated project Markdown documentation to reflect the clean `/doctor-review` contract and task ordering rules.

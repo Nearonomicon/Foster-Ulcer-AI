@@ -24,30 +24,44 @@ extension _DashboardPage on _MainNavigationScreenState {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Expanded(
+              child: Row(
+                children: [
+                  Image.asset(
+                    'pic/app_logo_bg.png',
+                    width: 80,
+                    height: 80,
+                    fit: BoxFit.contain,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text(
-                  "Hello!",
+                  "AI DFU - Midwife",
                   style: GoogleFonts.plusJakartaSans(
-                    fontSize: 24,
+                    fontSize: 18,
                     fontWeight: FontWeight.bold,
                     color: const Color(0xFF1E293B),
                   ),
                 ),
-                const Text("ABC Clinic • Unit 4", style: TextStyle(fontSize: 14, color: Colors.grey)),
+                const Text("Yangon Hospital", style: TextStyle(fontSize: 12, color: Colors.grey)),
               ]),
-              Row(
-                children: [
-                  _buildNotificationButton(),
-                  const SizedBox(width: 12),
-                  _buildProfileAvatar(),
+                  ),
                 ],
               ),
+            ),
+            const SizedBox(width: 12),
+            Row(
+              children: [
+                _buildNotificationButton(),
+              ],
+            ),
             ],
           ),
           const SizedBox(height: 24),
           _buildStatCard(
             icon: LucideIcons.users,
-            label: "Active Patients",
+            label: "Patients",
             value: activePatientsCount,
             subValue: "",
             color: Colors.blue.shade50,

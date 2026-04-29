@@ -1,5 +1,6 @@
 import json
 from datetime import datetime
+from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from fastapi.encoders import jsonable_encoder
@@ -9,6 +10,51 @@ from services.firebase import db, upload_case_image_to_firebase
 
 
 router = APIRouter()
+
+
+def _generate_task_id() -> str:
+    return f"TSK-{uuid4().hex[:8].upper()}"
+
+
+def _normalize_plan_tasks(tasks: list | None, *, default_source: str | None = None) -> list[dict]:
+    normalized_tasks: list[dict] = []
+    for idx, task in enumerate(tasks or [], start=1):
+        task_data = dict(task) if isinstance(task, dict) else {}
+        if not task_data.get("task_id"):
+            task_data["task_id"] = _generate_task_id()
+        if "completed_at" not in task_data:
+            task_data["completed_at"] = None
+        if not str(task_data.get("source") or "").strip() and default_source:
+            task_data["source"] = default_source
+        incoming_order_index = task_data.get("order_index")
+        try:
+            task_data["order_index"] = int(incoming_order_index)
+        except Exception:
+            task_data["order_index"] = idx
+        normalized_tasks.append(task_data)
+
+    normalized_tasks.sort(key=lambda item: (int(item.get("order_index") or 0), str(item.get("task_id") or "")))
+    for idx, task_data in enumerate(normalized_tasks, start=1):
+        task_data["order_index"] = idx
+    return normalized_tasks
+
+
+def _task_doc_payload(task: dict, *, case_id: str, record_id: str, plan_id: str, timestamp: datetime) -> dict:
+    return {
+        "task_id": task.get("task_id"),
+        "case_id": case_id,
+        "record_id": record_id,
+        "plan_id": plan_id,
+        "created_at": timestamp,
+        "updated_at": timestamp,
+        "task_text": task.get("task_text"),
+        "status": task.get("status"),
+        "task_due": task.get("task_due"),
+        "completed_at": task.get("completed_at"),
+        "task_photo_url": task.get("task_photo_url"),
+        "source": task.get("source"),
+        "order_index": task.get("order_index"),
+    }
 
 
 @router.post("/tasks_list")
@@ -66,6 +112,7 @@ async def list_tasks(payload: dict | None = None):
                 "patient_id": patient_id,
                 "patient_name": patient_info.get("patient_name"),
                 "photo_url": patient_info.get("photo_url"),
+                "case_updated_at": case.get("case_updated_at"),
                 "current_record_id": case.get("current_record_id"),
                 "current_plan_id": case.get("current_plan_id"),
                 "current_treatment": current_treatment,
@@ -102,9 +149,14 @@ async def task_detail(payload: dict | None = None):
                 patient_name = patient_data.get("patient_name")
 
         current_treatment = case_data.get("current_treatment_plan") or {}
-        plan_tasks = current_treatment.get("plan_tasks") or []
+        plan_tasks = _normalize_plan_tasks(current_treatment.get("plan_tasks") or [])
 
         selected_task = None
+        task_id = payload.get("task_id")
+        if task_id is not None:
+            selected_task = next((task for task in plan_tasks if task.get("task_id") == task_id), None)
+            if selected_task is None:
+                raise HTTPException(status_code=404, detail="task_id not found")
         if task_index is not None:
             try:
                 index = int(task_index)
@@ -161,7 +213,7 @@ async def task_update(
             raise HTTPException(status_code=400, detail="plan_id does not match current plan")
 
         current_treatment = case_data.get("current_treatment_plan") or {}
-        plan_tasks = current_treatment.get("plan_tasks") or []
+        plan_tasks = _normalize_plan_tasks(current_treatment.get("plan_tasks") or [])
         if not isinstance(plan_tasks, list) or not plan_tasks:
             raise HTTPException(status_code=404, detail="No plan_tasks found")
 
@@ -208,6 +260,7 @@ async def task_update(
                 task_data.update(updates_by_id[task_id])
                 updated_task_ids.add(task_id)
             updated_tasks.append(task_data)
+        updated_tasks = _normalize_plan_tasks(updated_tasks)
 
         missing = [tid for tid in updates_by_id.keys() if tid not in updated_task_ids]
         if missing:

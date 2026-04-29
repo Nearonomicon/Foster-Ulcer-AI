@@ -474,23 +474,23 @@ def run(args):
             "case_id": context["case_id"],
             "record_id": context["record_id"],
             "analysis_id": context["analysis_id"],
-            "payload": {
-                "analysis": {
-                    "diagnosis": "Doctor reviewed diagnosis",
-                    "description": "Confirmed infected ulcer",
-                    "healing_progress": "Baseline assessment completed",
-                    "classifications": {},
-                }
+            "analysis": {
+                "diagnosis": "Doctor reviewed diagnosis",
+                "description": "Confirmed infected ulcer",
+                "healing_progress": "Baseline assessment completed",
+                "classifications": {},
             },
             "treatment_plan": {
                 "plan_text": "Perform dressing change, offloading, and follow-up review.",
                 "followup_days": 7,
                 "plan_tasks": [
-                    {"task_text": "Apply dressing", "task_due": date_str(days=1)},
-                    {"task_text": "Offloading education", "task_due": date_str(days=1)},
-                    {"task_text": "Review in clinic", "task_due": date_str(days=7)},
+                    {"order_index": 1, "task_text": "Apply dressing", "task_due": date_str(days=1)},
+                    {"order_index": 2, "task_text": "Offloading education", "task_due": date_str(days=1)},
+                    {"order_index": 3, "task_text": "Review in clinic", "task_due": date_str(days=7)},
                 ],
             },
+            "ai_result_edit_flag": True,
+            "treatment_plan_edit_flag": True,
             "signature_base64": "data:image/png;base64,TEST_SIGNATURE",
         },
     )
@@ -502,7 +502,7 @@ def run(args):
     case_data = detail_after_review["case"]
     expect(case_data.get("status") == "PLAN_ISSUED", "case not PLAN_ISSUED after doctor-review")
     expect(case_data.get("current_treatment_plan", {}).get("status") == "SENT", "plan not SENT after doctor-review")
-    tasks = case_data.get("current_task_list") or []
+    tasks = case_data.get("current_treatment_plan", {}).get("plan_tasks") or []
     expect(tasks and all(t.get("status") == "SENT" for t in tasks), "not all tasks are SENT after doctor-review")
     context["task_id"] = tasks[0]["task_id"]
 

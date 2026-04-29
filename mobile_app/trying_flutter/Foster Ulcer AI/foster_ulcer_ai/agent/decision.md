@@ -1,5 +1,83 @@
 # Development Decisions
 
+## 2026-04-23 10:43:52 +07:00
+
+### Launcher Logo Source Update
+
+- We decided `pic/app_logo_bg.png` should replace `pic/app_logo.png` as the launcher icon source.
+- We decided no extra padding is needed during generation because the new source is already a square `1024x1024` logo with background.
+
+## 2026-04-23 10:21:58 +07:00
+
+### App Name and Launcher Logo
+
+- We decided the user-facing app name should be `AI DFU (Midwife)`.
+- We decided Android should reference the app name through `@string/app_name` instead of hardcoding the label in the manifest.
+- We decided `pic/app_logo.png` should be used as the launcher icon source with a white square background.
+- We decided to update iOS, macOS, and Windows display metadata for consistency, while Android remains the primary APK target.
+
+## 2026-04-22 15:52:42 +07:00
+
+### Assessment Prefill Visibility
+
+- We decided skipping the AI Extraction preview should not hide the prefilled assessment values.
+- We decided the `Fill-in Answers (Review)` section should auto-expand after successful photo prefill so the nurse can immediately review extracted wound details.
+- We decided not to change the prefill data mapping or API payload variables.
+
+## 2026-04-22 15:51:00 +07:00
+
+### Skip AI Extraction Dev Preview
+
+- We decided the `response_view` AI Extraction page is a dev/debug preview and should not interrupt the nurse workflow after taking a wound photo.
+- We decided successful `/analyze-fillin` should go directly to Wound Assessment with extracted fields already prefilled.
+- We decided to keep `response_view` available as a fallback/debug page for non-fill-in analysis paths.
+
+## 2026-04-22 15:46:24 +07:00
+
+### Notification Bell Count Badge
+
+- We decided the bell should show unread count instead of a plain red dot.
+- We decided to cap the visible count at `9+` to keep the badge compact.
+- We decided the badge should remain tied to loaded unread notifications only.
+
+## 2026-04-22 15:45:36 +07:00
+
+### Notification Bell Badge
+
+- We decided the red dot on the bell should mean unread notifications exist, not merely that notification history exists.
+- We decided the badge should disappear when all loaded notifications are marked read.
+
+## 2026-04-22 15:38:04 +07:00
+
+### Compact Notification Cards
+
+- We decided notification cards should be more compact so the nurse can scan more notifications per screen.
+- We decided to keep the redesigned visual hierarchy but reduce the visual weight.
+- We decided this change should be presentation-only and must not change notification payload variables, read/unread logic, or case navigation behavior.
+
+## 2026-04-22 15:27:37 +07:00
+
+### Notification Visibility Fix
+
+- We decided notification entry points from outside the panel should default to showing all notifications to avoid hiding read notifications behind a stale unread-only filter.
+- We decided the unread-only toggle should remain available inside the panel for intentional filtering.
+- We decided unread-only empty state text should be explicit so the user can distinguish no unread notifications from no notifications at all.
+- We decided to keep the redesigned notification card and fix its layout constraints instead of reverting the design.
+
+## 2026-04-22 15:23:46 +07:00
+
+### Notification Card Redesign
+
+- We decided notification cards should feel more like clinical alert cards than plain list tiles.
+- We decided unread state should be visible through multiple cues:
+  blue left stripe,
+  stronger border,
+  elevated shadow,
+  unread dot,
+  status chip.
+- We decided to preserve existing notification behavior while changing only presentation.
+- We decided to extract card rendering into a helper method to make future notification UI changes safer.
+
 ## 2026-04-22 13:34:25 +07:00
 
 ### Notification Filter UI
