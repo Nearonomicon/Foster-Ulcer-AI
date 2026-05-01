@@ -7,7 +7,7 @@ Each scenario is split into:
 1. User workflow
 2. Program (data) workflow
 
-The flows below are based on the current route behavior in [`routes/patients.py`](/c:/Users/Pawarit/Desktop/GitHub/Foster-Ulcer-AI/Foster-Ulcer-AI/backend/routes/patients.py), [`routes/cases.py`](/c:/Users/Pawarit/Desktop/GitHub/Foster-Ulcer-AI/Foster-Ulcer-AI/backend/routes/cases.py), [`routes/analysis.py`](/c:/Users/Pawarit/Desktop/GitHub/Foster-Ulcer-AI/Foster-Ulcer-AI/backend/routes/analysis.py), and [`routes/task.py`](/c:/Users/Pawarit/Desktop/GitHub/Foster-Ulcer-AI/Foster-Ulcer-AI/backend/routes/task.py).
+The flows below are based on the current route behavior in [`routes/patients.py`](/backend/routes/patients.py), [`routes/cases.py`](/backend/routes/cases.py), [`routes/analysis.py`](/backend/routes/analysis.py), and [`routes/task.py`](/backend/routes/task.py).
 
 ## 1. Create Case
 

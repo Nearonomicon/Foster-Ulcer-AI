@@ -5,7 +5,7 @@ This delivery set is based on a code review of:
 - Backend: `Foster-Ulcer-AI/backend`
 - Frontend: `Foster-Ulcer-AI/mobile_app/trying_flutter/Foster Ulcer AI/foster_ulcer_ai`
 
-It reflects the current implementation found in the repository on 2026-04-28.
+It reflects the current implementation found in the repository on 2026-04-29.
 
 ## Included documents
 
@@ -21,6 +21,8 @@ It reflects the current implementation found in the repository on 2026-04-28.
   Runtime dependencies, environment requirements, deployment notes, and operational risks.
 - `Review_Findings.md`
   Code review findings, risks, and recommended remediation priorities.
+- `Improvement_Guide.md`
+  Prioritized engineering improvement plan with concrete, file-level actions and acceptance criteria.
 
 ## Important note
 

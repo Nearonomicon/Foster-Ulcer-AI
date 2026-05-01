@@ -11,7 +11,7 @@
   - `application/json`
   - `multipart/form-data`
 
-This document summarizes the API as implemented in the backend source, primarily [`app.py`](/c:/Users/Pawarit/Desktop/GitHub/Foster-Ulcer-AI/Foster-Ulcer-AI/backend/app.py), [`routes/patients.py`](/c:/Users/Pawarit/Desktop/GitHub/Foster-Ulcer-AI/Foster-Ulcer-AI/backend/routes/patients.py), [`routes/cases.py`](/c:/Users/Pawarit/Desktop/GitHub/Foster-Ulcer-AI/Foster-Ulcer-AI/backend/routes/cases.py), [`routes/analysis.py`](/c:/Users/Pawarit/Desktop/GitHub/Foster-Ulcer-AI/Foster-Ulcer-AI/backend/routes/analysis.py), [`routes/task.py`](/c:/Users/Pawarit/Desktop/GitHub/Foster-Ulcer-AI/Foster-Ulcer-AI/backend/routes/task.py), and [`schemas.py`](/c:/Users/Pawarit/Desktop/GitHub/Foster-Ulcer-AI/Foster-Ulcer-AI/backend/schemas.py).
+This document summarizes the API as implemented in the backend source, primarily [`app.py`](/backend/app.py), [`routes/patients.py`](/backend/routes/patients.py), [`routes/cases.py`](/backend/routes/cases.py), [`routes/analysis.py`](/backend/routes/analysis.py), [`routes/task.py`](/backend/routes/task.py), and [`schemas.py`](/backend/schemas.py).
 
 ## 2. Global Behavior
 
@@ -1330,7 +1330,7 @@ metadata/counters_case_{YYMMDD}
 - Several endpoints use `POST` for reads (`/cases_list`, `/case_detail`, `/tasks_list`, `/task_detail`).
 - `/analyze-wound` returns the final analysis as a JSON string instead of a nested JSON object.
 - `/tasks_list` returns `current_treatment_plan` as the array key, which is slightly misleading.
-- Case status written by `/analyze-wound` is `"ANALYZING"`, which is not part of the `Status` enum in [`schemas.py`](/c:/Users/Pawarit/Desktop/GitHub/Foster-Ulcer-AI/Foster-Ulcer-AI/backend/schemas.py).
+- Case status written by `/analyze-wound` is `"ANALYZING"`, which is not part of the `Status` enum in [`schemas.py`](/backend/schemas.py).
 - No explicit request/response versioning is implemented.
 
 ## 9. Recommended Next Step

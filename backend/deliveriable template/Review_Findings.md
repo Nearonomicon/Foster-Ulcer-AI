@@ -170,6 +170,57 @@ Recommendation:
 
 - standardize naming during next API versioning cycle
 
+### Finding 10: Specific code-level issues discovered during this review
+
+The following concrete code defects were observed and should be tracked as discrete tickets:
+
+**`services/firebase.py` line 12 — credential filename leaked in source.**
+The hardcoded path `C:/Users/Pawarit/Desktop/foster-ulcer-ai-firebase-adminsdk-fbsvc-6eda7ee8ab.json` is committed to the repository. Even though the file is local, the *filename* itself reveals service-account naming conventions and is now in git history. Same path also appears in `backend/blackboard.ipynb`. Treat the existing service-account key as compromised and rotate it.
+
+**`app.py` lines 96–129 — request/response middleware logs full PHI bodies.**
+Every request and response body is decoded and printed, including patient names, NRC IDs, vitals, and structured wound assessments. This is a HIPAA / PDPA exposure if logs land in any non-restricted log sink. The middleware also reconstructs the response body from the iterator on every call, which breaks streaming responses and adds memory pressure on large analysis payloads.
+
+**`app.py` line 167 — unbounded dashboard scan.**
+`/load-dashboard` streams the entire `cases` collection on every call. There is no limit, no pagination, and no index hint. This will silently degrade and then time out as case volume grows.
+
+**`routes/analysis.py` lines 184–186 — duplicate JSON parse.**
+```python
+data_dict = json.loads(response.text)
+raw_text = response.text.strip().replace("```json", "").replace("```", "")
+data_dict = json.loads(raw_text)
+```
+The first `json.loads` is wasted work and will throw on fenced output before the cleanup runs. Reorder so the cleanup happens first, or drop the first call.
+
+**`routes/analysis.py` `/analyze-healing` — sequential image fetches.**
+Each historical image is downloaded synchronously inside an `async` route via `urlopen`. For a chronic patient with many follow-ups, this serializes N HTTPS round-trips on the request thread and blocks the event loop. Use `httpx.AsyncClient` with concurrency, or pre-fetch in a thread pool.
+
+**`routes/analysis.py` line 119, line 480, `routes/task.py` line 239 — `datetime.utcnow()` is deprecated.**
+Replace with `datetime.now(timezone.utc)`. `utcnow()` returns a naive datetime and is removed in future Python releases.
+
+**`services/genai_client.py` lines 13–18 — all Gemini safety filters set to `BLOCK_NONE`.**
+This is intentional for clinical wound imagery but should be documented in a model card, audited periodically, and gated to wound-image and clinical-text inputs only. If user-supplied audio is ever extended beyond transcription, revisit.
+
+**`backend/requirements.txt` — no version pins, plus `pandas` declared but never imported.**
+Unpinned dependencies make builds non-reproducible and expose the deployment to upstream breakage. `pandas` is heavy (~50MB extra image weight) and is not actually used by the backend code reviewed.
+
+**`backend/Dockerfile` — single-stage, runs as root, copies the entire context.**
+There is no `.dockerignore` visible; the local `venv/` directory and Firebase admin JSON could leak into the image. Image runs as `root` with no `USER` directive. Add `.dockerignore`, switch to a multi-stage slim build, and run as a non-root user.
+
+**`mobile_app/.../main_navigation_screen.dart` — 3,734-line god file with `part of` directive.**
+All `lib/pages/*.dart` files are `part of` this single controller. State, API calls, camera, audio, navigation, and notification handling all share private fields. Refactor into per-feature modules with explicit interfaces.
+
+**Mobile API base URL is hardcoded.**
+`_baseUrl` flips between commented-out emulator and production Cloud Run URL. Move to compile-time `--dart-define` or a flavor system so dev/staging/prod can be selected without editing source.
+
+**`routes/cases.py` lines 311, 328 — Firestore transactional helpers.**
+`@firestore.transactional` decorated functions are correctly defined but the `transaction = db.transaction()` instance is reused across `get_next_case_id` and `create_case_with_first_record` in the request handler. Confirm this is intentional; the safer pattern is one transaction per critical section.
+
+**`routes/cases.py` `/cases_list` — composite-index hazard.**
+When both `patient_id` and a status `IN` filter are supplied, the code intentionally drops `order_by` to dodge composite-index errors. The trade-off is unstable result ordering. Add the composite index in Firestore and remove the workaround.
+
+**`routes/notifications.py` `/notifications/mark-all-read` — multi-batch race.**
+Streaming the unread query and committing 500-doc batches in a loop can race against concurrent inserts and miss records. Acceptable for a shared role inbox, but document the eventual-consistency behavior.
+
 ## 5. Strengths observed
 
 - Good case and record versioning pattern
