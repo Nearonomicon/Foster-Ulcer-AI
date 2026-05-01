@@ -32,15 +32,59 @@ extension _AssessmentPage on _MainNavigationScreenState {
 
   void _maybeShowHighRisk(int newScore) {
     if (newScore >= 3 && _sinbadScoreLast < 3) {
+      HapticFeedback.mediumImpact();
       showDialog<void>(
         context: context,
         builder: (context) => AlertDialog(
-          title: const Text("High Risk Case"),
-          content: const Text("Referral recommended."),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: const [
+              Icon(LucideIcons.triangleAlert, color: Color(0xFFDC2626), size: 22),
+              SizedBox(width: 10),
+              Text("High Risk — SINBAD ≥ 3", style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFFECACA)),
+                ),
+                child: Text(
+                  "SINBAD score of $newScore indicates a complex wound with elevated amputation risk.",
+                  style: const TextStyle(fontSize: 13, color: Color(0xFF991B1B)),
+                ),
+              ),
+              const SizedBox(height: 14),
+              const Text("Recommended actions:", style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              ...[
+                "Document all SINBAD components carefully",
+                "Escalate to supervising physician or specialist",
+                "Ensure vascular & infection assessments are complete",
+                "Mark urgency as HIGH when sending to doctor",
+              ].map((step) => Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(LucideIcons.chevronRight, size: 14, color: Color(0xFFDC2626)),
+                        const SizedBox(width: 6),
+                        Expanded(child: Text(step, style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)))),
+                      ],
+                    ),
+                  )),
+            ],
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text("OK"),
+              child: const Text("Understood", style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF0D9488))),
             ),
           ],
         ),
@@ -1519,6 +1563,7 @@ extension _AssessmentPage on _MainNavigationScreenState {
 
     return InkWell(
       onTap: () {
+        HapticFeedback.lightImpact();
         setState(() {
           switch (group) {
             case "site":

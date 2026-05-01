@@ -200,9 +200,33 @@ extension _TasksPage on _MainNavigationScreenState {
         if (_tasksLoading)
           const LinearProgressIndicator(color: Color(0xFF0D9488), minHeight: 2),
         if (_tasksError != null)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-            child: Text(_tasksError!, style: const TextStyle(color: Colors.redAccent)),
+          GestureDetector(
+            onTap: _fetchTasksList,
+            child: Container(
+              margin: const EdgeInsets.fromLTRB(24, 8, 24, 0),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF2F2),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFFECACA)),
+              ),
+              child: Row(
+                children: [
+                  const Icon(LucideIcons.circleAlert, size: 16, color: Color(0xFFDC2626)),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _tasksError!,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12, color: Color(0xFFB91C1C)),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  const Text('Retry', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFDC2626))),
+                ],
+              ),
+            ),
           ),
         const SizedBox(height: 20),
         Padding(
@@ -337,7 +361,15 @@ extension _TasksPage on _MainNavigationScreenState {
               await _fetchTasksList();
             },
             child: _tasksViewMode == 'plan'
-                ? ListView.builder(
+                ? filteredPlanCases.isEmpty
+                    ? _buildEmptyState(
+                        LucideIcons.clipboardList,
+                        _tasksItems.isEmpty ? 'No treatment plans yet' : 'No matching plans',
+                        subtitle: _tasksItems.isEmpty
+                            ? 'Treatment plans will appear here once a doctor issues one.'
+                            : 'Try adjusting your filters or search query.',
+                      )
+                    : ListView.builder(
                     padding: const EdgeInsets.fromLTRB(32, 8, 24, 8),
                     physics: const AlwaysScrollableScrollPhysics(),
                     itemCount: filteredPlanCases.length,
@@ -411,14 +443,14 @@ extension _TasksPage on _MainNavigationScreenState {
                                               Text("ID: ${c['case_id']} \n ${tasks.length} Tasks", style: const TextStyle(fontSize: 11, color: Colors.grey)),
                                             ]),
                                           ),
-                                          Container(
+                                                          Container(
                                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                             decoration: BoxDecoration(
                                               color: _statusBgColor(status),
                                               borderRadius: BorderRadius.circular(8),
                                             ),
                                             child: Text(
-                                              status,
+                                              _statusLabel(status),
                                               style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: _statusFgColor(status)),
                                             ),
                                           ),
@@ -485,7 +517,15 @@ extension _TasksPage on _MainNavigationScreenState {
                     );
                   },
                 )
-                : ListView.builder(
+                : allTasks.isEmpty
+                    ? _buildEmptyState(
+                        LucideIcons.checkSquare,
+                        _tasksItems.isEmpty ? 'No tasks yet' : 'No matching tasks',
+                        subtitle: _tasksItems.isEmpty
+                            ? 'Tasks assigned to you will appear here.'
+                            : 'Try adjusting your filters or search query.',
+                      )
+                    : ListView.builder(
                     padding: const EdgeInsets.fromLTRB(32, 8, 24, 8),
                     physics: const AlwaysScrollableScrollPhysics(),
                     itemCount: allTasks.length,
@@ -588,7 +628,7 @@ extension _TasksPage on _MainNavigationScreenState {
     required List<String> items,
     required ValueChanged<Set<String>> onChanged,
   }) {
-    String displayLabel(String raw) => raw.replaceAll('_', ' ');
+    String displayLabel(String raw) => _statusLabel(raw);
 
     final selectedCount = selectedItems.length;
     final summary = selectedCount == 0

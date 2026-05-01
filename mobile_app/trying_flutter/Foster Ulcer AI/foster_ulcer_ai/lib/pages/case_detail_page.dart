@@ -7,9 +7,12 @@ extension _CaseDetailPage on _MainNavigationScreenState {
       return const Center(child: CircularProgressIndicator(color: Color(0xFF0D9488)));
     }
     if (_caseDetailError != null) {
-      return Center(child: Text(_caseDetailError!, style: const TextStyle(color: Colors.redAccent)));
+      return _buildErrorState(_caseDetailError!, () async {
+        final caseId = _caseDetail?['case_id']?.toString() ?? _selectedPatient?['case_id']?.toString();
+        if (caseId != null) await _fetchCaseDetail(caseId);
+      });
     }
-    if (c == null) return const Center(child: Text("No case selected."));
+    if (c == null) return _buildEmptyState(LucideIcons.folderOpen, 'No case selected', subtitle: 'Go back and select a case to view.');
 
     String fmt(dynamic v) => (v == null || v.toString().isEmpty) ? "-" : v.toString();
     

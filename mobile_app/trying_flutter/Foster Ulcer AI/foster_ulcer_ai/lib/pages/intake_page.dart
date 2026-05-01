@@ -12,7 +12,7 @@ extension _IntakePage on _MainNavigationScreenState {
             child: Column(
               children: [
                 GestureDetector(
-                  onTap: () => _pickPatientPhoto(ImageSource.camera),
+                  onTap: () => _showPhotoSourceSheet(_pickPatientPhoto),
                   child: Container(
                     width: 110,
                     height: 110,
@@ -30,10 +30,10 @@ extension _IntakePage on _MainNavigationScreenState {
                 ),
                 const SizedBox(height: 8),
                 TextButton.icon(
-                  onPressed: () => _pickPatientPhoto(ImageSource.camera),
-                  icon: const Icon(LucideIcons.camera, size: 16),
+                  onPressed: () => _showPhotoSourceSheet(_pickPatientPhoto),
+                  icon: const Icon(LucideIcons.imagePlus, size: 16),
                   label: Text(
-                    (_patientPhoto == null && (_patientPhotoUrl == null || _patientPhotoUrl!.isEmpty)) ? "Capture Patient Image" : "Change Image",
+                    (_patientPhoto == null && (_patientPhotoUrl == null || _patientPhotoUrl!.isEmpty)) ? "Add Patient Photo" : "Change Photo",
                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
                   ),
                 ),

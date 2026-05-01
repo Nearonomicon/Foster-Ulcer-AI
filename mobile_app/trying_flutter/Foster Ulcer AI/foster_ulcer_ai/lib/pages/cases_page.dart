@@ -166,18 +166,20 @@ extension _CasesPage on _MainNavigationScreenState {
                   return const Center(child: CircularProgressIndicator(color: Color(0xFF0D9488)));
                 }
                 if (_casesError != null) {
-                  return Center(child: Text(_casesError!, style: const TextStyle(color: Colors.redAccent)));
+                  return _buildErrorState(_casesError!, _fetchCasesList);
                 }
                 if (_caseItems.isEmpty) {
-                  return ListView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    children: const [Center(child: Padding(padding: EdgeInsets.only(top: 80), child: Text("No cases found.")))],
+                  return _buildEmptyState(
+                    LucideIcons.folderOpen,
+                    'No cases yet',
+                    subtitle: 'Create a new case from the dashboard to get started.',
                   );
                 }
                 if (filtered.isEmpty) {
-                  return ListView(
-                    physics: const AlwaysScrollableScrollPhysics(),
-                    children: const [Center(child: Padding(padding: EdgeInsets.only(top: 80), child: Text("No cases match the current filters.")))],
+                  return _buildEmptyState(
+                    LucideIcons.filterX,
+                    'No matching cases',
+                    subtitle: 'Try adjusting your filters or search query.',
                   );
                 }
                 return ListView.builder(
@@ -237,13 +239,17 @@ extension _CasesPage on _MainNavigationScreenState {
                 return const Center(child: CircularProgressIndicator(color: Color(0xFF0D9488)));
               }
               if (_casesError != null) {
-                return Center(child: Text(_casesError!, style: const TextStyle(color: Colors.redAccent)));
+                return _buildErrorState(_casesError!, () => _fetchCasesList(patientId: pid));
               }
               if (pid == null || pid.isEmpty) {
-                return const Center(child: Text("No patient selected."));
+                return _buildEmptyState(LucideIcons.userX, 'No patient selected');
               }
               if (_caseItems.isEmpty) {
-                return const Center(child: Text("No cases found for this patient."));
+                return _buildEmptyState(
+                  LucideIcons.folderOpen,
+                  'No cases for this patient',
+                  subtitle: 'This patient has no recorded wound cases yet.',
+                );
               }
               return ListView.builder(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
@@ -317,7 +323,7 @@ extension _CasesPage on _MainNavigationScreenState {
     required List<String> items,
     required ValueChanged<Set<String>> onChanged,
   }) {
-    String displayLabel(String raw) => raw.replaceAll('_', ' ');
+    String displayLabel(String raw) => _statusLabel(raw);
 
     final selectedCount = selectedItems.length;
     final summary = selectedCount == 0

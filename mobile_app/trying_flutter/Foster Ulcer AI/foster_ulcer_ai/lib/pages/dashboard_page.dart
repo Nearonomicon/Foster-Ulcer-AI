@@ -59,17 +59,29 @@ extension _DashboardPage on _MainNavigationScreenState {
             ],
           ),
           const SizedBox(height: 24),
-          _buildStatCard(
-            icon: LucideIcons.users,
-            label: "Patients",
-            value: activePatientsCount,
-            subValue: "",
-            color: Colors.blue.shade50,
-            iconColor: Colors.blue.shade600,
+          GestureDetector(
+            onTap: () {
+              HapticFeedback.lightImpact();
+              setState(() {
+                _activeTab = 2;
+                _currentStep = 'dashboard';
+                _casesFetchedOnce = false;
+              });
+              _fetchCasesList();
+            },
+            child: _buildStatCard(
+              icon: LucideIcons.users,
+              label: "Patients",
+              value: activePatientsCount,
+              subValue: "View all →",
+              color: Colors.blue.shade50,
+              iconColor: Colors.blue.shade600,
+            ),
           ),
           const SizedBox(height: 16),
           InkWell(
             onTap: () {
+              HapticFeedback.lightImpact();
               setState(() {
                 _activeTab = 1;
                 _currentStep = 'dashboard';
@@ -107,7 +119,33 @@ extension _DashboardPage on _MainNavigationScreenState {
           ),
           if (_dashboardError != null) ...[
             const SizedBox(height: 16),
-            Text(_dashboardError!, style: const TextStyle(color: Colors.redAccent)),
+            GestureDetector(
+              onTap: _fetchDashboard,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFEF2F2),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: const Color(0xFFFECACA)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(LucideIcons.circleAlert, size: 16, color: Color(0xFFDC2626)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _dashboardError!,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12, color: Color(0xFFB91C1C)),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    const Text('Retry', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFFDC2626))),
+                  ],
+                ),
+              ),
+            ),
           ],
           const SizedBox(height: 24),
           ElevatedButton.icon(
@@ -320,7 +358,7 @@ extension _DashboardPage on _MainNavigationScreenState {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                status,
+                _statusLabel(status),
                 style: TextStyle(
                   fontSize: 9,
                   fontWeight: FontWeight.bold,

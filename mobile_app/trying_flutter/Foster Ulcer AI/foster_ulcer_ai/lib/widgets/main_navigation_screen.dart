@@ -11,6 +11,7 @@ import 'package:flutter_tailwind_colors/flutter_tailwind_colors.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:camera/camera.dart' as cam;
 import 'package:record/record.dart';
+import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
 import 'package:foster_ulcer_ai/models/mock_patients.dart';
@@ -3105,23 +3106,38 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: Stack(
-        children: [
-          SafeArea(
-            child: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 300),
-              child: KeyedSubtree(
-                key: ValueKey(_currentStep + _activeTab.toString()),
-                child: _buildCurrentStep(),
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) {
+        if (didPop) return;
+        if (_currentStep != 'dashboard') {
+          HapticFeedback.lightImpact();
+          setState(() {
+            _currentStep = _previousStep;
+            if (_previousStep == 'dashboard') {
+              _activeTab = _previousTab;
+            }
+          });
+        }
+      },
+      child: Scaffold(
+        backgroundColor: Colors.white,
+        body: Stack(
+          children: [
+            SafeArea(
+              child: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                child: KeyedSubtree(
+                  key: ValueKey(_currentStep + _activeTab.toString()),
+                  child: _buildCurrentStep(),
+                ),
               ),
             ),
-          ),
-          if (_isAnalyzing) _buildAnalysisOverlay(),
-        ],
+            if (_isAnalyzing) _buildAnalysisOverlay(),
+          ],
+        ),
+        bottomNavigationBar: _shouldShowNav() ? _buildBottomNav() : null,
       ),
-      bottomNavigationBar: _shouldShowNav() ? _buildBottomNav() : null,
     );
   }
 
@@ -3446,6 +3462,185 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     }
   }
 
+  String _statusLabel(String? status) {
+    switch ((status ?? '').toUpperCase()) {
+      case 'CREATION':
+        return 'New Case';
+      case 'ANALYZING':
+        return 'Analyzing';
+      case 'DOCTOR_REVIEW':
+        return 'Awaiting Review';
+      case 'PLAN_ISSUED':
+        return 'Plan Issued';
+      case 'APPOINTMENT':
+        return 'Appointment';
+      case 'REQUEST_CLOSE':
+        return 'Closure Req.';
+      case 'COMPLETED':
+        return 'Completed';
+      case 'DRAFT':
+        return 'Draft';
+      case 'SENT':
+        return 'Sent';
+      case 'PENDING':
+        return 'Pending';
+      default:
+        return (status ?? '-').replaceAll('_', ' ');
+    }
+  }
+
+  Widget _buildErrorState(String message, VoidCallback onRetry) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFEF2F2),
+                shape: BoxShape.circle,
+                border: Border.all(color: const Color(0xFFFECACA)),
+              ),
+              child: const Icon(LucideIcons.circleX, size: 32, color: Color(0xFFDC2626)),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Something went wrong',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(LucideIcons.refreshCw, size: 16),
+              label: const Text('Try Again', style: TextStyle(fontWeight: FontWeight.bold)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0D9488),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEmptyState(IconData icon, String message, {String? subtitle}) {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        SizedBox(
+          height: 320,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF0FDFA),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: const Color(0xFF99F6E4)),
+                ),
+                child: Icon(icon, size: 32, color: const Color(0xFF0D9488)),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                message,
+                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF1E293B)),
+              ),
+              if (subtitle != null) ...[
+                const SizedBox(height: 6),
+                Text(
+                  subtitle,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _showPhotoSourceSheet(Future<void> Function(ImageSource) onPick) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Select Photo Source',
+                  style: GoogleFonts.plusJakartaSans(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: const Color(0xFF1E293B),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0FDFA),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(LucideIcons.camera, color: Color(0xFF0D9488)),
+                  ),
+                  title: const Text('Take Photo', style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: const Text('Use camera to capture now'),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    onPick(ImageSource.camera);
+                  },
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF0F9FF),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(LucideIcons.image, color: Color(0xFF0369A1)),
+                  ),
+                  title: const Text('Choose from Gallery', style: TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: const Text('Select an existing photo'),
+                  onTap: () {
+                    Navigator.of(context).pop();
+                    onPick(ImageSource.gallery);
+                  },
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   // Static UI Blocks
   Widget _buildStatCard({required IconData icon, required String label, required String value, required String subValue, required Color color, required Color iconColor}) => Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: const Color(0xFFF8FAFC), borderRadius: BorderRadius.circular(24), border: Border.all(color: const Color(0xFFF1F5F9))), child: Row(children: [Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(16)), child: Icon(icon, color: iconColor, size: 24)), const SizedBox(width: 16), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(value, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold)), Text(label.toUpperCase(), style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey))])), Text(subValue, style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: iconColor))]));
   Widget _buildActionCard() => Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: const Color(0xFFD97706), borderRadius: BorderRadius.circular(24)), child: const Row(children: [Icon(LucideIcons.listTodo, color: Colors.white), SizedBox(width: 16), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text("4", style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white)), Text("TASKS FOR TODAY", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white70))])), Icon(LucideIcons.chevronRight, color: Colors.white70)]));
@@ -3493,7 +3688,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         ),
       );
   Widget _buildSectionTitle(IconData icon, String title) => Row(children: [Icon(icon, size: 20, color: const Color(0xFF0D9488)), const SizedBox(width: 10), Expanded(child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Color(0xFF0D9488))))]);
-  Widget _buildFixedBottomButton(String label, IconData icon, VoidCallback onPressed) => Container(padding: const EdgeInsets.all(24), decoration: const BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: Color(0xFFF1F5F9)))), child: ElevatedButton.icon(onPressed: onPressed, icon: Icon(icon), label: Text(label, style: const TextStyle(fontWeight: FontWeight.bold)), style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0D9488), foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 60), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)))));
+  Widget _buildFixedBottomButton(String label, IconData icon, VoidCallback onPressed) => Container(padding: const EdgeInsets.all(24), decoration: const BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: Color(0xFFF1F5F9)))), child: ElevatedButton.icon(onPressed: () { HapticFeedback.mediumImpact(); onPressed(); }, icon: Icon(icon), label: Text(label, style: const TextStyle(fontWeight: FontWeight.bold)), style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0D9488), foregroundColor: Colors.white, minimumSize: const Size(double.infinity, 60), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)))));
   Widget _buildNotificationButton() {
     final unreadCount = _notificationsItems.where(_notificationIsUnread).length;
     final unreadLabel = unreadCount > 9 ? '9+' : unreadCount.toString();
@@ -3683,7 +3878,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Text(
-                status,
+                _statusLabel(status),
                 style: TextStyle(
                   fontSize: 9,
                   fontWeight: FontWeight.bold,
