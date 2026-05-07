@@ -47,12 +47,15 @@ extension _CaseDetailPage on _MainNavigationScreenState {
         : <String, dynamic>{};
     final activeDescription = activeAnalysis['description']?.toString();
     final classifications = activeClassifications.isNotEmpty ? activeClassifications : currentClassifications;
-    final sinbadMap = (classifications['SINBAD'] is Map)
-        ? Map<String, dynamic>.from(classifications['SINBAD'])
+    final currentSinbad = (c['current_sinbad'] is Map)
+        ? Map<String, dynamic>.from(c['current_sinbad'])
+        : <String, dynamic>{};
+    final sinbadMap = currentSinbad.isNotEmpty
+        ? currentSinbad
         : (activeRecord?['sinbad'] is Map)
             ? Map<String, dynamic>.from(activeRecord?['sinbad'])
-            : (c['current_sinbad'] is Map)
-                ? Map<String, dynamic>.from(c['current_sinbad'])
+            : (classifications['SINBAD'] is Map)
+                ? Map<String, dynamic>.from(classifications['SINBAD'])
                 : <String, dynamic>{};
     final sinbadTotal = sinbadMap['total'];
     
@@ -139,7 +142,12 @@ extension _CaseDetailPage on _MainNavigationScreenState {
                 const SizedBox(height: 24),
 
                 // --- CLINICAL SNAPSHOT ---
-                _buildClinicalSnapshotCard(activeRecord, currentWound, currentVitals, classifications),
+                _buildClinicalSnapshotCard(
+                  activeRecord,
+                  currentWound,
+                  classifications,
+                  currentSinbad,
+                ),
                 const SizedBox(height: 16),
 
                 // --- APPOINTMENT ---
@@ -677,13 +685,15 @@ extension _CaseDetailPage on _MainNavigationScreenState {
     );
   }
 
-  Widget _buildClinicalSnapshotCard(Map? activeRecord, Map wound, Map vitals, Map classifications) {
+  Widget _buildClinicalSnapshotCard(
+    Map? activeRecord,
+    Map wound,
+    Map classifications,
+    Map<String, dynamic> currentSinbad,
+  ) {
     String fmt(dynamic v) => (v == null || v.toString().isEmpty) ? "-" : v.toString();
     final recordWound = (activeRecord?['wound_detail'] is Map)
         ? Map<String, dynamic>.from(activeRecord?['wound_detail'])
-        : <String, dynamic>{};
-    final recordVitals = (activeRecord?['vital_signs'] is Map)
-        ? Map<String, dynamic>.from(activeRecord?['vital_signs'])
         : <String, dynamic>{};
     final recordAnalysis = (activeRecord?['analysis'] is Map)
         ? Map<String, dynamic>.from(activeRecord?['analysis'])
@@ -712,12 +722,17 @@ extension _CaseDetailPage on _MainNavigationScreenState {
     final recordGangrene = activeRecord?['gangrene_extent'];
 
     final snapWound = recordWound.isNotEmpty ? recordWound : wound;
-    final snapVitals = recordVitals.isNotEmpty ? recordVitals : vitals;
     final snapClassifications = recordClassifications.isNotEmpty ? recordClassifications : classifications;
     final snapIschemia = recordIschemia.isNotEmpty ? recordIschemia : (wound['ischemia'] is Map ? Map<String, dynamic>.from(wound['ischemia']) : <String, dynamic>{});
     final snapInfection = recordInfection.isNotEmpty ? recordInfection : <String, dynamic>{};
     final snapNeuropathy = recordNeuropathy.isNotEmpty ? recordNeuropathy : <String, dynamic>{};
-    final snapSinbad = recordSinbad.isNotEmpty ? recordSinbad : (snapClassifications['SINBAD'] is Map ? Map<String, dynamic>.from(snapClassifications['SINBAD']) : <String, dynamic>{});
+    final snapSinbad = currentSinbad.isNotEmpty
+        ? currentSinbad
+        : recordSinbad.isNotEmpty
+            ? recordSinbad
+            : (snapClassifications['SINBAD'] is Map)
+                ? Map<String, dynamic>.from(snapClassifications['SINBAD'])
+                : <String, dynamic>{};
     final snapLabs = recordLabs.isNotEmpty ? recordLabs : <String, dynamic>{};
     final snapVascular = recordVascular.isNotEmpty ? recordVascular : <String, dynamic>{};
     final snapGangrene = recordGangrene ?? snapWound['gangrene_extent'] ?? "-";
@@ -893,7 +908,7 @@ extension _CaseDetailPage on _MainNavigationScreenState {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _scorePill("SINBAD", snapClassifications['SINBAD']?['total']),
+              _scorePill("SINBAD", currentSinbad['total'] ?? snapSinbad['total']),
               _scorePill("WIfI", wIfiText),
               _scorePill("IDSA", snapClassifications['IDSA_infection_stage']),
             ],

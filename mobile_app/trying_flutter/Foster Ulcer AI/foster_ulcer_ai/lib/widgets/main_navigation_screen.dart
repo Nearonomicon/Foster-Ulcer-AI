@@ -526,6 +526,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   Uri _updatePatientUri(String id) => Uri.parse("$_baseUrl/patients/$id");
   final Uri _createCaseUri = Uri.parse("$_baseUrl/create-case");
   final Uri _updateCaseUri = Uri.parse("$_baseUrl/update_cases");
+  final Uri _noWoundAssessmentUri = Uri.parse("$_baseUrl/no-wound-assessment");
   final Uri _sendToDoctorUri = Uri.parse("$_baseUrl/send-to-doctor");
   final Uri _casesListUri = Uri.parse("$_baseUrl/cases_list");
   final Uri _tasksListUri = Uri.parse("$_baseUrl/tasks_list");
@@ -1417,7 +1418,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       return;
     }
     if (_woundNotPresentFlow) {
-      await _sendToDoctor();
+      await _submitNoWoundAssessment();
       return;
     }
     if (_capturedImage == null) {
@@ -1628,6 +1629,122 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     } catch (e) {
       debugPrint("Analyze-wound error: $e");
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Submit failed: $e"), backgroundColor: Colors.redAccent));
+    } finally {
+      if (mounted) setState(() => _isAnalyzing = false);
+    }
+  }
+
+  Future<void> _submitNoWoundAssessment() async {
+    if (_caseRefs.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Missing case reference. Please complete Vital Check first."), backgroundColor: Colors.orange),
+        );
+      }
+      return;
+    }
+
+    final payload = {
+      'case_id': _caseRefs['case_id'],
+      'patient_id': _caseRefs['patient_id'],
+      'record_id': _caseRefs['record_id'],
+      'status': 'COMPLETED',
+      'flow_type': 'NO_WOUND_PRESENT',
+      'wound_present': false,
+      'nurse_reviewed_flag': false,
+      'vital_signs': {
+        'temperature': _reviewed['temperature'],
+        'blood_pressure': _reviewed['blood_pressure'],
+        'blood_pressure_systolic': _reviewed['blood_pressure_systolic'],
+        'blood_pressure_diastolic': _reviewed['blood_pressure_diastolic'],
+        'blood_glucose': _reviewed['blood_sugar'],
+        'heart_rate': _reviewed['heart_rate'],
+        'respiratory_rate': _reviewed['respiratory_rate'],
+      },
+      'wound_detail': null,
+      'sinbad': {
+        'site': _reviewed['sinbad_site'],
+        'ischemia': _reviewed['sinbad_ischemia'],
+        'neuropathy': _reviewed['sinbad_neuropathy'],
+        'infection': _reviewed['sinbad_infection'],
+        'area': _reviewed['sinbad_area'],
+        'depth': _reviewed['sinbad_depth'],
+        'total': _calcSinbadScore(),
+      },
+      'ischemia': {
+        'points': _reviewed['ischemia_points'] ?? [],
+        'pulse': _reviewed['ischemia_pulse'],
+        'checklist': _reviewed['ischemia_checklist'] ?? [],
+      },
+      'infection': {
+        'checklist': _reviewed['infection_checklist'] ?? [],
+        'erythema_extent': _reviewed['erythema_extent'],
+        'probe_to_bone_test': _reviewed['probe_to_bone_test'],
+        'has_deep_abscess_or_fasciitis': _reviewed['has_deep_abscess_or_fasciitis'],
+      },
+      'neuropathy': {
+        'points': _reviewed['neuropathy_points'] ?? [],
+      },
+      'lab_results': {
+        'wbc_count': _reviewed['lab_wbc_count'],
+        'crp': _reviewed['lab_crp'],
+        'esr': _reviewed['lab_esr'],
+        'procalcitonin': _reviewed['lab_procalcitonin'],
+      },
+      'vascular': {
+        'abi_value': _reviewed['vascular_abi_value'],
+        'ankle_pressure_mmHg': _reviewed['vascular_ankle_pressure_mmHg'],
+        'toe_pressure_mmHg': _reviewed['vascular_toe_pressure_mmHg'],
+        'tcpo2_mmHg': _reviewed['vascular_tcpo2_mmHg'],
+      },
+      'meta': {
+        'submitted_at': _getFormattedTimestamp(),
+        'submitted_by_role': 'nurse',
+      },
+    };
+
+    debugPrint("No-wound-assessment payload: ${jsonEncode(payload)}");
+
+    setState(() {
+      _analysisTitle = "SAVING";
+      _analysisMessage = "Saving no-wound assessment...";
+      _isAnalyzing = true;
+    });
+    try {
+      final resp = await http
+          .post(
+            _noWoundAssessmentUri,
+            headers: {'Content-Type': 'application/json'},
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 30));
+      if (resp.statusCode != 200) {
+        throw Exception("No-wound assessment failed (${resp.statusCode}): ${resp.body}");
+      }
+
+      final decoded = jsonDecode(resp.body);
+      if (decoded is! Map || decoded['status'] != 'success') {
+        throw Exception("Unexpected no-wound assessment response: ${resp.body}");
+      }
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("No-wound assessment saved."), backgroundColor: Color(0xFF0D9488)),
+      );
+      setState(() {
+        _aiWoundJson = null;
+        _selectedUrgency = null;
+        _responseMode = 'analysis';
+        _rawResponse = resp.body;
+      });
+      _navigateTo('dashboard');
+    } catch (e) {
+      debugPrint("No-wound-assessment error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("No-wound assessment failed: $e"), backgroundColor: Colors.redAccent),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isAnalyzing = false);
     }

@@ -128,29 +128,12 @@ extension _DashboardPage on _MainNavigationScreenState {
           ),
           const SizedBox(height: 12),
           OutlinedButton.icon(
-            onPressed: () {
-              _patientProfile
-                ..clear()
-                ..addAll({
-                  'patient_name': null,
-                  'phone_no': '0000000000',
-                  'dob': null,
-                  'gender': null,
-                  'height_cm': null,
-                  'weight_kg': null,
-                  'medical_history': null,
-                });
-              setState(() {
-                _patientProfileSaved = true;
-                _emergencyBypassProfile = true;
-              });
-              _navigateTo('camera');
-            },
+            onPressed: null,
             icon: const Icon(LucideIcons.triangleAlert),
             label: const Text("Emergency Escalate", style: TextStyle(fontWeight: FontWeight.bold)),
             style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.redAccent,
-              side: const BorderSide(color: Colors.redAccent),
+              foregroundColor: const Color(0xFF94A3B8),
+              side: const BorderSide(color: Color(0xFFCBD5E1)),
               minimumSize: const Size(double.infinity, 60),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
             ),
