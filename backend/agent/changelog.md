@@ -44,3 +44,24 @@
 - Confirmed that doctor add, delete, and reorder of plan tasks only happens through `/doctor-review`.
 - Added and documented `order_index` on plan tasks and plan-version task documents.
 - Updated project Markdown documentation to reflect the clean `/doctor-review` contract and task ordering rules.
+
+## 2026-05-07
+
+- Added a dedicated no-wound workflow endpoint:
+  - `POST /no-wound-assessment`
+- Changed the no-wound request contract to take `case_id` in the JSON body instead of the URL path.
+- Added backend validation for the no-wound flow:
+  - `status` must be `COMPLETED`
+  - `flow_type` must be `NO_WOUND_PRESENT`
+  - `wound_present` must be `false`
+  - `wound_detail` must be `null`
+  - required `sinbad` fields: `site`, `ischemia`, `neuropathy`, `infection`, `area`, `depth`
+- Added request models for the no-wound workflow, including support for `meta.submitted_at` and `meta.submitted_by_role`.
+- Extended `sinbad` payload support to accept optional `total`.
+- Implemented no-wound record/case updates without image analysis, wound-detail review, analysis version creation, or plan version creation.
+- Changed the no-wound flow to complete immediately without doctor-review notification.
+- Set the case and target record to `COMPLETED`, stamped `completed_at`, cleared current analysis/plan pointers, and returned:
+  - `status`
+  - `case_id`
+  - `record_id`
+  - `next_status`

@@ -289,6 +289,7 @@ class Sinbad(BaseModel):
     infection: Optional[YesNoSinbad] = None
     area: Optional[SinbadArea] = None
     depth: Optional[SinbadDepth] = None
+    total: Optional[int] = Field(default=None, ge=0, le=6)
 
 
 class LabResults(BaseModel):
@@ -382,6 +383,11 @@ class CreateCaseMeta(BaseModel):
     sent_at: Optional[str] = None
 
 
+class NoWoundAssessmentMeta(BaseModel):
+    submitted_at: Optional[Union[str, datetime]] = None
+    submitted_by_role: Optional[str] = None
+
+
 class CreateCaseRequest(BaseModel):
     patient_id: str
     status: Optional[str] = "Creation"
@@ -467,6 +473,46 @@ class WoundCaseRecordUpdate(WoundCaseRecord):
             missing.append("vascular")
         if missing:
             raise ValueError(f"Missing required fields: {', '.join(missing)}")
+        return self
+
+
+class NoWoundAssessmentRequest(BaseModel):
+    case_id: str
+    patient_id: str
+    record_id: str
+    status: Status = Status.COMPLETED
+    flow_type: str
+    wound_present: bool
+    nurse_reviewed_flag: bool
+    vital_signs: VitalSigns
+    wound_detail: Any = None
+    sinbad: Sinbad
+    ischemia: Ischemia
+    infection: Infection
+    neuropathy: Neuropathy
+    lab_results: LabResults
+    vascular: Vascular
+    meta: Optional[NoWoundAssessmentMeta] = None
+    created_by_nurse: Optional[str] = None
+    assigned_doctor: Optional[str] = None
+    urgency: Optional[Urgency] = None
+
+    @model_validator(mode="after")
+    def validate_no_wound_payload(self):
+        if self.status != Status.COMPLETED:
+            raise ValueError("status must be COMPLETED")
+        if self.flow_type != "NO_WOUND_PRESENT":
+            raise ValueError("flow_type must be NO_WOUND_PRESENT")
+        if self.wound_present is not False:
+            raise ValueError("wound_present must be false")
+        if self.wound_detail is not None:
+            raise ValueError("wound_detail must be null")
+
+        required_sinbad_fields = ("site", "ischemia", "neuropathy", "infection", "area", "depth")
+        missing = [field for field in required_sinbad_fields if getattr(self.sinbad, field) is None]
+        if missing:
+            raise ValueError(f"Missing required SINBAD fields: {', '.join(missing)}")
+
         return self
 
 

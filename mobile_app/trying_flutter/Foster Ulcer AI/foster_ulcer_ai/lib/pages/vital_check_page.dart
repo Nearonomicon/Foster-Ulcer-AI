@@ -117,6 +117,7 @@ extension _VitalCheckPage on _MainNavigationScreenState {
                 onPressed: () async {
                   final ok = await _createCaseFromVitals();
                   if (!mounted || !ok) return;
+                  setState(() => _woundNotPresentFlow = false);
                   _navigateTo('camera');
                 },
                 icon: const Icon(LucideIcons.camera),
@@ -133,7 +134,8 @@ extension _VitalCheckPage on _MainNavigationScreenState {
                 onPressed: () async {
                   final ok = await _createCaseFromVitals();
                   if (!mounted || !ok) return;
-                  _navigateTo('dashboard');
+                  setState(() => _woundNotPresentFlow = true);
+                  _navigateTo('assessment');
                 },
                 icon: const Icon(LucideIcons.house),
                 label: const Text("Wound is not present", style: TextStyle(fontWeight: FontWeight.bold)),

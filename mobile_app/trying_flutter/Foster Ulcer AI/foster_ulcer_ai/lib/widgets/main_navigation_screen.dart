@@ -189,6 +189,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   bool _patientProfileSaved = false;
   bool _emergencyBypassProfile = false;
   bool _followUpFlow = false;
+  bool _woundNotPresentFlow = false;
 
   final TextEditingController _patientNameCtrl = TextEditingController();
   final TextEditingController _nrcIdCtrl = TextEditingController();
@@ -280,6 +281,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     _capturedImage = null;
     _capturedImageBytes = null;
     _woundPhotoAwaitingConfirmation = false;
+    _woundNotPresentFlow = false;
     _clearVitalsInfo();
   }
 
@@ -303,6 +305,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     _showInflammatoryLabs = false;
     _showDeepInfectionIndicators = false;
     _showObjectiveIschemia = false;
+    _woundNotPresentFlow = false;
     _assessmentAudioPath = null;
     _assessmentAudioRecording = false;
     _assessmentAudioPlaying = false;
@@ -836,24 +839,36 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     enumIfPresent('has_infection', const ["true", "false"], 'Has Infection');
     enumIfPresent('skin_condition', const ["healthy", "dry", "cracked", "macerated", "fragile", "scaling"], 'Skin Condition');
 
-    if ((_reviewed['sinbad_site'] ?? _reviewed['location_primary']) == null) {
+    if (_woundNotPresentFlow) {
+      if (_reviewed['sinbad_site'] == null) {
+        errors['sinbad_site'] = 'Choose the SINBAD site.';
+      }
+    } else if ((_reviewed['sinbad_site'] ?? _reviewed['location_primary']) == null) {
       errors['location_primary'] = 'Location Primary is required if SINBAD site is empty.';
       errors['sinbad_site'] = 'Choose the SINBAD site or fill Location Primary.';
     }
-    if ((_reviewed['sinbad_ischemia'] ?? _reviewed['ischemia_pulse']) == null) {
+    if ((_reviewed['sinbad_ischemia'] ?? (_woundNotPresentFlow ? null : _reviewed['ischemia_pulse'])) == null) {
       errors['sinbad_ischemia'] = 'Choose ischemia status.';
     }
-    if ((_reviewed['sinbad_neuropathy'] ?? _reviewed['neuropathy_points']) == null) {
+    if ((_reviewed['sinbad_neuropathy'] ?? (_woundNotPresentFlow ? null : _reviewed['neuropathy_points'])) == null) {
       errors['sinbad_neuropathy'] = 'Choose neuropathy status.';
     }
-    if ((_reviewed['sinbad_infection'] ?? _reviewed['infection_checklist']) == null) {
+    if ((_reviewed['sinbad_infection'] ?? (_woundNotPresentFlow ? null : _reviewed['infection_checklist'])) == null) {
       errors['sinbad_infection'] = 'Choose infection status.';
     }
-    if (_reviewed['sinbad_area'] == null) {
+    if (_woundNotPresentFlow) {
+      if (_reviewed['sinbad_area'] == null) {
+        errors['sinbad_area'] = 'Choose wound area.';
+      }
+    } else if (_reviewed['sinbad_area'] == null) {
       requireValue('size_width_cm', 'Width is required if SINBAD area is empty.');
       requireValue('size_length_cm', 'Length is required if SINBAD area is empty.');
     }
-    if ((_reviewed['sinbad_depth'] ?? _reviewed['depth_category']) == null) {
+    if (_woundNotPresentFlow) {
+      if (_reviewed['sinbad_depth'] == null) {
+        errors['sinbad_depth'] = 'Choose wound depth.';
+      }
+    } else if ((_reviewed['sinbad_depth'] ?? _reviewed['depth_category']) == null) {
       errors['depth_category'] = 'Depth Category is required if SINBAD depth is empty.';
       errors['sinbad_depth'] = 'Choose wound depth or fill Depth Category.';
     }
@@ -1365,8 +1380,6 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   }
 
   Future<void> _submitToAnalyzeWound() async {
-    if (_capturedImage == null) return;
-    final imageFile = File(_capturedImage!.path);
     if (!_patientProfileSaved || _patientProfile.isEmpty) {
       _navigateTo('patient_search');
       return;
@@ -1403,6 +1416,19 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       }
       return;
     }
+    if (_woundNotPresentFlow) {
+      await _sendToDoctor();
+      return;
+    }
+    if (_capturedImage == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Please capture a wound photo first."), backgroundColor: Colors.orange),
+        );
+      }
+      return;
+    }
+    final imageFile = File(_capturedImage!.path);
     if (_assessmentInvalidKeys.isNotEmpty) {
       setState(() => _assessmentInvalidKeys.clear());
     }
@@ -3012,6 +3038,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       }
       if (step == 'vital_check_page') {
         _clearVitalsInfo();
+        _woundNotPresentFlow = false;
       }
       if (step == 'patient_search') {
         setState(() => _patientsFetchedOnce = false);

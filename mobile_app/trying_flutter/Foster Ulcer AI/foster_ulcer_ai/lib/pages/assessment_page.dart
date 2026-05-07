@@ -52,9 +52,10 @@ extension _AssessmentPage on _MainNavigationScreenState {
   Widget _buildWoundAssessmentForm() {
     final score = _calcSinbadScore();
     final scoreColor = _scoreColor(score);
+    final reviewSkipped = _woundNotPresentFlow;
     return Column(
       children: [
-        _buildHeader("Wound Assessment", onBack: () => _navigateTo('response_view')),
+        _buildHeader("Wound Assessment", onBack: () => _navigateTo(reviewSkipped ? 'vital_check_page' : 'response_view')),
         Expanded(
           child: SingleChildScrollView(
             controller: _assessmentScrollCtrl,
@@ -92,177 +93,222 @@ extension _AssessmentPage on _MainNavigationScreenState {
                     ],
                   ),
                 ),
-                Theme(
-                  data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-                  child: ExpansionTile(
-                    key: ValueKey('fillin_review_$_fillinExpanded'),
-                    initiallyExpanded: _fillinExpanded,
-                    onExpansionChanged: (v) => setState(() => _fillinExpanded = v),
-                    tilePadding: const EdgeInsets.symmetric(horizontal: 4),
-                    title: Row(
+                if (reviewSkipped)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF1F5F9),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: const Color(0xFFE2E8F0)),
+                    ),
+                    child: Row(
                       children: [
+                        const Icon(Icons.remove_circle_outline, color: Color(0xFF94A3B8)),
+                        const SizedBox(width: 10),
                         const Expanded(
-                          child: Text(
-                            "Fill-in Answers (Review)",
-                            style: TextStyle(fontWeight: FontWeight.bold),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Fill-in Answers (Review)",
+                                style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF64748B)),
+                              ),
+                              SizedBox(height: 4),
+                              Text(
+                                "Skipped because wound is not present. Complete the SINBAD section below.",
+                                style: TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+                              ),
+                            ],
                           ),
                         ),
-                        TextButton.icon(
-                          onPressed: () => setState(() => _fillinReviewed = !_fillinReviewed),
-                          icon: Icon(
-                            _fillinReviewed ? Icons.check_circle : Icons.check_circle,
-                            color: _fillinReviewed ? const Color(0xFF0D9488) : Colors.blueGrey,
-                            size: 18,
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: const Color(0xFFCBD5E1)),
                           ),
-                          label: Text(
-                            _fillinReviewed ? "Reviewed" : "Review",
-                            style: TextStyle(
-                              color: _fillinReviewed ? const Color(0xFF0D9488) : Colors.blueGrey,
-                              fontWeight: FontWeight.bold,
-                            ),
+                          child: const Text(
+                            "Skipped",
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xFF64748B)),
                           ),
                         ),
                       ],
                     ),
-                    trailing: Icon(
-                      _fillinExpanded ? Icons.keyboard_arrow_down : Icons.chevron_right,
-                      color: Colors.blueGrey,
+                  )
+                else
+                  Theme(
+                    data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                    child: ExpansionTile(
+                      key: ValueKey('fillin_review_$_fillinExpanded'),
+                      initiallyExpanded: _fillinExpanded,
+                      onExpansionChanged: (v) => setState(() => _fillinExpanded = v),
+                      tilePadding: const EdgeInsets.symmetric(horizontal: 4),
+                      title: Row(
+                        children: [
+                          const Expanded(
+                            child: Text(
+                              "Fill-in Answers (Review)",
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          TextButton.icon(
+                            onPressed: () => setState(() => _fillinReviewed = !_fillinReviewed),
+                            icon: Icon(
+                              _fillinReviewed ? Icons.check_circle : Icons.check_circle,
+                              color: _fillinReviewed ? const Color(0xFF0D9488) : Colors.blueGrey,
+                              size: 18,
+                            ),
+                            label: Text(
+                              _fillinReviewed ? "Reviewed" : "Review",
+                              style: TextStyle(
+                                color: _fillinReviewed ? const Color(0xFF0D9488) : Colors.blueGrey,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      trailing: Icon(
+                        _fillinExpanded ? Icons.keyboard_arrow_down : Icons.chevron_right,
+                        color: Colors.blueGrey,
+                      ),
+                      children: [
+                        _buildDropdownField(
+                          label: "Location Primary",
+                          options: const [
+                            "toe",
+                            "sole",
+                            "side",
+                            "heel",
+                            "dorsal_aspect",
+                            "medial_malleolus",
+                            "lateral_malleolus",
+                          ],
+                          value: _reviewed['location_primary']?.toString(),
+                          bindKey: "location_primary",
+                        ),
+                        _buildTextField(
+                          label: "Location Detail",
+                          placeholder: "Enter detail",
+                          bindKey: "location_detail",
+                        ),
+                        _buildDropdownField(
+                          label: "Wound Type",
+                          options: const [
+                            "ulcer",
+                            "surgical",
+                            "traumatic",
+                            "pressure",
+                            "burn",
+                            "other",
+                          ],
+                          value: _reviewed['wound_type']?.toString(),
+                          bindKey: "wound_type",
+                        ),
+                        _buildDropdownField(
+                          label: "Shape",
+                          options: const ["round", "oval", "irregular", "linear", "punched_out"],
+                          value: _reviewed['shape']?.toString(),
+                          bindKey: "shape",
+                        ),
+                        _buildTextField(
+                          label: "Width (cm)",
+                          placeholder: "e.g. 2.5",
+                          keyboardType: TextInputType.number,
+                          bindKey: "size_width_cm",
+                        ),
+                        _buildTextField(
+                          label: "Length (cm)",
+                          placeholder: "e.g. 3.0",
+                          keyboardType: TextInputType.number,
+                          bindKey: "size_length_cm",
+                        ),
+                        _buildDropdownField(
+                          label: "Depth Category",
+                          options: const [
+                            "superficial",
+                            "partial_thickness",
+                            "full_thickness",
+                            "deep",
+                            "very_deep_exposed_bone_tendon",
+                          ],
+                          value: _reviewed['depth_category']?.toString(),
+                          bindKey: "depth_category",
+                        ),
+                        _buildTextField(
+                          label: "Bed Slough (%)",
+                          placeholder: "0-100",
+                          keyboardType: TextInputType.number,
+                          bindKey: "bed_slough_pct",
+                        ),
+                        _buildTextField(
+                          label: "Bed Necrotic (%)",
+                          placeholder: "0-100",
+                          keyboardType: TextInputType.number,
+                          bindKey: "bed_necrotic_pct",
+                        ),
+                        _buildDropdownField(
+                          label: "Edge Description",
+                          options: const ["smooth", "thickened", "irregular", "rolled_epibole", "undermined", "calloused"],
+                          value: _reviewed['edge_description']?.toString(),
+                          bindKey: "edge_description",
+                        ),
+                        _buildDropdownField(
+                          label: "Periwound Status",
+                          options: const [
+                            "normal",
+                            "erythematous",
+                            "edematous",
+                            "indurated",
+                            "macerated",
+                            "fluctuant",
+                            "hyperpigmented",
+                          ],
+                          value: _reviewed['periwound_status']?.toString(),
+                          bindKey: "periwound_status",
+                        ),
+                        _buildDropdownField(
+                          label: "Discharge Volume",
+                          options: const ["none", "minimal", "moderate", "heavy"],
+                          value: _reviewed['discharge_volume']?.toString(),
+                          bindKey: "discharge_volume",
+                        ),
+                        _buildDropdownField(
+                          label: "Discharge Type",
+                          options: const [
+                            "serous (clear)",
+                            "sanguineous (bloody)",
+                            "serosanguineous (pink)",
+                            "purulent (yellow/pus)",
+                            "seropurulent (cloudy yellow)",
+                          ],
+                          value: _reviewed['discharge_type']?.toString(),
+                          bindKey: "discharge_type",
+                        ),
+                        _buildDropdownField(
+                          label: "Odor Presence",
+                          options: const ["none", "faint", "moderate", "foul", "putrid"],
+                          value: _reviewed['odor_presence']?.toString(),
+                          bindKey: "odor_presence",
+                        ),
+                        _buildPainScoreSlider(),
+                        _buildDropdownField(
+                          label: "Has Infection",
+                          options: const ["true", "false"],
+                          value: _reviewed['has_infection']?.toString(),
+                          bindKey: "has_infection",
+                        ),
+                        _buildDropdownField(
+                          label: "Skin Condition",
+                          options: const ["healthy", "dry", "cracked", "macerated", "fragile", "scaling"],
+                          value: _reviewed['skin_condition']?.toString(),
+                          bindKey: "skin_condition",
+                        ),
+                      ],
                     ),
-                    children: [
-                      _buildDropdownField(
-                        label: "Location Primary",
-                        options: const [
-                          "toe",
-                          "sole",
-                          "side",
-                          "heel",
-                          "dorsal_aspect",
-                          "medial_malleolus",
-                          "lateral_malleolus",
-                        ],
-                        value: _reviewed['location_primary']?.toString(),
-                        bindKey: "location_primary",
-                      ),
-                      _buildTextField(
-                        label: "Location Detail",
-                        placeholder: "Enter detail",
-                        bindKey: "location_detail",
-                      ),
-                      _buildDropdownField(
-                        label: "Wound Type",
-                        options: const [
-                          "ulcer",
-                          "surgical",
-                          "traumatic",
-                          "pressure",
-                          "burn",
-                          "other",
-                        ],
-                        value: _reviewed['wound_type']?.toString(),
-                        bindKey: "wound_type",
-                      ),
-                      _buildDropdownField(
-                        label: "Shape",
-                        options: const ["round", "oval", "irregular", "linear", "punched_out"],
-                        value: _reviewed['shape']?.toString(),
-                        bindKey: "shape",
-                      ),
-                      _buildTextField(
-                        label: "Width (cm)",
-                        placeholder: "e.g. 2.5",
-                        keyboardType: TextInputType.number,
-                        bindKey: "size_width_cm",
-                      ),
-                      _buildTextField(
-                        label: "Length (cm)",
-                        placeholder: "e.g. 3.0",
-                        keyboardType: TextInputType.number,
-                        bindKey: "size_length_cm",
-                      ),
-                      _buildDropdownField(
-                        label: "Depth Category",
-                        options: const [
-                          "superficial",
-                          "partial_thickness",
-                          "full_thickness",
-                          "deep",
-                          "very_deep_exposed_bone_tendon",
-                        ],
-                        value: _reviewed['depth_category']?.toString(),
-                        bindKey: "depth_category",
-                      ),
-                      _buildTextField(
-                        label: "Bed Slough (%)",
-                        placeholder: "0-100",
-                        keyboardType: TextInputType.number,
-                        bindKey: "bed_slough_pct",
-                      ),
-                      _buildTextField(
-                        label: "Bed Necrotic (%)",
-                        placeholder: "0-100",
-                        keyboardType: TextInputType.number,
-                        bindKey: "bed_necrotic_pct",
-                      ),
-                      _buildDropdownField(
-                        label: "Edge Description",
-                        options: const ["smooth", "thickened", "irregular", "rolled_epibole", "undermined", "calloused"],
-                        value: _reviewed['edge_description']?.toString(),
-                        bindKey: "edge_description",
-                      ),
-                      _buildDropdownField(
-                        label: "Periwound Status",
-                        options: const [
-                          "normal",
-                          "erythematous",
-                          "edematous",
-                          "indurated",
-                          "macerated",
-                          "fluctuant",
-                          "hyperpigmented",
-                        ],
-                        value: _reviewed['periwound_status']?.toString(),
-                        bindKey: "periwound_status",
-                      ),
-                      _buildDropdownField(
-                        label: "Discharge Volume",
-                        options: const ["none", "minimal", "moderate", "heavy"],
-                        value: _reviewed['discharge_volume']?.toString(),
-                        bindKey: "discharge_volume",
-                      ),
-                      _buildDropdownField(
-                        label: "Discharge Type",
-                        options: const [
-                          "serous (clear)",
-                          "sanguineous (bloody)",
-                          "serosanguineous (pink)",
-                          "purulent (yellow/pus)",
-                          "seropurulent (cloudy yellow)",
-                        ],
-                        value: _reviewed['discharge_type']?.toString(),
-                        bindKey: "discharge_type",
-                      ),
-                      _buildDropdownField(
-                        label: "Odor Presence",
-                        options: const ["none", "faint", "moderate", "foul", "putrid"],
-                        value: _reviewed['odor_presence']?.toString(),
-                        bindKey: "odor_presence",
-                      ),
-                      _buildPainScoreSlider(),
-                      _buildDropdownField(
-                        label: "Has Infection",
-                        options: const ["true", "false"],
-                        value: _reviewed['has_infection']?.toString(),
-                        bindKey: "has_infection",
-                      ),
-                      _buildDropdownField(
-                        label: "Skin Condition",
-                        options: const ["healthy", "dry", "cracked", "macerated", "fragile", "scaling"],
-                        value: _reviewed['skin_condition']?.toString(),
-                        bindKey: "skin_condition",
-                      ),
-                    ],
                   ),
-                ),
                 _buildSinbadCard(
                   icon: LucideIcons.mapPin,
                   title: "Site",
@@ -339,7 +385,11 @@ extension _AssessmentPage on _MainNavigationScreenState {
             ),
           ),
         ),
-        _buildFixedBottomButton("Submit Assessment", LucideIcons.circleCheck, _submitToAnalyzeWound),
+        _buildFixedBottomButton(
+          reviewSkipped ? "Send SINBAD Assessment" : "Submit Assessment",
+          LucideIcons.circleCheck,
+          _submitToAnalyzeWound,
+        ),
       ],
     );
   }

@@ -9,6 +9,7 @@ from google.cloud.firestore_v1 import FieldFilter
 from schemas import (
     CreateCaseRequest,
     UpdateCaseRequest,
+    NoWoundAssessmentRequest,
     Status,
     Urgency,
     VitalSigns,
@@ -953,6 +954,111 @@ async def send_to_doctor(payload: WoundCaseRecordUpdate):
 
     except Exception as e:
         print(f"Error sending to doctor: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/no-wound-assessment")
+async def create_no_wound_assessment(payload: NoWoundAssessmentRequest):
+    try:
+        payload_dict = _model_to_dict(payload)
+        print("no-wound-assessment received payload:", json.dumps(payload_dict, ensure_ascii=False))
+
+        case_id = payload.case_id
+        case_ref = db.collection("cases").document(case_id)
+        case_snapshot = case_ref.get()
+        if not case_snapshot.exists:
+            raise HTTPException(status_code=404, detail="Case not found")
+
+        case_data = case_snapshot.to_dict() or {}
+        if case_data.get("patient_id") and case_data.get("patient_id") != payload.patient_id:
+            raise HTTPException(status_code=400, detail="patient_id does not match case")
+
+        record_ref = case_ref.collection("records").document(payload.record_id)
+        record_snapshot = record_ref.get()
+        if not record_snapshot.exists:
+            raise HTTPException(status_code=404, detail="Record not found")
+
+        existing_record_data = record_snapshot.to_dict() or {}
+        submitted_at_raw = payload.meta.submitted_at if payload.meta else None
+        operation_time = _normalize_datetime(submitted_at_raw, fallback_to_now=True)
+
+        existing_timestamps = existing_record_data.get("timestamps") or {}
+        record_created_at = existing_record_data.get("record_created_at")
+        created_at = _normalize_datetime(
+            existing_timestamps.get("created_at") or record_created_at or operation_time,
+            fallback_to_now=True,
+        )
+        updated_timestamps = dict(existing_timestamps) if isinstance(existing_timestamps, dict) else {}
+        updated_timestamps["created_at"] = created_at
+        updated_timestamps["updated_at"] = operation_time
+        updated_timestamps.setdefault("analyze_at", None)
+        updated_timestamps.setdefault("doctor_review_at", None)
+        updated_timestamps.setdefault("plan_issued_at", None)
+        updated_timestamps.setdefault("treatment_active_at", None)
+        updated_timestamps.setdefault("appointment_at", None)
+        updated_timestamps["completed_at"] = operation_time
+
+        record_data = {
+            "record_id": payload.record_id,
+            "case_id": case_id,
+            "patient_id": payload.patient_id,
+            "record_created_by": existing_record_data.get("record_created_by") or payload.created_by_nurse,
+            "record_created_at": created_at,
+            "record_updated_at": operation_time,
+            "created_by_nurse": payload.created_by_nurse or existing_record_data.get("created_by_nurse") or case_data.get("created_by_nurse"),
+            "assigned_doctor": payload.assigned_doctor or existing_record_data.get("assigned_doctor") or case_data.get("assigned_doctor"),
+            "status": payload.status,
+            "urgency": payload.urgency or existing_record_data.get("urgency") or case_data.get("urgency"),
+            "flow_type": payload.flow_type,
+            "wound_present": payload.wound_present,
+            "nurse_reviewed_flag": payload.nurse_reviewed_flag,
+            "vital_signs": payload_dict.get("vital_signs"),
+            "wound_detail": None,
+            "ischemia": payload_dict.get("ischemia"),
+            "infection": payload_dict.get("infection"),
+            "neuropathy": payload_dict.get("neuropathy"),
+            "sinbad": payload_dict.get("sinbad"),
+            "lab_results": payload_dict.get("lab_results"),
+            "vascular": payload_dict.get("vascular"),
+            "gangrene_extent": existing_record_data.get("gangrene_extent"),
+            "timestamps": updated_timestamps,
+            "image": {"image_folder_url": None},
+            "analysis": None,
+            "treatment_plan": None,
+            "meta": payload_dict.get("meta"),
+            "task_list": firestore.DELETE_FIELD,
+        }
+
+        batch = db.batch()
+        case_update = {
+            "status": payload.status,
+            "urgency": record_data.get("urgency"),
+            "case_updated_at": operation_time,
+            "current_record_id": payload.record_id,
+            "current_analysis_id": None,
+            "current_plan_id": None,
+            "flow_type": payload.flow_type,
+            "wound_present": payload.wound_present,
+            "nurse_reviewed_flag": payload.nurse_reviewed_flag,
+        }
+        case_update.update(_current_record_snapshot(record_data))
+        case_update["current_task_list"] = firestore.DELETE_FIELD
+
+        batch.set(case_ref, case_update, merge=True)
+        batch.set(record_ref, record_data, merge=True)
+        batch.commit()
+
+        return {
+            "status": "success",
+            "case_id": case_id,
+            "record_id": payload.record_id,
+            "next_status": Status.COMPLETED.value,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error creating no-wound assessment: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

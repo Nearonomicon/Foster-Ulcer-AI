@@ -348,6 +348,7 @@ metadata/counters_case_{YYMMDD}
 | `POST` | `/cases_list` | List cases with optional filters |
 | `POST` | `/case_detail` | Load case, records, and patient profile |
 | `POST` | `/send-to-doctor` | Save nurse-reviewed record and create analysis/plan versions |
+| `POST` | `/no-wound-assessment` | Save a no-wound assessment and complete the case immediately |
 | `POST` | `/doctor-review` | Save doctor-reviewed analysis and issue plan |
 | `POST` | `/notification-devices/register` | Register FCM token for doctor/nurse app role broadcast |
 | `POST` | `/notification-devices/unregister` | Deactivate an FCM token |
@@ -742,6 +743,119 @@ Tasks should be sent under `treatment_plan.plan_tasks`. Deprecated `task_list` i
 ```
 
 * **Error Response:**
+  * **Code:** 500
+  **Content:** `{ "detail": "..." }`
+
+**POST /no-wound-assessment**
+
+----
+
+Saves a dedicated no-wound workflow record without image analysis, wound-detail review, analysis version creation, or plan version creation. The target case and record move directly to `COMPLETED`, `timestamps.completed_at` is set, and the current analysis/plan pointers are cleared.
+
+This endpoint is separate from image-analysis flow. Use it only when there is no wound photo and no wound-detail review.
+
+* **URL Params**
+  None
+
+* **Data Params**
+
+```json
+{
+  "case_id": "CASE-001",
+  "patient_id": "PAT-001",
+  "record_id": "REC-001",
+  "status": "COMPLETED",
+  "flow_type": "NO_WOUND_PRESENT",
+  "wound_present": false,
+  "nurse_reviewed_flag": false,
+  "vital_signs": {
+    "temperature": 36.8,
+    "blood_pressure": "120/80",
+    "blood_pressure_systolic": 120,
+    "blood_pressure_diastolic": 80,
+    "blood_glucose": 110,
+    "heart_rate": 72,
+    "respiratory_rate": 16
+  },
+  "wound_detail": null,
+  "sinbad": {
+    "site": "Forefoot",
+    "ischemia": "No",
+    "neuropathy": "Yes",
+    "infection": "No",
+    "area": "< 1 cm²",
+    "depth": "Skin only",
+    "total": 1
+  },
+  "ischemia": {
+    "points": [],
+    "pulse": null,
+    "checklist": []
+  },
+  "infection": {
+    "checklist": [],
+    "erythema_extent": null,
+    "probe_to_bone_test": null,
+    "has_deep_abscess_or_fasciitis": null
+  },
+  "neuropathy": {
+    "points": [1, 3]
+  },
+  "lab_results": {
+    "wbc_count": null,
+    "crp": null,
+    "esr": null,
+    "procalcitonin": null
+  },
+  "vascular": {
+    "abi_value": null,
+    "ankle_pressure_mmHg": null,
+    "toe_pressure_mmHg": null,
+    "tcpo2_mmHg": null
+  },
+  "meta": {
+    "submitted_at": "2026-05-07 14:30:00",
+    "submitted_by_role": "nurse"
+  }
+}
+```
+
+* **Headers**
+  Content-Type: application/json
+
+* **Validation Rules**
+  - `status` must be `COMPLETED`
+  - `flow_type` must be `NO_WOUND_PRESENT`
+  - `wound_present` must be `false`
+  - `wound_detail` must be `null`
+  - required `sinbad` fields: `site`, `ischemia`, `neuropathy`, `infection`, `area`, `depth`
+
+* **Success Response:**
+* **Code:** 200
+  **Content:**
+
+```json
+{
+  "status": "success",
+  "case_id": "CASE-001",
+  "record_id": "REC-001",
+  "next_status": "COMPLETED"
+}
+```
+
+* **Error Response:**
+  * **Code:** 400
+  **Content:** `{ "detail": "patient_id does not match case" }`
+  OR
+  * **Code:** 404
+  **Content:** `{ "detail": "Case not found" }`
+  OR
+  * **Code:** 404
+  **Content:** `{ "detail": "Record not found" }`
+  OR
+  * **Code:** 422
+  **Content:** `{ "detail": [...] }`
+  OR
   * **Code:** 500
   **Content:** `{ "detail": "..." }`
 
