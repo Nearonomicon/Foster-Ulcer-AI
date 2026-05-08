@@ -13,6 +13,27 @@ const List<Offset> _neuropathyPointAnchors = [
 ];
 
 extension _AssessmentPage on _MainNavigationScreenState {
+  Widget _buildCollapseSectionButton(VoidCallback onPressed) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: Align(
+        alignment: Alignment.centerRight,
+        child: TextButton.icon(
+          onPressed: onPressed,
+          icon: const Icon(Icons.keyboard_arrow_up, size: 18),
+          label: const Text(
+            "Collapse",
+            style: TextStyle(fontWeight: FontWeight.w700),
+          ),
+          style: TextButton.styleFrom(
+            foregroundColor: const Color(0xFF64748B),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          ),
+        ),
+      ),
+    );
+  }
+
   int _calcSinbadScore() {
     var score = 0;
     if (_sinbadSite == "Midfoot/Hindfoot") score++;
@@ -78,7 +99,9 @@ extension _AssessmentPage on _MainNavigationScreenState {
                 Theme(
                   data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
                   child: ExpansionTile(
-                    initiallyExpanded: false,
+                    key: ValueKey('voice_assessment_$_voiceAssessmentExpanded'),
+                    initiallyExpanded: _voiceAssessmentExpanded,
+                    onExpansionChanged: (v) => setState(() => _voiceAssessmentExpanded = v),
                     tilePadding: const EdgeInsets.symmetric(horizontal: 4),
                     childrenPadding: const EdgeInsets.only(bottom: 16),
                     collapsedBackgroundColor: Colors.transparent,
@@ -90,6 +113,10 @@ extension _AssessmentPage on _MainNavigationScreenState {
                     trailing: const Icon(Icons.chevron_right, color: Colors.blueGrey),
                     children: [
                       _buildAssessmentVoiceCard(),
+                      if (_voiceAssessmentExpanded)
+                        _buildCollapseSectionButton(() {
+                          setState(() => _voiceAssessmentExpanded = false);
+                        }),
                     ],
                   ),
                 ),
@@ -306,6 +333,10 @@ extension _AssessmentPage on _MainNavigationScreenState {
                           value: _reviewed['skin_condition']?.toString(),
                           bindKey: "skin_condition",
                         ),
+                        if (_fillinExpanded)
+                          _buildCollapseSectionButton(() {
+                            setState(() => _fillinExpanded = false);
+                          }),
                       ],
                     ),
                   ),
@@ -617,6 +648,10 @@ extension _AssessmentPage on _MainNavigationScreenState {
                       child: Text(helpText, style: const TextStyle(fontSize: 12, color: Colors.blueGrey)),
                     ),
                   if (helpWidget != null) helpWidget,
+                  if (isExpanded)
+                    _buildCollapseSectionButton(() {
+                      setState(() => _sinbadHelpExpanded[group] = false);
+                    }),
                 ],
               ),
               crossFadeState: isExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,

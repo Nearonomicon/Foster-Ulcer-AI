@@ -65,3 +65,4 @@
   - `case_id`
   - `record_id`
   - `next_status`
+- Changed `POST /create_appointment` so it updates only the treatment plan status to `APPOINTMENT` and preserves existing individual task statuses.

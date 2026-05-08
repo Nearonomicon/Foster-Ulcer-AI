@@ -331,7 +331,7 @@ metadata/counters_case_{YYMMDD}
 - `records/{record_id}.treatment_plan.plan_tasks[*].status` is the record-level task snapshot.
 - `current_task_list` and `task_list` are deprecated snapshots and are deleted on new writes.
 - `POST /doctor-review` forces plan and task status to `SENT`.
-- `POST /create_appointment` updates case, record, current treatment plan tasks, record treatment plan tasks, and plan-version task documents to `APPOINTMENT`.
+- `POST /create_appointment` updates case, record, and treatment plan status to `APPOINTMENT` but preserves individual task statuses.
 - `POST /request_close` only updates case and record to `REQUEST_CLOSE`.
 - `POST /complete_case` updates case, record, current treatment plan tasks, record treatment plan tasks, and plan-version task documents to `COMPLETED`.
 
@@ -1046,7 +1046,7 @@ Optional:
 
 ----
 
-Updates case, record, current treatment plan, record treatment plan, and plan-version task documents to `APPOINTMENT`.
+Updates case, record, and treatment plan status to `APPOINTMENT`. Individual task statuses under `plan_tasks` and plan-version task documents are preserved.
 
 * **URL Params**
   None

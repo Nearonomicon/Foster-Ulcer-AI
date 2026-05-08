@@ -233,14 +233,16 @@ def _update_case_record_plan_and_tasks_status(
     new_status: Status,
     timestamp_field: str,
     timestamp_value: datetime,
+    update_task_statuses: bool = True,
 ):
     current_plan_id = case_data.get("current_plan_id")
     current_treatment_plan = case_data.get("current_treatment_plan") or record_data.get("treatment_plan") or {}
     normalized_treatment_plan = dict(current_treatment_plan) if isinstance(current_treatment_plan, dict) else {}
-    normalized_tasks = _normalize_plan_tasks_status(
-        _get_plan_tasks(normalized_treatment_plan, record_data.get("task_list") or []),
-        new_status.value,
-    )
+    base_tasks = _get_plan_tasks(normalized_treatment_plan, record_data.get("task_list") or [])
+    if update_task_statuses:
+        normalized_tasks = _normalize_plan_tasks_status(base_tasks, new_status.value)
+    else:
+        normalized_tasks = _normalize_plan_tasks(base_tasks)
     if normalized_treatment_plan:
         normalized_treatment_plan["status"] = new_status.value
         normalized_treatment_plan["plan_tasks"] = normalized_tasks
@@ -295,15 +297,16 @@ def _update_case_record_plan_and_tasks_status(
             "status": new_status.value,
             "updated_at": timestamp_value,
         }, merge=True)
-        for task in normalized_tasks:
-            task_id = task.get("task_id") or _generate_task_id()
-            task_ref = plan_ref.collection("tasks").document(task_id)
-            batch.set(task_ref, {
-                "task_id": task_id,
-                "status": new_status.value,
-                "updated_at": timestamp_value,
-                "order_index": task.get("order_index"),
-            }, merge=True)
+        if update_task_statuses:
+            for task in normalized_tasks:
+                task_id = task.get("task_id") or _generate_task_id()
+                task_ref = plan_ref.collection("tasks").document(task_id)
+                batch.set(task_ref, {
+                    "task_id": task_id,
+                    "status": new_status.value,
+                    "updated_at": timestamp_value,
+                    "order_index": task.get("order_index"),
+                }, merge=True)
 
     batch.commit()
     return current_plan_id
@@ -1342,6 +1345,7 @@ async def create_appointment(payload: dict):
             new_status=Status.APPOINTMENT,
             timestamp_field="appointment_at",
             timestamp_value=appointment_dt,
+            update_task_statuses=False,
         )
 
         return {

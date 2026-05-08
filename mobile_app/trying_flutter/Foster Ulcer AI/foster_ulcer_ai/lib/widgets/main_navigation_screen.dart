@@ -220,6 +220,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   final Set<String> _infectionChecklist = {};
   bool _fillinReviewed = false;
   bool _fillinExpanded = false;
+  bool _voiceAssessmentExpanded = false;
   final ScrollController _assessmentScrollCtrl = ScrollController();
   final Set<String> _assessmentInvalidKeys = {};
   final Map<String, GlobalKey> _assessmentFieldKeys = {};
@@ -301,6 +302,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     _infectionChecklist.clear();
     _fillinReviewed = false;
     _fillinExpanded = false;
+    _voiceAssessmentExpanded = false;
     _sinbadHelpExpanded.clear();
     _showInflammatoryLabs = false;
     _showDeepInfectionIndicators = false;
@@ -364,7 +366,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   };
   final Set<String> _tasksTreatmentStatuses = {..._defaultTasksTreatmentStatuses};
   String _tasksTaskStatus = 'ALL';
-  String _tasksSortBy = 'DUE_ASC';
+  String _tasksSortBy = 'DUE_CLOSEST';
   String _casesSearchQuery = '';
   static const Set<String> _defaultCasesStatusFilters = {
     'CREATION',
@@ -2521,13 +2523,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       if (resp.statusCode < 200 || resp.statusCode >= 300) {
         throw Exception("mark all read failed (${resp.statusCode}): ${resp.body}");
       }
-      if (!mounted) return;
-      setState(() {
-        for (final item in _notificationsItems) {
-          item['status'] = 'READ';
-          item['read_at'] ??= DateTime.now().toIso8601String();
-        }
-      });
+      await _fetchNurseNotifications();
     } catch (e) {
       debugPrint("mark all notifications read error: $e");
       if (mounted) {

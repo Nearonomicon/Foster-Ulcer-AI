@@ -58,6 +58,25 @@ extension _TasksPage on _MainNavigationScreenState {
       }
     }
 
+    int compareClosestDue(DateTime? aDue, DateTime? bDue, String aName, String bName) {
+      final now = DateTime.now();
+      if (aDue == null && bDue == null) return aName.compareTo(bName);
+      if (aDue == null) return 1;
+      if (bDue == null) return -1;
+
+      final aIsUpcoming = !aDue.isBefore(now);
+      final bIsUpcoming = !bDue.isBefore(now);
+
+      if (aIsUpcoming && bIsUpcoming) {
+        return aDue.compareTo(bDue);
+      }
+      if (aIsUpcoming != bIsUpcoming) {
+        return aIsUpcoming ? -1 : 1;
+      }
+
+      return bDue.compareTo(aDue);
+    }
+
     List<Map<String, dynamic>> planCases = [];
     if (_tasksItems.isNotEmpty) {
       planCases = _tasksItems.map((t) {
@@ -120,8 +139,20 @@ extension _TasksPage on _MainNavigationScreenState {
           .map((t) => parseIso(t['task_due']?.toString()))
           .whereType<DateTime>()
           .fold<DateTime?>(null, (prev, dt) => prev == null || dt.isAfter(prev) ? dt : prev);
+      final aClosestDue = aTasks
+          .map((t) => parseIso(t['task_due']?.toString()))
+          .whereType<DateTime>()
+          .where((dt) => !dt.isBefore(today))
+          .fold<DateTime?>(null, (prev, dt) => prev == null || dt.isBefore(prev) ? dt : prev);
+      final bClosestDue = bTasks
+          .map((t) => parseIso(t['task_due']?.toString()))
+          .whereType<DateTime>()
+          .where((dt) => !dt.isBefore(today))
+          .fold<DateTime?>(null, (prev, dt) => prev == null || dt.isBefore(prev) ? dt : prev);
 
       switch (_tasksSortBy) {
+        case 'DUE_CLOSEST':
+          return compareClosestDue(aClosestDue ?? aEarliestDue, bClosestDue ?? bEarliestDue, aName, bName);
         case 'DUE_DESC':
           if (aLatestDue == null && bLatestDue == null) return aName.compareTo(bName);
           if (aLatestDue == null) return 1;
@@ -171,6 +202,8 @@ extension _TasksPage on _MainNavigationScreenState {
       final ad = parseIso(a['task_due']?.toString());
       final bd = parseIso(b['task_due']?.toString());
       switch (_tasksSortBy) {
+        case 'DUE_CLOSEST':
+          return compareClosestDue(ad, bd, aName, bName);
         case 'DUE_DESC':
           if (ad == null && bd == null) return aName.compareTo(bName);
           if (ad == null) return 1;
@@ -323,7 +356,7 @@ extension _TasksPage on _MainNavigationScreenState {
               _buildFilterDropdown(
                 label: "Sort By",
                 value: _tasksSortBy,
-                items: const ["DUE_ASC", "DUE_DESC", "UPDATE_ASC", "UPDATE_DESC"],
+                items: const ["DUE_CLOSEST", "DUE_ASC", "DUE_DESC", "UPDATE_ASC", "UPDATE_DESC"],
                 onChanged: (value) => setState(() => _tasksSortBy = value),
               ),
             ],
@@ -539,6 +572,8 @@ extension _TasksPage on _MainNavigationScreenState {
   }) {
     String displayLabel(String raw) {
       switch (raw) {
+        case 'DUE_CLOSEST':
+          return 'Schedule: Closest';
         case 'DUE_ASC':
           return 'Schedule: Earliest';
         case 'DUE_DESC':

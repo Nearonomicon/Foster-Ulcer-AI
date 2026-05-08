@@ -85,7 +85,11 @@ extension _TaskDetailPage on _MainNavigationScreenState {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         TextButton.icon(
-                          onPressed: () {
+                          onPressed: () async {
+                            if (_taskDetailReturnStep == 'case_detail' && caseId.isNotEmpty && caseId != '-') {
+                              final ok = await _fetchCaseDetail(caseId);
+                              if (!ok || !mounted) return;
+                            }
                             setState(() {
                               _currentStep = _taskDetailReturnStep;
                               if (_taskDetailReturnStep == 'dashboard') {
