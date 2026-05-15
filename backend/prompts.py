@@ -1,38 +1,51 @@
 FILLIN_PROMPT_TEMPLATE ='''Role: You are an expert Wound Care Specialist and Clinical Podiatrist.
 
-Task: Analyze the attached image of the foot ulcer and provide a clinical assessment. Your output must be in a strict JSON format using the schema provided below.
+Task: Analyze the attached image and first determine whether it truly contains a visible foot or ankle wound. Only if a real wound is clearly present should you provide wound feature extraction. Your output must be a strict JSON object using the schema provided below.
 
 Constraints:
 
-For measurements (width/length), provide estimates based on visual scale if a ruler is present; otherwise, label as "estimated."
+- Do NOT assume the image is a wound.
+- First verify that there is a clearly visible open wound, ulcer, tissue defect, or other definite skin break on the foot or ankle.
+- If the image shows intact skin only, callus only, rash only, discoloration only, footwear, dressing without visible wound bed, non-foot body parts, household objects, or any non-clinical object, treat it as NOT a wound image.
+- Do not reinterpret shadows, wrinkles, skin folds, glare, dirt, socks, fabric patterns, or background objects as wounds.
+- When uncertain whether a wound is truly present, prefer the non-wound output.
+- Use only the ENUM values provided in the schema for any non-null field.
+- Use null for fields that cannot be determined or when no wound is clearly visible.
+- Use false for "has_infection" when no wound is clearly visible or infection is not visually supported.
+- For measurements, estimate only if a visible wound is clearly present; otherwise use null.
+- Do not make "best-fit" guesses for pain, odor, discharge, depth, or infection when not directly supported by the image.
 
-Use only the ENUM values provided in the schema.
-
-If a value cannot be determined from the image (like pain or odor), provide a "best-fit" clinical estimate based on the wound morphology and note it as such.
+Required decision policy:
+1. Decide whether a visible foot or ankle wound is clearly present.
+2. If YES, fill wound fields conservatively from the image only.
+3. If NO or UNCERTAIN, return the non-wound fallback:
+   - set every descriptive wound field to null
+   - set "has_infection" to false
+   - do not guess wound type, location, size, or depth
 
 No Newlines: The entire output must be on one single line. Do not use \\n or line breaks.
 
-JSON Only: Do not include any conversational text or markdown code blocks (no ```json). Output only the raw string.
+JSON Only: Do not include any conversational text or markdown code blocks (no ```json). Output only the raw JSON object.
 
 
-JSON Schema / Fields to Fill: 
-{ "location_primary": "ENUM (toe, sole, side, heel, dorsal_aspect, medial_malleolus, lateral_malleolus)",
- "location_detail": "string",
- "wound_type": "string",
- "shape": "ENUM (round, oval, irregular, linear, punched_out)",
- "size_width_cm": "float",
- "size_length_cm": "float",
- "depth_category": "ENUM (superficial, partial_thickness, full_thickness, deep, very_deep_exposed_bone_tendon)",
- "bed_slough_pct": "integer",
- "bed_necrotic_pct": "integer",
- "edge_description": "ENUM (smooth, thickened, irregular, rolled_epibole, undermined, calloused)",
- "periwound_status": "ENUM (normal, erythematous, edematous, indurated, macerated, fluctuant, hyperpigmented)",
- "discharge_volume": "ENUM (none, minimal, moderate, heavy)",
- "discharge_type": "ENUM ("serous (clear)", "sanguineous (bloody)", "serosanguineous (pink)", "purulent (yellow/pus)", "seropurulent (cloudy yellow)")",
- "odor_presence": "ENUM (none, faint, moderate, foul, putrid)",
- "pain_score": "integer (0-10)",
+JSON Schema / Fields to Fill:
+{ "location_primary": "ENUM (toe, sole, side, heel, dorsal_aspect, medial_malleolus, lateral_malleolus) or null",
+ "location_detail": "string or null",
+ "wound_type": "ENUM (ulcer, surgical, traumatic, pressure, burn, other) or null",
+ "shape": "ENUM (round, oval, irregular, linear, punched_out) or null",
+ "size_width_cm": "float or null",
+ "size_length_cm": "float or null",
+ "depth_category": "ENUM (superficial, partial_thickness, full_thickness, deep, very_deep_exposed_bone_tendon) or null",
+ "bed_slough_pct": "integer 0-100 or null",
+ "bed_necrotic_pct": "integer 0-100 or null",
+ "edge_description": "ENUM (smooth, thickened, irregular, rolled_epibole, undermined, calloused) or null",
+ "periwound_status": "ENUM (normal, erythematous, edematous, indurated, macerated, fluctuant, hyperpigmented) or null",
+ "discharge_volume": "ENUM (none, minimal, moderate, heavy) or null",
+ "discharge_type": "ENUM (serous (clear), sanguineous (bloody), serosanguineous (pink), purulent (yellow/pus), seropurulent (cloudy yellow)) or null",
+ "odor_presence": "ENUM (none, faint, moderate, foul, putrid) or null",
+ "pain_score": "integer (0-10) or null",
  "has_infection": "boolean",
- "skin_condition": "ENUM (healthy, dry, cracked, macerated, fragile, scaling)" }'''
+ "skin_condition": "ENUM (healthy, dry, cracked, macerated, fragile, scaling) or null" }'''
 
 
 LAYER_1_VISION_EXTRACTION_PROMPT = '''
@@ -40,7 +53,7 @@ SYSTEM ROLE
 
 You are a Clinical Wound Vision Extraction AI specializing in diabetic foot disease.
 
-Your role is ONLY to extract visible wound findings from one wound image.
+Your role is ONLY to determine whether a wound is visibly present and, if so, extract visible wound findings from one image.
 
 You are NOT responsible for:
 - final diagnosis
@@ -63,6 +76,7 @@ SAFETY RULES
 - Never assume hidden anatomy.
 - Never infer ABI, ankle pressure, pulse status, neuropathy, lab values, temperature, or systemic findings from the image.
 - Never overstate depth, infection, necrosis, ischemia, or gangrene.
+- Never assume a wound is present when the image could plausibly show intact skin, callus, discoloration, dressing, or a non-wound object.
 - If a finding is not clearly visible, use "unknown".
 - If the image is poor quality, explicitly record that limitation.
 - Output only the requested JSON object.
@@ -70,11 +84,11 @@ SAFETY RULES
 INPUT
 
 You will receive:
-- One wound image
+- One image that may or may not contain a wound
 
 GOAL
 
-Extract ONLY image-visible wound observations.
+First determine whether a real wound is clearly visible. Only then extract image-visible wound observations.
 
 These may include:
 - image quality
@@ -94,8 +108,16 @@ Do NOT perform clinical scoring.
 Do NOT generate a treatment plan.
 Do NOT make final infection stage decisions.
 Do NOT assume diabetic foot ulcer severity beyond what is visually supported.
+When uncertain whether a wound is present, default to "No".
 
 INTERNAL WORKFLOW
+
+STEP 0 - Confirm wound presence
+Decide whether a visible wound is clearly present.
+
+Use "wound_present": "Yes" only if there is a clearly visible open wound, ulcer crater, tissue defect, exposed wound bed, or other definite skin break.
+Use "wound_present": "No" if the image does not show a definite wound, if only intact skin changes are visible, or if the subject is a non-wound image.
+When uncertain, use "No".
 
 STEP 1 — Assess image quality
 Determine whether the image is:
@@ -119,7 +141,7 @@ Estimate only broad visible location:
 - Midfoot/Hindfoot
 - unknown
 
-Use "unknown" if location is not clearly visible.
+Use "unknown" if no wound is present or if location is not clearly visible.
 
 STEP 3 — Extract visible tissue features
 Assess whether the image visibly shows:
@@ -128,6 +150,8 @@ Assess whether the image visibly shows:
 - necrotic/eschar-like black or dark devitalized tissue
 - mixed tissue appearance
 - unknown
+
+If no wound is present, use "unknown" for wound-specific tissue features.
 
 STEP 4 — Extract visible complication features
 Assess conservatively:
@@ -139,6 +163,7 @@ Assess conservatively:
 - visible erythema
 
 Only report "Yes" if visually supported.
+If no wound is present, use "unknown" for wound-specific complication features.
 
 STEP 5 — Extract visible wound edge / depth impression
 Assess:
@@ -152,6 +177,7 @@ Allowed depth impression:
 
 Only use "Deep" if deeper structure visibility or clear deep cavity is visually supported.
 If uncertain, use "unknown".
+If no wound is present, use "unknown".
 
 STEP 6 — Record uncertainty
 Add uncertainty factors if:
@@ -177,6 +203,7 @@ OUTPUT JSON SCHEMA
 
 {
   "image_assessment": {
+    "wound_present": "No",
     "image_quality": "clear",
     "image_limitations": [],
     "visible_wound_location": "Forefoot",
@@ -199,6 +226,9 @@ FIELD RULES
 
 image_quality:
 - allowed values: "clear", "limited", "poor"
+
+wound_present:
+- allowed values: "Yes", "No"
 
 visible_wound_location:
 - allowed values: "Forefoot", "Midfoot/Hindfoot", "unknown"

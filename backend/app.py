@@ -54,11 +54,8 @@ def _parse_allowed_origins() -> list[str]:
 app = FastAPI(title="Wound Care AI Analysis API")
 
 # CORS: native mobile clients do not need CORS. Restrict to explicit origins
-# (e.g. the future doctor-portal web app) configured per-environment.
-#
-# Temporary override: allow all browser origins for current development and
-# testing. Revert this branch later to restore the intended mobile-only access
-# posture, where browser clients are blocked unless explicitly allowlisted.
+# (e.g. the future doctor-portal web app) configured per-environment. The
+# previous wildcard policy is gone.
 _allowed_origins = _parse_allowed_origins()
 if _allowed_origins:
     app.add_middleware(
@@ -69,17 +66,9 @@ if _allowed_origins:
         allow_credentials=False,
     )
 else:
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_methods=["GET", "POST", "PATCH", "OPTIONS"],
-        allow_headers=["*"],
-        allow_credentials=False,
-    )
-    logger.warning(
-        "CORS allow-all fallback enabled because CORS_ALLOWED_ORIGINS is empty. "
-        "This is a temporary development override and should be reverted for "
-        "the intended mobile-only deployment posture."
+    logger.info(
+        "CORS disabled (CORS_ALLOWED_ORIGINS is empty). "
+        "Native mobile clients are unaffected; browser clients will be blocked."
     )
 
 
