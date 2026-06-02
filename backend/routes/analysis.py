@@ -408,18 +408,38 @@ Today is {date.today()}.
         """.strip()
 
         layer1_result = await call_gemini_json([layer1_input, gemini_image_part], "layer1_vision")
-        if isinstance(layer1_result, dict) and layer1_result.get("blocked"):
-            response_payload = {"status": "blocked", "reason": layer1_result.get("reason")}
-            logger.info(
-                "analyze_wound payload_sent %s payload=%s",
+        layer1_blocked = isinstance(layer1_result, dict) and layer1_result.get("blocked")
+        if layer1_blocked:
+            logger.warning(
+                "analyze_wound layer1_fallback %s reason=%s",
                 request_label,
-                json.dumps(response_payload, ensure_ascii=False),
+                layer1_result.get("reason"),
             )
-            return response_payload
+            layer1_result = {
+                "image_assessment": {
+                    "image_quality": "unknown",
+                    "image_limitations": ["vision_model_blocked"],
+                    "visible_wound_location": "unknown",
+                    "visible_tissue_type": "unknown",
+                    "visible_yellow_white_material": "unknown",
+                    "visible_black_dark_tissue": "unknown",
+                    "visible_exudate": "unknown",
+                    "visible_surrounding_skin": "unknown",
+                    "visible_swelling": "unknown",
+                    "visible_redness": "unknown",
+                    "visible_wound_edge": "unknown",
+                    "visible_cavity_impression": "unknown",
+                },
+                "uncertainty_factors": [
+                    "vision_model_blocked",
+                    "layer2_and_layer3_should_use_structured_data_only",
+                ],
+            }
 
         layer2_payload = {
             "structured_clinical_data": structured_data,
-            "layer1_image_assessment": layer1_result
+            "layer1_image_assessment": layer1_result,
+            "image_analysis_status": "blocked_fallback" if layer1_blocked else "success",
         }
 
         layer2_input = f"""
@@ -487,7 +507,8 @@ Today is {date.today()}.
         response_payload = {
             "status": "success",
             "payload": structured_data,
-            "analysis": layer3_result
+            "analysis": layer3_result,
+            "image_analysis_status": "blocked_fallback" if layer1_blocked else "success",
         }
         logger.info(
             "analyze_wound payload_sent %s payload=%s",
