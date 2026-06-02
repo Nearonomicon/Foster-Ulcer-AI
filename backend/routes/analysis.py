@@ -221,12 +221,18 @@ async def analyze_wound(
         record_id = case_ref.get("record_id")
         patient_id = case_ref.get("patient_id")
         request_label = f"case_id={case_id or '-'} record_id={record_id or '-'}"
+        response_payload = None
 
         logger.info(
             "analyze_wound start %s filename=%s content_type=%s",
             request_label,
             image.filename,
             image.content_type,
+        )
+        logger.info(
+            "analyze_wound payload_received %s payload=%s",
+            request_label,
+            json.dumps(structured_data, ensure_ascii=False),
         )
 
         if case_id and record_id:
@@ -374,7 +380,13 @@ Today is {date.today()}.
 
         layer1_result = await call_gemini_json([layer1_input, img], "layer1_vision")
         if isinstance(layer1_result, dict) and layer1_result.get("blocked"):
-            return {"status": "blocked", "reason": layer1_result.get("reason")}
+            response_payload = {"status": "blocked", "reason": layer1_result.get("reason")}
+            logger.info(
+                "analyze_wound payload_sent %s payload=%s",
+                request_label,
+                json.dumps(response_payload, ensure_ascii=False),
+            )
+            return response_payload
 
         layer2_payload = {
             "structured_clinical_data": structured_data,
@@ -392,7 +404,13 @@ Today is {date.today()}.
 
         layer2_result = await call_gemini_json([layer2_input], "layer2_fusion")
         if isinstance(layer2_result, dict) and layer2_result.get("blocked"):
-            return {"status": "blocked", "reason": layer2_result.get("reason")}
+            response_payload = {"status": "blocked", "reason": layer2_result.get("reason")}
+            logger.info(
+                "analyze_wound payload_sent %s payload=%s",
+                request_label,
+                json.dumps(response_payload, ensure_ascii=False),
+            )
+            return response_payload
 
         layer3_input = f"""
 Today is {date.today()}.
@@ -405,7 +423,13 @@ Today is {date.today()}.
 
         layer3_result = await call_gemini_json([layer3_input], "layer3_plan")
         if isinstance(layer3_result, dict) and layer3_result.get("blocked"):
-            return {"status": "blocked", "reason": layer3_result.get("reason")}
+            response_payload = {"status": "blocked", "reason": layer3_result.get("reason")}
+            logger.info(
+                "analyze_wound payload_sent %s payload=%s",
+                request_label,
+                json.dumps(response_payload, ensure_ascii=False),
+            )
+            return response_payload
 
         if case_id and record_id:
             try:
@@ -431,12 +455,19 @@ Today is {date.today()}.
                     e,
                 )
 
-        logger.info("analyze_wound success %s", request_label)
-
-        return {
+        response_payload = {
             "status": "success",
+            "payload": structured_data,
             "analysis": layer3_result
         }
+        logger.info(
+            "analyze_wound payload_sent %s payload=%s",
+            request_label,
+            json.dumps(response_payload, ensure_ascii=False),
+        )
+        logger.info("analyze_wound success %s", request_label)
+
+        return response_payload
 
     except json.JSONDecodeError as e:
         raise HTTPException(status_code=400, detail=f"Invalid payload_data JSON: {str(e)}")
