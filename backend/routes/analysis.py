@@ -1,5 +1,6 @@
 import io
 import json
+import logging
 from datetime import date, datetime
 from urllib.request import urlopen
 
@@ -24,6 +25,8 @@ from services.notifications import create_doctor_healing_notification
 
 
 router = APIRouter()
+logger = logging.getLogger("foster_ulcer_ai.analysis")
+_GEMINI_TIMEOUT_SECONDS = 45
 
 
 @router.post("/analyze-transcribe")
@@ -217,6 +220,14 @@ async def analyze_wound(
         case_id = case_ref.get("case_id")
         record_id = case_ref.get("record_id")
         patient_id = case_ref.get("patient_id")
+        request_label = f"case_id={case_id or '-'} record_id={record_id or '-'}"
+
+        logger.info(
+            "analyze_wound start %s filename=%s content_type=%s",
+            request_label,
+            image.filename,
+            image.content_type,
+        )
 
         if case_id and record_id:
             try:
@@ -256,9 +267,15 @@ async def analyze_wound(
                 }
                 db.collection("cases").document(case_id).set(case_update, merge=True)
             except Exception as e:
-                print(f"analyze-wound warning: failed to store nurse_reviewed data: {e}")
+                logger.warning(
+                    "analyze_wound failed to store nurse_reviewed %s error=%s",
+                    request_label,
+                    e,
+                )
 
         image_content = await image.read()
+        if not image_content:
+            raise HTTPException(status_code=400, detail="Image file is empty")
         img = PILImage.open(io.BytesIO(image_content))
         img = img.convert("RGB")
         img.thumbnail((1024, 1024), PILImage.LANCZOS)
@@ -269,24 +286,46 @@ async def analyze_wound(
             except json.JSONDecodeError as e:
                 raise ValueError(f"Model did not return valid JSON: {e}\nRaw output: {text}")
 
-        async def call_gemini_json(contents):
+        async def call_gemini_json(contents, stage_name: str):
             max_wait_seconds = 60
             delays = [10, 15, 30, 60]
             waited = 0
 
             for attempt in range(len(delays) + 1):
                 try:
-                    response = client.models.generate_content(
-                        model=genai_model,
-                        contents=contents,
-                        config=types.GenerateContentConfig(
-                            safety_settings=safety_config,
-                            temperature=0.2,
-                            response_mime_type="application/json"
-                        )
+                    logger.info(
+                        "analyze_wound %s stage=%s attempt=%d gemini_call_start",
+                        request_label,
+                        stage_name,
+                        attempt + 1,
+                    )
+                    response = await asyncio.wait_for(
+                        asyncio.to_thread(
+                            client.models.generate_content,
+                            model=genai_model,
+                            contents=contents,
+                            config=types.GenerateContentConfig(
+                                safety_settings=safety_config,
+                                temperature=0.2,
+                                response_mime_type="application/json"
+                            ),
+                        ),
+                        timeout=_GEMINI_TIMEOUT_SECONDS,
+                    )
+                    logger.info(
+                        "analyze_wound %s stage=%s attempt=%d gemini_call_done",
+                        request_label,
+                        stage_name,
+                        attempt + 1,
                     )
 
                     if not response.candidates:
+                        logger.warning(
+                            "analyze_wound %s stage=%s blocked reason=%s",
+                            request_label,
+                            stage_name,
+                            getattr(response.prompt_feedback, "block_reason", "unknown"),
+                        )
                         return {
                             "blocked": True,
                             "reason": str(getattr(response.prompt_feedback, "block_reason", "unknown"))
@@ -296,8 +335,26 @@ async def analyze_wound(
                         raise ValueError("Model returned empty response.")
 
                     return parse_model_json(response.text)
+                except TimeoutError:
+                    logger.error(
+                        "analyze_wound %s stage=%s timeout_after=%ds",
+                        request_label,
+                        stage_name,
+                        _GEMINI_TIMEOUT_SECONDS,
+                    )
+                    raise HTTPException(
+                        status_code=504,
+                        detail=f"Gemini timed out during {stage_name}",
+                    )
                 except Exception as e:
                     msg = str(e)
+                    logger.warning(
+                        "analyze_wound %s stage=%s attempt=%d error=%s",
+                        request_label,
+                        stage_name,
+                        attempt + 1,
+                        msg,
+                    )
                     if "RESOURCE_EXHAUSTED" not in msg and "429" not in msg:
                         raise
                     if attempt >= len(delays) or waited >= max_wait_seconds:
@@ -315,7 +372,7 @@ Today is {date.today()}.
 {LAYER_1_VISION_EXTRACTION_PROMPT}
         """.strip()
 
-        layer1_result = await call_gemini_json([layer1_input, img])
+        layer1_result = await call_gemini_json([layer1_input, img], "layer1_vision")
         if isinstance(layer1_result, dict) and layer1_result.get("blocked"):
             return {"status": "blocked", "reason": layer1_result.get("reason")}
 
@@ -333,7 +390,7 @@ Today is {date.today()}.
 {json.dumps(layer2_payload, ensure_ascii=False, indent=2)}
         """.strip()
 
-        layer2_result = await call_gemini_json([layer2_input])
+        layer2_result = await call_gemini_json([layer2_input], "layer2_fusion")
         if isinstance(layer2_result, dict) and layer2_result.get("blocked"):
             return {"status": "blocked", "reason": layer2_result.get("reason")}
 
@@ -346,7 +403,7 @@ Today is {date.today()}.
 {json.dumps(layer2_result, ensure_ascii=False, indent=2)}
         """.strip()
 
-        layer3_result = await call_gemini_json([layer3_input])
+        layer3_result = await call_gemini_json([layer3_input], "layer3_plan")
         if isinstance(layer3_result, dict) and layer3_result.get("blocked"):
             return {"status": "blocked", "reason": layer3_result.get("reason")}
 
@@ -368,16 +425,23 @@ Today is {date.today()}.
                         "case_updated_at": firestore.SERVER_TIMESTAMP,
                     }, merge=True)
             except Exception as e:
-                print(f"analyze-wound warning: failed to store analysis snapshot: {e}")
+                logger.warning(
+                    "analyze_wound failed to store analysis_snapshot %s error=%s",
+                    request_label,
+                    e,
+                )
+
+        logger.info("analyze_wound success %s", request_label)
 
         return {
             "status": "success",
-            "analysis": json.dumps(layer3_result, ensure_ascii=False)
+            "analysis": layer3_result
         }
 
     except json.JSONDecodeError as e:
         raise HTTPException(status_code=400, detail=f"Invalid payload_data JSON: {str(e)}")
     except Exception as e:
+        logger.exception("analyze_wound failed error=%s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
