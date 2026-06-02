@@ -282,9 +282,38 @@ async def analyze_wound(
         image_content = await image.read()
         if not image_content:
             raise HTTPException(status_code=400, detail="Image file is empty")
-        img = PILImage.open(io.BytesIO(image_content))
+
+        if not (image.content_type or "").startswith("image/"):
+            logger.warning(
+                "analyze_wound non_image_content_type %s content_type=%s filename=%s",
+                request_label,
+                image.content_type,
+                image.filename,
+            )
+
+        try:
+            img = PILImage.open(io.BytesIO(image_content))
+        except UnidentifiedImageError:
+            raise HTTPException(status_code=400, detail="Invalid image file")
+
         img = img.convert("RGB")
         img.thumbnail((1024, 1024), PILImage.LANCZOS)
+
+        normalized_image_buffer = io.BytesIO()
+        img.save(normalized_image_buffer, format="JPEG", quality=90)
+        normalized_image_bytes = normalized_image_buffer.getvalue()
+        gemini_image_part = types.Part.from_bytes(
+            data=normalized_image_bytes,
+            mime_type="image/jpeg",
+        )
+        logger.info(
+            "analyze_wound image_normalized %s original_content_type=%s normalized_content_type=image/jpeg bytes=%d size=%sx%s",
+            request_label,
+            image.content_type,
+            len(normalized_image_bytes),
+            img.width,
+            img.height,
+        )
 
         def parse_model_json(text: str) -> dict:
             try:
@@ -378,7 +407,7 @@ Today is {date.today()}.
 {LAYER_1_VISION_EXTRACTION_PROMPT}
         """.strip()
 
-        layer1_result = await call_gemini_json([layer1_input, img], "layer1_vision")
+        layer1_result = await call_gemini_json([layer1_input, gemini_image_part], "layer1_vision")
         if isinstance(layer1_result, dict) and layer1_result.get("blocked"):
             response_payload = {"status": "blocked", "reason": layer1_result.get("reason")}
             logger.info(
