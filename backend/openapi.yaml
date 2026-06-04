@@ -1,0 +1,1518 @@
+openapi: 3.1.0
+info:
+  title: Foster Ulcer AI API
+  version: 1.0.0
+  description: |
+    Strict OpenAPI schema for the currently implemented Foster Ulcer AI backend.
+    This schema is implementation-based and reflects the current FastAPI routes.
+servers:
+  - url: http://127.0.0.1:8080
+    description: Local backend
+  - url: http://10.0.2.2:8080
+    description: Android emulator to local backend
+tags:
+  - name: System
+  - name: Patients
+  - name: Cases
+  - name: Analysis
+  - name: Tasks
+paths:
+  /load-dashboard:
+    post:
+      tags: [System]
+      summary: Connectivity check
+      operationId: loadDashboard
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  message:
+                    type: string
+                required: [message]
+  /create-patient-profile:
+    post:
+      tags: [Patients]
+      summary: Create patient profile
+      operationId: createPatientProfile
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                patient_data:
+                  type: string
+                  description: JSON string serialized from PatientCreateRequest
+                image:
+                  type: string
+                  format: binary
+              required: [patient_data]
+      responses:
+        '200':
+          description: Patient created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreatePatientProfileResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+  /patients_list:
+    get:
+      tags: [Patients]
+      summary: List patients
+      operationId: listPatients
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+            default: 50
+      responses:
+        '200':
+          description: Patients list
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  status:
+                    type: string
+                    enum: [success]
+                  patients:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PatientDocument'
+                required: [status, patients]
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /patients/{patient_id}:
+    patch:
+      tags: [Patients]
+      summary: Update patient profile
+      operationId: updatePatientProfile
+      parameters:
+        - name: patient_id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
+      responses:
+        '200':
+          description: Patient updated
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  status:
+                    type: string
+                    enum: [success]
+                  patient_id:
+                    type: string
+                  updated_fields:
+                    type: array
+                    items:
+                      type: string
+                required: [status, patient_id, updated_fields]
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /create-case:
+    post:
+      tags: [Cases]
+      summary: Create case
+      operationId: createCase
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCaseRequest'
+      responses:
+        '200':
+          description: Case created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateCaseResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /update_cases:
+    post:
+      tags: [Cases]
+      summary: Create follow-up record
+      operationId: updateCase
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCaseRequest'
+      responses:
+        '200':
+          description: Case updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateCaseResponse'
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /cases_list:
+    post:
+      tags: [Cases]
+      summary: List cases
+      operationId: listCases
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CasesListRequest'
+      responses:
+        '200':
+          description: Cases list
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  status:
+                    type: string
+                    enum: [success]
+                  cases:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/CaseDocument'
+                required: [status, cases]
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /case_detail:
+    post:
+      tags: [Cases]
+      summary: Get case detail
+      operationId: caseDetail
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                case_id:
+                  type: string
+              required: [case_id]
+      responses:
+        '200':
+          description: Case detail
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  status:
+                    type: string
+                    enum: [success]
+                  case:
+                    $ref: '#/components/schemas/CaseDocument'
+                  records:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/WoundCaseRecordDocument'
+                  patient_profile:
+                    anyOf:
+                      - $ref: '#/components/schemas/PatientDocument'
+                      - type: 'null'
+                required: [status, case, records, patient_profile]
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /send-to-doctor:
+    post:
+      tags: [Cases]
+      summary: Send case to doctor
+      operationId: sendToDoctor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WoundCaseRecordUpdateRequest'
+      responses:
+        '200':
+          description: Sent to doctor
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  status:
+                    type: string
+                    enum: [success]
+                  message:
+                    type: string
+                  case_id:
+                    type: string
+                  record_id:
+                    type: string
+                  analysis_id:
+                    type: string
+                  plan_id:
+                    type: string
+                required: [status, message, case_id, record_id, analysis_id, plan_id]
+        '422':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /doctor-review:
+    post:
+      tags: [Cases]
+      summary: Save doctor review
+      operationId: doctorReview
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DoctorReviewRequest'
+      responses:
+        '200':
+          description: Doctor review saved
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  status:
+                    type: string
+                    enum: [success]
+                  message:
+                    type: string
+                  analysis_id:
+                    type: string
+                  plan_id:
+                    anyOf:
+                      - type: string
+                      - type: 'null'
+                  case_id:
+                    type: string
+                  record_id:
+                    type: string
+                  source:
+                    type: string
+                  sinbad_copied:
+                    type: boolean
+                required: [status, message, analysis_id, plan_id, case_id, record_id, source, sinbad_copied]
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /create_appointment:
+    post:
+      tags: [Cases]
+      summary: Create appointment for current case record
+      operationId: createAppointment
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                case_id:
+                  type: string
+                appointment_at:
+                  type: string
+                  format: date-time
+              required: [case_id, appointment_at]
+      responses:
+        '200':
+          description: Appointment created
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  status:
+                    type: string
+                    enum: [success]
+                  message:
+                    type: string
+                  case_id:
+                    type: string
+                  record_id:
+                    type: string
+                  plan_id:
+                    anyOf:
+                      - type: string
+                      - type: 'null'
+                  appointment_at:
+                    type: string
+                    format: date-time
+                required: [status, message, case_id, record_id, plan_id, appointment_at]
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /request_close:
+    post:
+      tags: [Cases]
+      summary: Request case closure
+      operationId: requestClose
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                case_id:
+                  type: string
+              required: [case_id]
+      responses:
+        '200':
+          description: Close request saved
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  status:
+                    type: string
+                    enum: [success]
+                  message:
+                    type: string
+                  case_id:
+                    type: string
+                  record_id:
+                    type: string
+                required: [status, message, case_id, record_id]
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /complete_case:
+    post:
+      tags: [Cases]
+      summary: Complete current case
+      operationId: completeCase
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                case_id:
+                  type: string
+                completed_at:
+                  type: string
+                  format: date-time
+              required: [case_id]
+      responses:
+        '200':
+          description: Case completed
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  status:
+                    type: string
+                    enum: [success]
+                  message:
+                    type: string
+                  case_id:
+                    type: string
+                  record_id:
+                    type: string
+                  plan_id:
+                    anyOf:
+                      - type: string
+                      - type: 'null'
+                  completed_at:
+                    type: string
+                    format: date-time
+                required: [status, message, case_id, record_id, plan_id, completed_at]
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /analyze-fillin:
+    post:
+      tags: [Analysis]
+      summary: Upload image and get fill-in analysis
+      operationId: analyzeFillin
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                case_id:
+                  type: string
+                record_id:
+                  type: string
+                image:
+                  type: string
+                  format: binary
+              required: [case_id, record_id, image]
+      responses:
+        '200':
+          description: Fill-in result
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      status:
+                        type: string
+                        enum: [success]
+                      case_id:
+                        type: string
+                      record_id:
+                        type: string
+                      analysis:
+                        type: object
+                        additionalProperties: true
+                      image_id:
+                        type: string
+                      image_url:
+                        type: string
+                    required: [status, case_id, record_id, analysis, image_id, image_url]
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      status:
+                        type: string
+                        enum: [blocked]
+                      reason:
+                        type: string
+                    required: [status, reason]
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /analyze-wound:
+    post:
+      tags: [Analysis]
+      summary: Run layered wound AI analysis
+      operationId: analyzeWound
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                payload_data:
+                  type: string
+                image:
+                  type: string
+                  format: binary
+              required: [payload_data, image]
+      responses:
+        '200':
+          description: Analysis result
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      status:
+                        type: string
+                        enum: [success]
+                      analysis:
+                        type: string
+                    required: [status, analysis]
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      status:
+                        type: string
+                        enum: [blocked]
+                      reason:
+                        type: string
+                    required: [status, reason]
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /analyze-healing:
+    post:
+      tags: [Analysis]
+      summary: Analyze healing progress
+      operationId: analyzeHealing
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                case_id:
+                  type: string
+              required: [case_id]
+      responses:
+        '200':
+          description: Healing analysis result
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      status:
+                        type: string
+                        enum: [success]
+                      analysis:
+                        type: string
+                      records:
+                        type: array
+                        items:
+                          type: object
+                          additionalProperties: true
+                    required: [status, analysis, records]
+                  - type: object
+                    additionalProperties: false
+                    properties:
+                      status:
+                        type: string
+                        enum: [blocked]
+                      reason:
+                        type: string
+                      records:
+                        type: array
+                        items:
+                          type: object
+                          additionalProperties: true
+                    required: [status, reason, records]
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /tasks_list:
+    post:
+      tags: [Tasks]
+      summary: List cases with current tasks
+      operationId: tasksList
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                limit:
+                  type: integer
+                  minimum: 1
+                  maximum: 500
+                  default: 200
+      responses:
+        '200':
+          description: Task list
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  status:
+                    type: string
+                    enum: [success]
+                  current_treatment_plan:
+                    type: array
+                    items:
+                      type: object
+                      additionalProperties: false
+                      properties:
+                        case_id:
+                          type: string
+                        patient_id:
+                          type: string
+                        patient_name:
+                          anyOf:
+                            - type: string
+                            - type: 'null'
+                        current_record_id:
+                          type: string
+                        current_plan_id:
+                          anyOf:
+                            - type: string
+                            - type: 'null'
+                        current_treatment:
+                          $ref: '#/components/schemas/TreatmentPlan'
+                      required: [case_id, patient_id, patient_name, current_record_id, current_plan_id, current_treatment]
+                required: [status, current_treatment_plan]
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /task_detail:
+    post:
+      tags: [Tasks]
+      summary: Get task detail
+      operationId: taskDetail
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                case_id:
+                  type: string
+                task_id:
+                  type: string
+                task_index:
+                  type: integer
+                  minimum: 0
+              required: [case_id]
+      responses:
+        '200':
+          description: Task detail
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+  /task_update:
+    post:
+      tags: [Tasks]
+      summary: Update task(s)
+      operationId: taskUpdate
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                case_id:
+                  type: string
+                plan_id:
+                  type: string
+                updates:
+                  type: string
+                images:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+              required: [case_id, updates]
+      responses:
+        '200':
+          description: Task update success
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  status:
+                    type: string
+                    enum: [success]
+                  case_id:
+                    type: string
+                  plan_id:
+                    type: string
+                  updated_task_ids:
+                    type: array
+                    items:
+                      type: string
+                required: [status, case_id, plan_id, updated_task_ids]
+        '400':
+          $ref: '#/components/responses/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/ErrorResponse'
+        '500':
+          $ref: '#/components/responses/ErrorResponse'
+components:
+  responses:
+    ErrorResponse:
+      description: Error response
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: true
+            properties:
+              detail:
+                oneOf:
+                  - type: string
+                  - type: array
+                    items:
+                      type: object
+                      additionalProperties: true
+            required: [detail]
+  schemas:
+    Status:
+      type: string
+      enum: [CREATION, AI_PROCESSING, DOCTOR_REVIEW, PLAN_ISSUED, TREATMENT_ACTIVE, APPOINTMENT, REQUEST_CLOSE, COMPLETED]
+    Urgency:
+      type: string
+      enum: [URGENT, MEDIUM, LOW]
+    CreatePatientProfileResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        status: { type: string, enum: [success] }
+        patient_id: { type: string }
+        photo_url:
+          anyOf:
+            - type: string
+            - type: 'null'
+        message: { type: string }
+      required: [status, patient_id, photo_url, message]
+    DiabetesInfo:
+      type: object
+      additionalProperties: false
+      properties:
+        has_diabetes: { type: string }
+        years:
+          anyOf:
+            - type: string
+            - type: 'null'
+        risk_history:
+          type: array
+          items: { type: string }
+        complications:
+          type: array
+          items: { type: string }
+      required: [has_diabetes, years, risk_history, complications]
+    PatientDocument:
+      type: object
+      additionalProperties: true
+      properties:
+        patient_id: { type: string }
+        nrc_id:
+          anyOf:
+            - type: string
+            - type: 'null'
+        patient_name: { type: string }
+        phone_no: { type: string }
+        dob: { type: string }
+        gender: { type: string }
+        height_cm:
+          anyOf:
+            - type: number
+            - type: string
+        weight_kg:
+          anyOf:
+            - type: number
+            - type: string
+        medical_history: { type: string }
+        diabetes: { $ref: '#/components/schemas/DiabetesInfo' }
+        created_at: { type: string }
+        status: { type: string }
+        synced_at:
+          anyOf:
+            - type: string
+            - type: object
+            - type: 'null'
+        photo_url:
+          anyOf:
+            - type: string
+            - type: 'null'
+      required: [patient_name, phone_no, dob, gender, height_cm, weight_kg, medical_history, diabetes, created_at, status]
+    CreateCaseVitals:
+      type: object
+      additionalProperties: false
+      properties:
+        temperature: { type: string }
+        blood_pressure: { type: string }
+        blood_pressure_systolic: { type: string }
+        blood_pressure_diastolic: { type: string }
+        blood_glucose: { type: string }
+        blood_sugar: { type: string }
+        heart_rate: { type: string }
+        respiratory_rate: { type: string }
+    CreateCaseMeta:
+      type: object
+      additionalProperties: false
+      properties:
+        sent_at:
+          type: string
+          format: date-time
+    CreateCaseRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        patient_id: { type: string }
+        status: { type: string }
+        urgency: { type: string }
+        created_by_nurse: { type: string }
+        assigned_doctor: { type: string }
+        vitals: { $ref: '#/components/schemas/CreateCaseVitals' }
+        meta: { $ref: '#/components/schemas/CreateCaseMeta' }
+      required: [patient_id]
+    UpdateCaseRequest:
+      allOf:
+        - $ref: '#/components/schemas/CreateCaseRequest'
+        - type: object
+          additionalProperties: false
+          properties:
+            case_id: { type: string }
+          required: [patient_id, case_id]
+    CreateCaseResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        status: { type: string }
+        patient_id: { type: string }
+        case_id: { type: string }
+        record_id: { type: string }
+      required: [status, patient_id, case_id, record_id]
+    CasesListRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 200
+          default: 50
+        patient_id: { type: string }
+        filter:
+          type: array
+          maxItems: 10
+          items: { type: string }
+    CaseImage:
+      type: object
+      additionalProperties: false
+      properties:
+        image_folder_url:
+          anyOf:
+            - type: string
+            - type: 'null'
+      required: [image_folder_url]
+    Size:
+      type: object
+      additionalProperties: false
+      properties:
+        width_cm:
+          anyOf:
+            - type: number
+            - type: 'null'
+        length_cm:
+          anyOf:
+            - type: number
+            - type: 'null'
+      required: [width_cm, length_cm]
+    Bed:
+      type: object
+      additionalProperties: false
+      properties:
+        slough_pct:
+          anyOf:
+            - type: integer
+            - type: 'null'
+        necrotic_pct:
+          anyOf:
+            - type: integer
+            - type: 'null'
+      required: [slough_pct, necrotic_pct]
+    Discharge:
+      type: object
+      additionalProperties: false
+      properties:
+        volume:
+          anyOf:
+            - type: string
+            - type: 'null'
+        type:
+          anyOf:
+            - type: string
+            - type: 'null'
+      required: [volume, type]
+    VitalSigns:
+      type: object
+      additionalProperties: false
+      properties:
+        temperature:
+          anyOf:
+            - type: string
+            - type: 'null'
+        blood_pressure:
+          anyOf:
+            - type: string
+            - type: 'null'
+        blood_pressure_systolic:
+          anyOf:
+            - type: string
+            - type: 'null'
+        blood_pressure_diastolic:
+          anyOf:
+            - type: string
+            - type: 'null'
+        blood_glucose:
+          anyOf:
+            - type: string
+            - type: 'null'
+        heart_rate:
+          anyOf:
+            - type: string
+            - type: 'null'
+        respiratory_rate:
+          anyOf:
+            - type: string
+            - type: 'null'
+      required: [temperature, blood_pressure, blood_pressure_systolic, blood_pressure_diastolic, blood_glucose, heart_rate, respiratory_rate]
+    WoundDetail:
+      type: object
+      additionalProperties: false
+      properties:
+        location_primary:
+          anyOf:
+            - type: string
+            - type: 'null'
+        location_detail:
+          anyOf:
+            - type: string
+            - type: 'null'
+        wound_type:
+          anyOf:
+            - type: string
+            - type: 'null'
+        shape:
+          anyOf:
+            - type: string
+            - type: 'null'
+        size: { $ref: '#/components/schemas/Size' }
+        depth_category:
+          anyOf:
+            - type: string
+            - type: 'null'
+        bed: { $ref: '#/components/schemas/Bed' }
+        edge_description:
+          anyOf:
+            - type: string
+            - type: 'null'
+        periwound_status:
+          anyOf:
+            - type: string
+            - type: 'null'
+        discharge: { $ref: '#/components/schemas/Discharge' }
+        odor_presence:
+          anyOf:
+            - type: string
+            - type: 'null'
+        pain_score:
+          anyOf:
+            - type: integer
+            - type: 'null'
+        has_infection:
+          anyOf:
+            - type: boolean
+            - type: 'null'
+        skin_condition:
+          anyOf:
+            - type: string
+            - type: 'null'
+      required: [location_primary, location_detail, wound_type, shape, size, depth_category, bed, edge_description, periwound_status, discharge, odor_presence, pain_score, has_infection, skin_condition]
+    Ischemia:
+      type: object
+      additionalProperties: false
+      properties:
+        points:
+          type: array
+          items: { type: integer }
+        pulse:
+          anyOf:
+            - type: string
+            - type: 'null'
+        checklist:
+          type: array
+          items: { type: string }
+      required: [points, pulse, checklist]
+    Infection:
+      type: object
+      additionalProperties: false
+      properties:
+        checklist:
+          type: array
+          items: { type: string }
+        erythema_extent:
+          anyOf:
+            - type: string
+            - type: 'null'
+        probe_to_bone_test:
+          anyOf:
+            - type: string
+            - type: 'null'
+        has_deep_abscess_or_fasciitis:
+          anyOf:
+            - type: boolean
+            - type: 'null'
+      required: [checklist, erythema_extent, probe_to_bone_test, has_deep_abscess_or_fasciitis]
+    Neuropathy:
+      type: object
+      additionalProperties: false
+      properties:
+        points:
+          type: array
+          items: { type: integer }
+      required: [points]
+    Sinbad:
+      type: object
+      additionalProperties: false
+      properties:
+        site:
+          anyOf:
+            - type: string
+            - type: 'null'
+        ischemia:
+          anyOf:
+            - type: string
+            - type: 'null'
+        neuropathy:
+          anyOf:
+            - type: string
+            - type: 'null'
+        infection:
+          anyOf:
+            - type: string
+            - type: 'null'
+        area:
+          anyOf:
+            - type: string
+            - type: 'null'
+        depth:
+          anyOf:
+            - type: string
+            - type: 'null'
+      required: [site, ischemia, neuropathy, infection, area, depth]
+    LabResults:
+      type: object
+      additionalProperties: false
+      properties:
+        wbc_count:
+          anyOf:
+            - type: string
+            - type: 'null'
+        crp:
+          anyOf:
+            - type: string
+            - type: 'null'
+        esr:
+          anyOf:
+            - type: string
+            - type: 'null'
+        procalcitonin:
+          anyOf:
+            - type: string
+            - type: 'null'
+      required: [wbc_count, crp, esr, procalcitonin]
+    Vascular:
+      type: object
+      additionalProperties: false
+      properties:
+        abi_value:
+          anyOf:
+            - type: string
+            - type: 'null'
+        ankle_pressure_mmHg:
+          anyOf:
+            - type: string
+            - type: 'null'
+        toe_pressure_mmHg:
+          anyOf:
+            - type: string
+            - type: 'null'
+        tcpo2_mmHg:
+          anyOf:
+            - type: string
+            - type: 'null'
+      required: [abi_value, ankle_pressure_mmHg, toe_pressure_mmHg, tcpo2_mmHg]
+    TaskItem:
+      type: object
+      additionalProperties: true
+      properties:
+        task_id: { type: string }
+        task_text: { type: string }
+        status: { type: string }
+        task_due:
+          anyOf:
+            - type: string
+            - type: 'null'
+        completed_at:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+        task_photo_url:
+          anyOf:
+            - type: string
+            - type: 'null'
+        source:
+          anyOf:
+            - type: string
+            - type: 'null'
+        order_index:
+          anyOf:
+            - type: integer
+            - type: 'null'
+      required: [task_text]
+    TreatmentPlan:
+      type: object
+      additionalProperties: true
+      properties:
+        plan_id: { type: string }
+        plan_text:
+          anyOf:
+            - type: string
+            - type: 'null'
+        followup_days:
+          anyOf:
+            - type: integer
+            - type: 'null'
+        status:
+          anyOf:
+            - type: string
+            - type: 'null'
+        plan_tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskItem'
+      required: [plan_tasks]
+    Timestamps:
+      type: object
+      additionalProperties: false
+      properties:
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        analyze_at:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+        doctor_review_at:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+        plan_issued_at:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+        treatment_active_at:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+        appointment_at:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+        completed_at:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+      required: [created_at, updated_at, analyze_at, doctor_review_at, plan_issued_at, treatment_active_at, appointment_at, completed_at]
+    WoundCaseRecordDocument:
+      type: object
+      additionalProperties: true
+      properties:
+        record_id: { type: string }
+        case_id: { type: string }
+        patient_id: { type: string }
+        record_created_by:
+          anyOf:
+            - type: string
+            - type: 'null'
+        record_created_at:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+        record_updated_at:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+        created_by_nurse:
+          anyOf:
+            - type: string
+            - type: 'null'
+        assigned_doctor:
+          anyOf:
+            - type: string
+            - type: 'null'
+        status:
+          anyOf:
+            - $ref: '#/components/schemas/Status'
+            - type: 'null'
+        urgency:
+          anyOf:
+            - $ref: '#/components/schemas/Urgency'
+            - type: 'null'
+        timestamps:
+          anyOf:
+            - $ref: '#/components/schemas/Timestamps'
+            - type: 'null'
+        image:
+          anyOf:
+            - $ref: '#/components/schemas/CaseImage'
+            - type: 'null'
+        vital_signs:
+          anyOf:
+            - $ref: '#/components/schemas/VitalSigns'
+            - type: 'null'
+        wound_detail:
+          anyOf:
+            - $ref: '#/components/schemas/WoundDetail'
+            - type: 'null'
+        ischemia:
+          anyOf:
+            - $ref: '#/components/schemas/Ischemia'
+            - type: 'null'
+        infection:
+          anyOf:
+            - $ref: '#/components/schemas/Infection'
+            - type: 'null'
+        neuropathy:
+          anyOf:
+            - $ref: '#/components/schemas/Neuropathy'
+            - type: 'null'
+        sinbad:
+          anyOf:
+            - $ref: '#/components/schemas/Sinbad'
+            - type: 'null'
+        lab_results:
+          anyOf:
+            - $ref: '#/components/schemas/LabResults'
+            - type: 'null'
+        vascular:
+          anyOf:
+            - $ref: '#/components/schemas/Vascular'
+            - type: 'null'
+        gangrene_extent:
+          anyOf:
+            - type: string
+            - type: 'null'
+        analysis:
+          anyOf:
+            - type: object
+              additionalProperties: true
+            - type: 'null'
+        treatment_plan:
+          anyOf:
+            - $ref: '#/components/schemas/TreatmentPlan'
+            - type: 'null'
+        task_list:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskItem'
+        current_healing_progress:
+          anyOf:
+            - type: string
+            - type: 'null'
+      required: [record_id, case_id, patient_id, task_list]
+    CaseDocument:
+      type: object
+      additionalProperties: true
+      properties:
+        case_id: { type: string }
+        patient_id: { type: string }
+        created_by_nurse:
+          anyOf:
+            - type: string
+            - type: 'null'
+        assigned_doctor:
+          anyOf:
+            - type: string
+            - type: 'null'
+        status:
+          anyOf:
+            - $ref: '#/components/schemas/Status'
+            - type: string
+        urgency:
+          anyOf:
+            - $ref: '#/components/schemas/Urgency'
+            - type: 'null'
+        case_created_at:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+        case_updated_at:
+          anyOf:
+            - type: string
+              format: date-time
+            - type: 'null'
+        current_record_id:
+          anyOf:
+            - type: string
+            - type: 'null'
+        current_analysis_id:
+          anyOf:
+            - type: string
+            - type: 'null'
+        current_plan_id:
+          anyOf:
+            - type: string
+            - type: 'null'
+        current_timestamps:
+          anyOf:
+            - $ref: '#/components/schemas/Timestamps'
+            - type: 'null'
+        current_image:
+          anyOf:
+            - $ref: '#/components/schemas/CaseImage'
+            - type: 'null'
+        current_vital_signs:
+          anyOf:
+            - $ref: '#/components/schemas/VitalSigns'
+            - type: 'null'
+        current_wound_detail:
+          anyOf:
+            - $ref: '#/components/schemas/WoundDetail'
+            - type: 'null'
+        current_ischemia:
+          anyOf:
+            - $ref: '#/components/schemas/Ischemia'
+            - type: 'null'
+        current_infection:
+          anyOf:
+            - $ref: '#/components/schemas/Infection'
+            - type: 'null'
+        current_neuropathy:
+          anyOf:
+            - $ref: '#/components/schemas/Neuropathy'
+            - type: 'null'
+        current_sinbad:
+          anyOf:
+            - $ref: '#/components/schemas/Sinbad'
+            - type: 'null'
+        current_lab_results:
+          anyOf:
+            - $ref: '#/components/schemas/LabResults'
+            - type: 'null'
+        current_vascular:
+          anyOf:
+            - $ref: '#/components/schemas/Vascular'
+            - type: 'null'
+        current_gangrene_extent:
+          anyOf:
+            - type: string
+            - type: 'null'
+        current_analysis:
+          anyOf:
+            - type: object
+              additionalProperties: true
+            - type: 'null'
+        current_treatment_plan:
+          anyOf:
+            - $ref: '#/components/schemas/TreatmentPlan'
+            - type: 'null'
+        current_task_list:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskItem'
+        current_healing_progress:
+          anyOf:
+            - type: string
+            - type: 'null'
+      required: [case_id, patient_id]
+    WoundCaseRecordUpdateRequest:
+      allOf:
+        - $ref: '#/components/schemas/WoundCaseRecordDocument'
+        - type: object
+          required: [record_id, case_id, patient_id, vital_signs, wound_detail, ischemia, infection, neuropathy, sinbad, lab_results, vascular]
+    DoctorReviewRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        analysis_id: { type: string }
+        case_id: { type: string }
+        record_id: { type: string }
+        payload:
+          type: object
+          additionalProperties: true
+          description: Legacy wrapper for older clients. Prefer top-level `analysis` and `treatment_plan`.
+        analysis:
+          type: object
+          additionalProperties: true
+        treatment_plan:
+          $ref: '#/components/schemas/TreatmentPlan'
+        ai_result_edit_flag:
+          type: boolean
+        treatment_plan_edit_flag:
+          type: boolean
+        signature:
+          oneOf:
+            - type: string
+            - type: object
+              additionalProperties: true
+        signature_base64: { type: string }
+      required: [case_id, record_id]

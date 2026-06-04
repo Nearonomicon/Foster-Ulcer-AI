@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:gap/gap.dart';
 
+import 'package:flutter_application/features/auth/widgets/auth_common.dart';
+import 'package:flutter_application/shared/app_localizations.dart';
+
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
 
@@ -29,11 +32,29 @@ class _RegisterScreenState extends State<RegisterScreen> {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
+    // dropdown items
+    final specialtyItems = <DropdownMenuItem<String>>[
+      DropdownMenuItem(value: "", child: Text(context.tr('register.specialty.select'))),
+      DropdownMenuItem(value: "dermatology", child: Text(context.tr('register.specialty.dermatology'))),
+      DropdownMenuItem(value: "vascular", child: Text(context.tr('register.specialty.vascular'))),
+      DropdownMenuItem(value: "wound_care", child: Text(context.tr('register.specialty.wound_care'))),
+      DropdownMenuItem(value: "endocrinology", child: Text(context.tr('register.specialty.endocrinology'))),
+      DropdownMenuItem(value: "internal_medicine", child: Text(context.tr('register.specialty.internal_medicine'))),
+    ];
+
     return Scaffold(
       body: Stack(
         children: [
-          Positioned(top: -96, right: -96, child: _GlowBlob(color: cs.primary.withOpacity(0.06))),
-          Positioned(bottom: -96, left: -96, child: _GlowBlob(color: cs.primary.withOpacity(0.06))),
+          Positioned(
+            top: -96,
+            right: -96,
+            child: AuthGlowBlob(color: cs.primary.withOpacity(0.06)),
+          ),
+          Positioned(
+            bottom: -96,
+            left: -96,
+            child: AuthGlowBlob(color: cs.primary.withOpacity(0.06)),
+          ),
 
           SafeArea(
             child: Column(
@@ -46,18 +67,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       IconButton(
                         onPressed: () => Navigator.pop(context),
                         icon: const Icon(Icons.arrow_back_ios_new, size: 18),
-                      ),
-                      const Spacer(),
-                      const Text("9:41", style: TextStyle(fontWeight: FontWeight.w700)),
-                      const Spacer(),
-                      const Row(
-                        children: [
-                          Icon(Icons.signal_cellular_alt, size: 18),
-                          SizedBox(width: 6),
-                          Icon(Icons.wifi, size: 18),
-                          SizedBox(width: 6),
-                          Icon(Icons.battery_full, size: 18),
-                        ],
                       ),
                     ],
                   ),
@@ -73,56 +82,59 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             const Gap(8),
-                            _Header(primary: cs.primary),
+                            _Header(
+                              primary: cs.primary,
+                              title: context.tr('register.header.title'),
+                              subtitle: context.tr('register.header.subtitle'),
+                            ),
                             const Gap(18),
 
-                            _AvatarPicker(primary: cs.primary),
+                            _AvatarPicker(
+                              primary: cs.primary,
+                              label: context.tr('register.avatar.label'),
+                            ),
                             const Gap(18),
 
-                            _LabeledField(
-                              label: "FULL NAME",
+                            AuthLabeledField(
+                              label: context.tr('register.full_name.label'),
+                              withInsetLabel: true,
                               child: TextField(
                                 controller: fullNameCtrl,
-                                decoration: const InputDecoration(
-                                  hintText: "Dr. Jane Smith",
-                                  prefixIcon: Padding(
+                                decoration: InputDecoration(
+                                  hintText: context.tr('register.full_name.hint'),
+                                  prefixIcon: const Padding(
                                     padding: EdgeInsets.only(left: 8),
                                     child: Icon(Icons.person_outline),
                                   ),
-                                  prefixIconConstraints: BoxConstraints(minWidth: 48),
+                                  prefixIconConstraints: const BoxConstraints(minWidth: 48),
                                 ),
                               ),
                             ),
                             const Gap(14),
 
-                            _LabeledField(
-                              label: "MEDICAL LICENSE NUMBER",
+                            AuthLabeledField(
+                              label: context.tr('register.license.label'),
+                              withInsetLabel: true,
                               child: TextField(
                                 controller: licenseCtrl,
-                                decoration: const InputDecoration(
-                                  hintText: "MD-12345678",
-                                  prefixIcon: Padding(
+                                decoration: InputDecoration(
+                                  hintText: context.tr('register.license.hint'),
+                                  prefixIcon: const Padding(
                                     padding: EdgeInsets.only(left: 8),
                                     child: Icon(Icons.verified_user_outlined),
                                   ),
-                                  prefixIconConstraints: BoxConstraints(minWidth: 48),
+                                  prefixIconConstraints: const BoxConstraints(minWidth: 48),
                                 ),
                               ),
                             ),
                             const Gap(14),
 
-                            _LabeledField(
-                              label: "SPECIALTY",
+                            AuthLabeledField(
+                              label: context.tr('register.specialty.label'),
+                              withInsetLabel: true,
                               child: DropdownButtonFormField<String>(
-                                initialValue: specialty.isEmpty ? null : specialty,
-                                items: const [
-                                  DropdownMenuItem(value: "", child: Text("Select Specialty")),
-                                  DropdownMenuItem(value: "dermatology", child: Text("Dermatology")),
-                                  DropdownMenuItem(value: "vascular", child: Text("Vascular Surgery")),
-                                  DropdownMenuItem(value: "wound_care", child: Text("Wound Care Specialist")),
-                                  DropdownMenuItem(value: "endocrinology", child: Text("Endocrinology")),
-                                  DropdownMenuItem(value: "internal_medicine", child: Text("Internal Medicine")),
-                                ],
+                                value: specialty.isEmpty ? null : specialty,
+                                items: specialtyItems,
                                 onChanged: (v) => setState(() => specialty = v ?? ""),
                                 decoration: const InputDecoration(
                                   prefixIcon: Padding(
@@ -136,17 +148,18 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             ),
                             const Gap(14),
 
-                            _LabeledField(
-                              label: "HOSPITAL AFFILIATION",
+                            AuthLabeledField(
+                              label: context.tr('register.hospital.label'),
+                              withInsetLabel: true,
                               child: TextField(
                                 controller: hospitalCtrl,
-                                decoration: const InputDecoration(
-                                  hintText: "Central Medical Center",
-                                  prefixIcon: Padding(
+                                decoration: InputDecoration(
+                                  hintText: context.tr('register.hospital.hint'),
+                                  prefixIcon: const Padding(
                                     padding: EdgeInsets.only(left: 8),
                                     child: Icon(Icons.apartment_outlined),
                                   ),
-                                  prefixIconConstraints: BoxConstraints(minWidth: 48),
+                                  prefixIconConstraints: const BoxConstraints(minWidth: 48),
                                 ),
                               ),
                             ),
@@ -168,7 +181,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                 Expanded(
                                   child: Text.rich(
                                     TextSpan(
-                                      text: "I agree to the ",
+                                      text: context.tr('register.terms.prefix'),
                                       style: TextStyle(
                                         fontSize: 11,
                                         height: 1.35,
@@ -177,15 +190,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                       ),
                                       children: [
                                         TextSpan(
-                                          text: "Terms of Clinical Practice",
+                                          text: context.tr('register.terms.terms'),
                                           style: TextStyle(
                                             color: cs.primary,
                                             fontWeight: FontWeight.w800,
                                           ),
                                         ),
-                                        const TextSpan(
-                                          text:
-                                              " and confirm that my medical credentials are accurate.",
+                                        TextSpan(
+                                          text: context.tr('register.terms.suffix'),
                                         ),
                                       ],
                                     ),
@@ -211,12 +223,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                     borderRadius: BorderRadius.circular(16),
                                   ),
                                 ),
-                                child: const Row(
+                                child: Row(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    Text("Create Account", style: TextStyle(fontWeight: FontWeight.w900)),
-                                    SizedBox(width: 8),
-                                    Icon(Icons.arrow_forward, size: 18),
+                                    Text(
+                                      context.tr('register.create_account'),
+                                      style: const TextStyle(fontWeight: FontWeight.w900),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    const Icon(Icons.arrow_forward, size: 18),
                                   ],
                                 ),
                               ),
@@ -229,7 +244,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                               padding: const EdgeInsets.only(bottom: 8),
                               child: Text.rich(
                                 TextSpan(
-                                  text: "Already have an account? ",
+                                  text: context.tr('register.have_account.prefix'),
                                   style: TextStyle(
                                     fontSize: 13,
                                     color: isDark ? Colors.white54 : Colors.black45,
@@ -240,7 +255,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                                       child: GestureDetector(
                                         onTap: () => Navigator.pop(context),
                                         child: Text(
-                                          "Log In",
+                                          context.tr('register.have_account.login'),
                                           style: TextStyle(
                                             color: cs.primary,
                                             fontWeight: FontWeight.w900,
@@ -257,14 +272,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             const Gap(22),
 
                             // iOS home indicator
-                            Container(
-                              width: 120,
-                              height: 6,
-                              decoration: BoxDecoration(
-                                color: isDark ? Colors.white.withOpacity(0.18) : Colors.black.withOpacity(0.14),
-                                borderRadius: BorderRadius.circular(999),
-                              ),
-                            ),
+                            const AuthBottomIndicator(),
                           ],
                         ),
                       ),
@@ -281,8 +289,15 @@ class _RegisterScreenState extends State<RegisterScreen> {
 }
 
 class _Header extends StatelessWidget {
-  const _Header({required this.primary});
+  const _Header({
+    required this.primary,
+    required this.title,
+    required this.subtitle,
+  });
+
   final Color primary;
+  final String title;
+  final String subtitle;
 
   @override
   Widget build(BuildContext context) {
@@ -308,7 +323,7 @@ class _Header extends StatelessWidget {
         ),
         const Gap(14),
         Text(
-          "Practitioner Registration",
+          title,
           style: TextStyle(
             fontSize: 22,
             fontWeight: FontWeight.w900,
@@ -318,7 +333,7 @@ class _Header extends StatelessWidget {
         ),
         const Gap(6),
         Text(
-          "Join the clinical wound care network",
+          subtitle,
           style: TextStyle(
             fontWeight: FontWeight.w600,
             color: isDark ? Colors.white.withOpacity(0.55) : Colors.black.withOpacity(0.45),
@@ -331,8 +346,9 @@ class _Header extends StatelessWidget {
 }
 
 class _AvatarPicker extends StatelessWidget {
-  const _AvatarPicker({required this.primary});
+  const _AvatarPicker({required this.primary, required this.label});
   final Color primary;
+  final String label;
 
   @override
   Widget build(BuildContext context) {
@@ -376,7 +392,7 @@ class _AvatarPicker extends StatelessWidget {
         ),
         const Gap(10),
         Text(
-          "PROFESSIONAL MEDICAL ID",
+          label,
           style: TextStyle(
             fontSize: 11,
             fontWeight: FontWeight.w900,
@@ -389,53 +405,3 @@ class _AvatarPicker extends StatelessWidget {
   }
 }
 
-class _GlowBlob extends StatelessWidget {
-  const _GlowBlob({required this.color});
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 260,
-      height: 260,
-      decoration: BoxDecoration(
-        color: color,
-        shape: BoxShape.circle,
-        boxShadow: [
-          BoxShadow(color: color, blurRadius: 70, spreadRadius: 10),
-        ],
-      ),
-    );
-  }
-}
-
-class _LabeledField extends StatelessWidget {
-  const _LabeledField({required this.label, required this.child});
-  final String label;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(left: 6),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              letterSpacing: 1.1,
-              fontWeight: FontWeight.w900,
-              color: isDark ? Colors.white54 : Colors.black45,
-            ),
-          ),
-        ),
-        const Gap(8),
-        child,
-      ],
-    );
-  }
-}

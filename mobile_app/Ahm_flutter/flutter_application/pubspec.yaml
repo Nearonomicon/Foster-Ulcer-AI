@@ -8,8 +8,13 @@ environment:
   sdk: ">=3.3.0 <4.0.0"
 
 dependencies:
+  http: ^1.2.1
   flutter:
     sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  provider: ^6.1.2
 
   # Core UI
   cupertino_icons: ^1.0.6
@@ -48,6 +53,7 @@ dependencies:
   signature: ^5.5.0
 
 dev_dependencies:
+
   flutter_test:
     sdk: flutter
 

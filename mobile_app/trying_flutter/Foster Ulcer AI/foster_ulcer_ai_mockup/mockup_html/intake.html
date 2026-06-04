@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Foster Ulcer AI — Intake</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark"></div>
+        <div>
+          <div class="brand-title">Foster Ulcer AI</div>
+          <div class="brand-subtitle">Clinical Assistant Mockup</div>
+        </div>
+      </div>
+      <div class="top-actions">
+        <a class="ghost" href="patient_search.html">New Case</a>
+        <button class="primary">Sync</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="sidebar">
+        <nav class="nav">
+          <a class="nav-item" href="dashboard.html">Dashboard</a>
+          <a class="nav-item" href="patient_search.html">Patient Search</a>
+          <a class="nav-item active" href="intake.html">Intake</a>
+          <a class="nav-item" href="vital_check.html">Vital Check</a>
+          <a class="nav-item" href="camera.html">Camera</a>
+          <a class="nav-item" href="response_view.html">Response View</a>
+          <a class="nav-item" href="assessment.html">Assessment</a>
+          <a class="nav-item" href="doctor_summary.html">Doctor Summary</a>
+          <a class="nav-item" href="cases.html">Cases</a>
+          <a class="nav-item" href="tasks.html">Tasks</a>
+          <a class="nav-item" href="profile.html">Profile</a>
+        </nav>
+        <div class="sidebar-card">
+          <div class="card-label">Today</div>
+          <div class="card-value">4 Tasks</div>
+          <div class="card-sub">2 High Priority</div>
+        </div>
+      </aside>
+
+      <section class="content">
+        <section class="panel">
+          <div class="panel-head">
+            <h2>New Patient Intake</h2>
+            <a class="ghost" href="patient_search.html">Back</a>
+          </div>
+          <div class="card list">
+            <div class="list-head">Patient Details</div>
+            <div class="form-grid">
+              <div class="field"><label>Patient Name</label><input type="text" value="Amira S." /></div>
+              <div class="field"><label>Date of Birth</label><input type="text" value="1991-03-12" /></div>
+              <div class="field"><label>Gender</label><select><option>Female</option></select></div>
+              <div class="field"><label>Phone</label><input type="text" value="+91 99999 88888" /></div>
+              <div class="field"><label>Height (cm)</label><input type="text" value="160" /></div>
+              <div class="field"><label>Weight (kg)</label><input type="text" value="58" /></div>
+            </div>
+          </div>
+          <div class="card list">
+            <div class="list-head">Diabetes</div>
+            <div class="form-grid">
+              <div class="field"><label>Has Diabetes</label><select><option>Yes</option><option>No</option></select></div>
+              <div class="field"><label>Years</label><select><option>1-5y</option></select></div>
+              <div class="field"><label>Risk History</label><input type="text" value="Past Ulcer" /></div>
+              <div class="field"><label>Complications</label><input type="text" value="Kidney" /></div>
+            </div>
+          </div>
+          <div class="card list">
+            <div class="list-head">Other Medical History</div>
+            <input type="text" value="Hypertension" />
+          </div>
+          <div class="panel-head">
+            <a class="primary" href="vital_check.html">Save and Continue</a>
+          </div>
+        </section>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

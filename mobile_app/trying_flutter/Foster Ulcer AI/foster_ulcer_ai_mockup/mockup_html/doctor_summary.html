@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Foster Ulcer AI — Doctor Summary</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark"></div>
+        <div>
+          <div class="brand-title">Foster Ulcer AI</div>
+          <div class="brand-subtitle">Clinical Assistant Mockup</div>
+        </div>
+      </div>
+      <div class="top-actions">
+        <a class="ghost" href="patient_search.html">New Case</a>
+        <button class="primary">Sync</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="sidebar">
+        <nav class="nav">
+          <a class="nav-item" href="dashboard.html">Dashboard</a>
+          <a class="nav-item" href="patient_search.html">Patient Search</a>
+          <a class="nav-item" href="intake.html">Intake</a>
+          <a class="nav-item" href="vital_check.html">Vital Check</a>
+          <a class="nav-item" href="camera.html">Camera</a>
+          <a class="nav-item" href="response_view.html">Response View</a>
+          <a class="nav-item" href="assessment.html">Assessment</a>
+          <a class="nav-item active" href="doctor_summary.html">Doctor Summary</a>
+          <a class="nav-item" href="cases.html">Cases</a>
+          <a class="nav-item" href="tasks.html">Tasks</a>
+          <a class="nav-item" href="profile.html">Profile</a>
+        </nav>
+        <div class="sidebar-card">
+          <div class="card-label">Today</div>
+          <div class="card-value">4 Tasks</div>
+          <div class="card-sub">2 High Priority</div>
+        </div>
+      </aside>
+
+      <section class="content">
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Doctor Summary</h2>
+            <span class="badge danger">Red Flag</span>
+          </div>
+          <div class="card summary">
+            <div class="summary-title">UT Grade 1 Stage D</div>
+            <div class="summary-sub">Gemini AI • Confidence 80%</div>
+            <p>
+              Diabetic foot ulcer on the dorsal foot with signs of infection and ischemia.
+              Wound is full-thickness, 4.0 x 5.0 cm, with slough and necrotic tissue.
+            </p>
+          </div>
+          <div class="grid">
+            <div class="card list">
+              <div class="list-head">Nurse-Reviewed Data</div>
+              <div class="kv"><span>Blood Pressure</span><strong>High</strong></div>
+              <div class="kv"><span>Blood Sugar</span><strong>Normal</strong></div>
+              <div class="kv"><span>Heart Rate</span><strong>Normal</strong></div>
+              <div class="kv"><span>Temperature</span><strong>Warm</strong></div>
+            </div>
+            <div class="card list">
+              <div class="list-head">Treatment Plan</div>
+              <ul class="task-list">
+                <li>Debride necrotic tissue</li>
+                <li>Apply appropriate wound dressing</li>
+                <li>Monitor for worsening infection/ischemia</li>
+                <li>Strict offloading of the affected foot</li>
+              </ul>
+              <div class="plan-meta">Follow-up: 1 day • Status: Draft</div>
+            </div>
+          </div>
+          <div class="panel-head">
+            <a class="primary" href="dashboard.html">Send to Doctor</a>
+          </div>
+        </section>
+      </section>
+    </main>
+  </div>
+</body>
+</html>
