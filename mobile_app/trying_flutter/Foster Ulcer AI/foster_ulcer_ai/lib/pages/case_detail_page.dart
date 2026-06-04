@@ -245,8 +245,33 @@ extension _CaseDetailPage on _MainNavigationScreenState {
               ),
             ],
           ),
+          // --- CONTINUE CASE BANNER ---
+          // Shown when the case is stuck mid-flow and can be resumed.
+          if (const {'CREATION', 'AI_PROCESSING', 'ANALYZING'}
+              .contains((status ?? '').toUpperCase())) ...[
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8),
+              child: SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => _resumeIncompleteCase(c),
+                  icon: const Icon(LucideIcons.play, size: 16),
+                  label: const Text(
+                    "Continue Case",
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0D9488),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 4),
-          const SizedBox.shrink(),
         ],
       ),
     );

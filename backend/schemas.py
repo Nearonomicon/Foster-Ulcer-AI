@@ -409,6 +409,16 @@ class UpdateCaseRequest(BaseModel):
     meta: Optional[CreateCaseMeta] = None
 
 
+RESUMABLE_STATUSES = {"CREATION", "AI_PROCESSING", "ANALYZING"}
+
+
+class ResumeCaseRequest(BaseModel):
+    case_id: str
+    patient_id: str
+    vitals: Optional[CreateCaseVitals] = None
+    meta: Optional[CreateCaseMeta] = None
+
+
 class NotificationDeviceRegistrationRequest(BaseModel):
     user_id: str = Field(min_length=1)
     role: NotificationUserRole

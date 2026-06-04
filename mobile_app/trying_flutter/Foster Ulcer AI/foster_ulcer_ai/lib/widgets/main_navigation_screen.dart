@@ -190,6 +190,9 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   bool _emergencyBypassProfile = false;
   bool _followUpFlow = false;
   bool _woundNotPresentFlow = false;
+  // True when the nurse is resuming a CREATION/AI_PROCESSING/ANALYZING case
+  // in-place (same record). Prevents /create-case from firing again.
+  bool _resumingIncompleteCase = false;
 
   final TextEditingController _patientNameCtrl = TextEditingController();
   final TextEditingController _nrcIdCtrl = TextEditingController();
@@ -528,6 +531,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   Uri _updatePatientUri(String id) => Uri.parse("$_baseUrl/patients/$id");
   final Uri _createCaseUri = Uri.parse("$_baseUrl/create-case");
   final Uri _updateCaseUri = Uri.parse("$_baseUrl/update_cases");
+  final Uri _resumeCaseUri = Uri.parse("$_baseUrl/resume-case");
   final Uri _noWoundAssessmentUri = Uri.parse("$_baseUrl/no-wound-assessment");
   final Uri _sendToDoctorUri = Uri.parse("$_baseUrl/send-to-doctor");
   final Uri _casesListUri = Uri.parse("$_baseUrl/cases_list");
@@ -3058,7 +3062,157 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // RESUME INCOMPLETE CASE
+  // ---------------------------------------------------------------------------
+
+  /// Entry point called when the nurse taps "Continue Case" on a CREATION,
+  /// AI_PROCESSING, or ANALYZING case.
+  ///
+  /// CREATION  → pre-fill vitals, go to vital_check_page (same record, no new record).
+  /// ANALYZING + analysis present → load AI result, go straight to doctor_summary.
+  /// ANALYZING + analysis missing (AI failed) → pre-fill assessment, go to assessment.
+  void _resumeIncompleteCase(Map<String, dynamic> caseData) {
+    final patientId  = caseData['patient_id']?.toString();
+    final caseId     = caseData['case_id']?.toString();
+    final recordId   = caseData['current_record_id']?.toString();
+    final status     = (caseData['status'] ?? '').toString().toUpperCase();
+
+    if (patientId == null || caseId == null || recordId == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Cannot resume: missing case references."), backgroundColor: Colors.orange),
+        );
+      }
+      return;
+    }
+
+    // Seed _caseRefs so the rest of the flow (camera, assessment, send-to-doctor)
+    // all use the existing case_id + record_id — no new record will be created.
+    _caseRefs
+      ..clear()
+      ..addAll({'patient_id': patientId, 'case_id': caseId, 'record_id': recordId});
+
+    if (patientId.isNotEmpty) _patientProfile['patient_id'] = patientId;
+    _capturedImage = null;
+    _capturedImageBytes = null;
+    _woundPhotoAwaitingConfirmation = false;
+    _followUpFlow = false;
+
+    if (status == 'CREATION') {
+      // Pre-fill vitals from the snapshot so the nurse only needs to confirm.
+      final existingVitals = caseData['current_vital_signs'];
+      if (existingVitals is Map) {
+        final flat = _flattenAssessmentPrefill(Map<String, dynamic>.from(existingVitals));
+        setState(() => _reviewed.addAll(flat));
+        _applyPrefillControllersFromReviewed();
+      }
+      setState(() => _resumingIncompleteCase = true);
+      _navigateTo('vital_check_page');
+
+    } else {
+      // ANALYZING / AI_PROCESSING
+      _resumingIncompleteCase = false;
+
+      final existingAnalysis = caseData['current_analysis'];
+      final hasAnalysis = existingAnalysis is Map && existingAnalysis.isNotEmpty;
+
+      // Pre-fill assessment fields from current snapshot regardless of path.
+      final prefillSource = <String, dynamic>{
+        if (caseData['current_vital_signs'] is Map) ...Map<String, dynamic>.from(caseData['current_vital_signs']),
+        if (caseData['current_wound_detail'] is Map)   'wound_detail':   caseData['current_wound_detail'],
+        if (caseData['current_ischemia'] is Map)       'ischemia':       caseData['current_ischemia'],
+        if (caseData['current_infection'] is Map)      'infection':      caseData['current_infection'],
+        if (caseData['current_neuropathy'] is Map)     'neuropathy':     caseData['current_neuropathy'],
+        if (caseData['current_sinbad'] is Map)         'sinbad':         caseData['current_sinbad'],
+        if (caseData['current_lab_results'] is Map)    'lab_results':    caseData['current_lab_results'],
+        if (caseData['current_vascular'] is Map)       'vascular':       caseData['current_vascular'],
+        if (caseData['current_gangrene_extent'] != null) 'gangrene_extent': caseData['current_gangrene_extent'],
+      };
+      if (prefillSource.isNotEmpty) {
+        final flat = _flattenAssessmentPrefill(prefillSource);
+        if (flat.isNotEmpty) {
+          _applyAssessmentTranscription(flat);
+        }
+      }
+
+      if (hasAnalysis) {
+        // AI result is already stored — skip straight to the summary screen.
+        // Reconstruct _aiWoundJson in the shape doctor_summary_page expects.
+        setState(() {
+          _aiWoundJson = {'AI_analysis': Map<String, dynamic>.from(existingAnalysis)};
+          final existingPlan = caseData['current_treatment_plan'];
+          if (existingPlan is Map) {
+            _aiWoundJson!['treatment_plan'] = Map<String, dynamic>.from(existingPlan);
+          }
+        });
+        _navigateTo('doctor_summary');
+      } else {
+        // AI call failed previously — send the nurse back to assessment so
+        // she can re-submit. All fields are pre-filled above.
+        _navigateTo('assessment');
+      }
+    }
+  }
+
+  /// Patches vitals onto the existing CREATION record via /resume-case.
+  /// Called by _createCaseFromVitals() when _resumingIncompleteCase is true.
+  Future<bool> _resumeExistingCaseVitals() async {
+    final caseId    = _caseRefs['case_id']?.toString();
+    final patientId = _caseRefs['patient_id']?.toString() ?? _patientProfile['patient_id']?.toString();
+    if (caseId == null || caseId.isEmpty || patientId == null || patientId.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Resume failed: missing case references."), backgroundColor: Colors.redAccent),
+        );
+      }
+      return false;
+    }
+
+    final payload = {
+      'case_id':    caseId,
+      'patient_id': patientId,
+      'vitals': {
+        'temperature':              _reviewed['temperature'],
+        'blood_pressure':           _reviewed['blood_pressure'],
+        'blood_pressure_systolic':  _reviewed['blood_pressure_systolic'],
+        'blood_pressure_diastolic': _reviewed['blood_pressure_diastolic'],
+        'heart_rate':               _reviewed['heart_rate'],
+        'respiratory_rate':         _reviewed['respiratory_rate'],
+        'blood_sugar':              _reviewed['blood_sugar'],
+      },
+      'meta': {'sent_at': _getFormattedTimestamp()},
+    };
+
+    try {
+      final resp = await http
+          .post(_resumeCaseUri, headers: {'Content-Type': 'application/json'}, body: jsonEncode(payload))
+          .timeout(const Duration(seconds: 20));
+      if (resp.statusCode != 200) {
+        throw Exception("resume-case failed (${resp.statusCode}): ${resp.body}");
+      }
+      // _caseRefs already has the correct case_id + record_id — no update needed.
+      return true;
+    } catch (e) {
+      debugPrint("resume-case error: $e");
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Resume failed: $e"), backgroundColor: Colors.redAccent),
+        );
+      }
+      return false;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+
   Future<bool> _createCaseFromVitals() async {
+    // When resuming a CREATION case, patch vitals onto the existing record
+    // instead of creating a new case or a new follow-up record.
+    if (_resumingIncompleteCase) {
+      return _resumeExistingCaseVitals();
+    }
+
     final patientId = _patientProfile['patient_id'];
     if (patientId == null || patientId.toString().isEmpty) {
       if (mounted) {
@@ -3150,8 +3304,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         _sinbadDepth = _reviewed['sinbad_depth'];
       }
       if (step == 'vital_check_page') {
-        _clearVitalsInfo();
+        // When resuming, keep the pre-filled vitals; only clear on a fresh flow.
+        if (!_resumingIncompleteCase) _clearVitalsInfo();
         _woundNotPresentFlow = false;
+      }
+      // Reset resume flag whenever the nurse exits back to a top-level screen.
+      if (step == 'dashboard' || step == 'patient_search' || step == 'cases') {
+        _resumingIncompleteCase = false;
       }
       if (step == 'patient_search') {
         setState(() => _patientsFetchedOnce = false);

@@ -10,6 +10,8 @@ from schemas import (
     CreateCaseRequest,
     UpdateCaseRequest,
     NoWoundAssessmentRequest,
+    ResumeCaseRequest,
+    RESUMABLE_STATUSES,
     Status,
     Urgency,
     VitalSigns,
@@ -684,6 +686,77 @@ async def update_case(payload: UpdateCaseRequest):
             "case_id": case_id,
             "record_id": record_id,
         }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/resume-case")
+async def resume_case(payload: ResumeCaseRequest):
+    """Resume an incomplete case that is stuck at CREATION, AI_PROCESSING, or ANALYZING.
+
+    Unlike /update_cases (which always creates a new follow-up record), this endpoint
+    patches vitals onto the *existing* current record so the nurse can continue the
+    original create-case flow without creating a duplicate record.
+    """
+    try:
+        case_id = payload.case_id
+        case_ref = db.collection("cases").document(case_id)
+        case_snapshot = case_ref.get()
+        if not case_snapshot.exists:
+            raise HTTPException(status_code=404, detail="Case not found")
+
+        case_data = case_snapshot.to_dict() or {}
+        if case_data.get("patient_id") and case_data.get("patient_id") != payload.patient_id:
+            raise HTTPException(status_code=400, detail="patient_id does not match case")
+
+        status = str(case_data.get("status") or "").upper()
+        if status not in RESUMABLE_STATUSES:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Case is not resumable (status={status}). Only {sorted(RESUMABLE_STATUSES)} are allowed.",
+            )
+
+        record_id = case_data.get("current_record_id")
+        if not record_id:
+            raise HTTPException(status_code=404, detail="No current record found for case")
+
+        now = _utc_now()
+
+        record_update: dict = {"record_updated_at": now}
+        case_update: dict = {"case_updated_at": now}
+
+        if payload.vitals:
+            # Build a dict of only the non-null vital fields so we do not wipe
+            # values that were already saved on a previous attempt.
+            incoming_vitals = {
+                "temperature": payload.vitals.temperature,
+                "blood_pressure": payload.vitals.blood_pressure,
+                "blood_pressure_systolic": payload.vitals.blood_pressure_systolic,
+                "blood_pressure_diastolic": payload.vitals.blood_pressure_diastolic,
+                "heart_rate": payload.vitals.heart_rate,
+                "respiratory_rate": payload.vitals.respiratory_rate,
+                "blood_glucose": payload.vitals.blood_glucose or payload.vitals.blood_sugar,
+            }
+            incoming_vitals = {k: v for k, v in incoming_vitals.items() if v is not None}
+            if incoming_vitals:
+                record_update["vital_signs"] = incoming_vitals
+                case_update["current_vital_signs"] = incoming_vitals
+
+        record_ref = case_ref.collection("records").document(record_id)
+        batch = db.batch()
+        batch.set(record_ref, record_update, merge=True)
+        batch.set(case_ref, case_update, merge=True)
+        batch.commit()
+
+        return {
+            "status": "success",
+            "case_id": case_id,
+            "record_id": record_id,
+            "patient_id": payload.patient_id,
+        }
+
     except HTTPException:
         raise
     except Exception as e:
@@ -1431,6 +1504,56 @@ async def request_close(payload: dict):
             "case_id": case_id,
             "record_id": record_id,
             "notification_id": notification_id,
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/complete_case")
+async def complete_case(payload: dict):
+    try:
+        case_id = payload.get("case_id")
+        completed_at = payload.get("completed_at")
+
+        if not case_id:
+            raise HTTPException(status_code=400, detail="case_id is required")
+
+        completed_dt = _normalize_datetime(completed_at, fallback_to_now=True)
+
+        case_ref = db.collection("cases").document(case_id)
+        case_snapshot = case_ref.get()
+        if not case_snapshot.exists:
+            raise HTTPException(status_code=404, detail="Case not found")
+        case_data = case_snapshot.to_dict() or {}
+        record_id = case_data.get("current_record_id")
+        if not record_id:
+            raise HTTPException(status_code=404, detail="Current record not found for case")
+
+        record_ref = case_ref.collection("records").document(record_id)
+        record_snapshot = record_ref.get()
+        if not record_snapshot.exists:
+            raise HTTPException(status_code=404, detail="Record not found")
+        record_data = record_snapshot.to_dict() or {}
+
+        plan_id = _update_case_record_plan_and_tasks_status(
+            case_ref=case_ref,
+            record_ref=record_ref,
+            case_data=case_data,
+            record_data=record_data,
+            new_status=Status.COMPLETED,
+            timestamp_field="completed_at",
+            timestamp_value=completed_dt,
+        )
+
+        return {
+            "status": "success",
+            "message": "Case completed",
+            "case_id": case_id,
+            "record_id": record_id,
+            "plan_id": plan_id,
+            "completed_at": completed_dt.isoformat(),
         }
     except HTTPException:
         raise

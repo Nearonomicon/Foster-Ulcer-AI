@@ -4,7 +4,12 @@ extension _VitalCheckPage on _MainNavigationScreenState {
   Widget _buildVitalCheckPage() {
     return Column(
       children: [
-        _buildHeader("Vital Check", onBack: () => _navigateTo('intake')),
+        _buildHeader(
+          "Vital Check",
+          onBack: () => _resumingIncompleteCase
+              ? _navigateTo('cases')
+              : _navigateTo('intake'),
+        ),
         Expanded(
           child: ListView(
             padding: const EdgeInsets.all(24),

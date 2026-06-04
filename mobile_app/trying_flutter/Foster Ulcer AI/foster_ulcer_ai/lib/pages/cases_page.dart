@@ -245,13 +245,20 @@ extension _CasesPage on _MainNavigationScreenState {
               if (_caseItems.isEmpty) {
                 return const Center(child: Text("No cases found for this patient."));
               }
+              const resumableStatuses = {'CREATION', 'AI_PROCESSING', 'ANALYZING'};
               return ListView.builder(
                 padding: const EdgeInsets.symmetric(horizontal: 24),
                 itemCount: _caseItems.length,
-                itemBuilder: (context, index) => _buildPatientListTile(
-                  _caseItems[index],
-                  onTap: () => _enterFollowUpVitals(_caseItems[index]),
-                ),
+                itemBuilder: (context, index) {
+                  final item = _caseItems[index];
+                  final status = (item['status'] ?? '').toString().toUpperCase();
+                  return _buildPatientListTile(
+                    item,
+                    onTap: () => resumableStatuses.contains(status)
+                        ? _resumeIncompleteCase(item)
+                        : _enterFollowUpVitals(item),
+                  );
+                },
               );
             },
           ),
